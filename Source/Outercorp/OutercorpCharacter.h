@@ -12,6 +12,8 @@ class USkeletalMeshComponent;
 class UCameraComponent;
 class UInputAction;
 class UUserWidget;
+class UInventoryComponent;
+class UInventoryWidget;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -32,15 +34,27 @@ class AOutercorpCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FirstPersonCameraComponent;
 
+	/** Inventory component */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UInventoryComponent* InventoryComponent;
+
 	/** Crosshair widget */
 	UPROPERTY()
 	UUserWidget* CrosshairWidget;
+
+	/** Inventory widget */
+	UPROPERTY()
+	UInventoryWidget* InventoryWidget;
 
 protected:
 
 	/** Crosshair widget class */
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UUserWidget> CrosshairWidgetClass;
+
+	/** Inventory widget class */
+	UPROPERTY(EditDefaultsOnly, Category="UI")
+	TSubclassOf<UInventoryWidget> InventoryWidgetClass;
 
 	/** Jump Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
@@ -57,7 +71,11 @@ protected:
 	/** Mouse Look Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* MouseLookAction;
-	
+
+	/** Inventory Toggle Input Action */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* InventoryAction;
+
 public:
 	AOutercorpCharacter();
 
@@ -88,6 +106,10 @@ protected:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
+	/** Toggle inventory display */
+	UFUNCTION(BlueprintCallable, Category="Inventory")
+	virtual void ToggleInventory();
+
 protected:
 
 	/** Set up input action bindings */
@@ -101,6 +123,9 @@ public:
 
 	/** Returns first person camera component **/
 	UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
+
+	/** Returns inventory component **/
+	UInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
 
 };
 
