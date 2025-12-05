@@ -11,6 +11,7 @@ class UInputComponent;
 class USkeletalMeshComponent;
 class UCameraComponent;
 class UInputAction;
+class UUserWidget;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -31,7 +32,15 @@ class AOutercorpCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FirstPersonCameraComponent;
 
+	/** Crosshair widget */
+	UPROPERTY()
+	UUserWidget* CrosshairWidget;
+
 protected:
+
+	/** Crosshair widget class */
+	UPROPERTY(EditDefaultsOnly, Category="UI")
+	TSubclassOf<UUserWidget> CrosshairWidgetClass;
 
 	/** Jump Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
@@ -51,6 +60,9 @@ protected:
 	
 public:
 	AOutercorpCharacter();
+
+	/** Called when the game starts or when spawned */
+	virtual void BeginPlay() override;
 
 protected:
 
