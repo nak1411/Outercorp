@@ -150,15 +150,7 @@ void AOutercorpCharacter::ToggleInventory()
 	// If inventory is open, close it
 	if (InventoryWidget && InventoryWidget->IsInViewport())
 	{
-		InventoryWidget->RemoveFromParent();
-
-		// Restore input mode to game only
-		if (APlayerController *PC = Cast<APlayerController>(GetController()))
-		{
-			FInputModeGameOnly InputMode;
-			PC->SetInputMode(InputMode);
-			PC->SetShowMouseCursor(false);
-		}
+		InventoryWidget->CloseInventory();
 	}
 	else
 	{
@@ -168,19 +160,35 @@ void AOutercorpCharacter::ToggleInventory()
 			InventoryWidget = CreateWidget<UInventoryWidget>(GetWorld(), InventoryWidgetClass);
 			if (InventoryWidget)
 			{
+				// Bind to close event
+				InventoryWidget->OnInventoryClosed.AddDynamic(this, &AOutercorpCharacter::OnInventoryWidgetClosed);
+
 				InventoryWidget->InitializeInventory(InventoryComponent);
 				InventoryWidget->AddToViewport(1);
 
-				// Set input mode to UI
+				// Set input mode to UI only - blocks all game input
 				if (APlayerController *PC = Cast<APlayerController>(GetController()))
 				{
-					FInputModeGameAndUI InputMode;
-					InputMode.SetWidgetToFocus(InventoryWidget->TakeWidget());
+					FInputModeUIOnly InputMode;
 					InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 					PC->SetInputMode(InputMode);
 					PC->SetShowMouseCursor(true);
 				}
+
+				// Set focus to the widget after adding to viewport
+				InventoryWidget->SetKeyboardFocus();
 			}
 		}
+	}
+}
+
+void AOutercorpCharacter::OnInventoryWidgetClosed()
+{
+	// Restore input mode to game only
+	if (APlayerController *PC = Cast<APlayerController>(GetController()))
+	{
+		FInputModeGameOnly InputMode;
+		PC->SetInputMode(InputMode);
+		PC->SetShowMouseCursor(false);
 	}
 }

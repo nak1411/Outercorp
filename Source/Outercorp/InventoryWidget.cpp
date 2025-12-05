@@ -7,10 +7,14 @@
 #include "Components/ProgressBar.h"
 #include "Components/Button.h"
 #include "Components/EditableText.h"
+#include "Input/Reply.h"
 
 void UInventoryWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// Enable keyboard focus for this widget
+	SetKeyboardFocus();
 
 	// Bind button events
 	if (CloseButton)
@@ -40,6 +44,47 @@ void UInventoryWidget::NativeDestruct()
 	// No need to manually unbind
 
 	Super::NativeDestruct();
+}
+
+void UInventoryWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// Only reclaim focus if we've been without it for a short time
+	// This prevents interfering with button clicks
+	if (!HasKeyboardFocus())
+	{
+		FocusReclaimTimer += InDeltaTime;
+
+		// Wait 0.1 seconds before reclaiming focus
+		// This gives buttons time to process their clicks
+		if (FocusReclaimTimer > 0.1f)
+		{
+			SetKeyboardFocus();
+			FocusReclaimTimer = 0.0f;
+		}
+	}
+	else
+	{
+		FocusReclaimTimer = 0.0f;
+	}
+}
+
+FReply UInventoryWidget::NativeOnFocusReceived(const FGeometry& InGeometry, const FFocusEvent& InFocusEvent)
+{
+	return Super::NativeOnFocusReceived(InGeometry, InFocusEvent);
+}
+
+FReply UInventoryWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	// Handle ESC or I key to close inventory
+	if (InKeyEvent.GetKey() == EKeys::Escape || InKeyEvent.GetKey() == EKeys::I)
+	{
+		CloseInventory();
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
 
 void UInventoryWidget::InitializeInventory(UInventoryComponent* InInventoryComponent)
@@ -142,6 +187,7 @@ void UInventoryWidget::UpdateCapacityDisplay()
 
 void UInventoryWidget::CloseInventory()
 {
+	OnInventoryClosed.Broadcast();
 	RemoveFromParent();
 }
 
