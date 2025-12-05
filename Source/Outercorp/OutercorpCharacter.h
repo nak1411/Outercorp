@@ -110,6 +110,10 @@ protected:
 	UFUNCTION(BlueprintCallable, Category="Inventory")
 	virtual void ToggleInventory();
 
+	/** Called when inventory widget is closed */
+	UFUNCTION()
+	void OnInventoryWidgetClosed();
+
 protected:
 
 	/** Set up input action bindings */
