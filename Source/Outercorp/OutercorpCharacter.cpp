@@ -9,6 +9,8 @@
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Blueprint/UserWidget.h"
+#include "InventoryComponent.h"
+#include "InventoryWidget.h"
 #include "Outercorp.h"
 
 AOutercorpCharacter::AOutercorpCharacter()
@@ -43,6 +45,9 @@ AOutercorpCharacter::AOutercorpCharacter()
 	// Configure character movement
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 	GetCharacterMovement()->AirControl = 0.5f;
+
+	// Create inventory component
+	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("Inventory Component"));
 }
 
 void AOutercorpCharacter::BeginPlay()
@@ -75,6 +80,9 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 		// Looking/Aiming
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AOutercorpCharacter::LookInput);
 		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AOutercorpCharacter::LookInput);
+
+		// Inventory
+		EnhancedInputComponent->BindAction(InventoryAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleInventory);
 	}
 	else
 	{
@@ -130,4 +138,49 @@ void AOutercorpCharacter::DoJumpEnd()
 {
 	// pass StopJumping to the character
 	StopJumping();
+}
+
+void AOutercorpCharacter::ToggleInventory()
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	// If inventory is open, close it
+	if (InventoryWidget && InventoryWidget->IsInViewport())
+	{
+		InventoryWidget->RemoveFromParent();
+
+		// Restore input mode to game only
+		if (APlayerController *PC = Cast<APlayerController>(GetController()))
+		{
+			FInputModeGameOnly InputMode;
+			PC->SetInputMode(InputMode);
+			PC->SetShowMouseCursor(false);
+		}
+	}
+	else
+	{
+		// Always recreate the widget to avoid delegate issues
+		if (InventoryWidgetClass && InventoryComponent)
+		{
+			InventoryWidget = CreateWidget<UInventoryWidget>(GetWorld(), InventoryWidgetClass);
+			if (InventoryWidget)
+			{
+				InventoryWidget->InitializeInventory(InventoryComponent);
+				InventoryWidget->AddToViewport(1);
+
+				// Set input mode to UI
+				if (APlayerController *PC = Cast<APlayerController>(GetController()))
+				{
+					FInputModeGameAndUI InputMode;
+					InputMode.SetWidgetToFocus(InventoryWidget->TakeWidget());
+					InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+					PC->SetInputMode(InputMode);
+					PC->SetShowMouseCursor(true);
+				}
+			}
+		}
+	}
 }
