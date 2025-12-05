@@ -8,6 +8,7 @@
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Blueprint/UserWidget.h"
 #include "Outercorp.h"
 
 AOutercorpCharacter::AOutercorpCharacter()
@@ -42,6 +43,21 @@ AOutercorpCharacter::AOutercorpCharacter()
 	// Configure character movement
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 	GetCharacterMovement()->AirControl = 0.5f;
+}
+
+void AOutercorpCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Create and display the crosshair widget
+	if (CrosshairWidgetClass && IsLocallyControlled())
+	{
+		CrosshairWidget = CreateWidget<UUserWidget>(GetWorld(), CrosshairWidgetClass);
+		if (CrosshairWidget)
+		{
+			CrosshairWidget->AddToViewport();
+		}
+	}
 }
 
 void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInputComponent)
