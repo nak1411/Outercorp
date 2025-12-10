@@ -30,6 +30,22 @@
 		{
 			"Name": "GameplayStateTree",
 			"Enabled": true
+		},
+		{
+			"Name": "WidgetEditorToolPalette",
+			"Enabled": true
+		},
+		{
+			"Name": "ModelViewViewModel",
+			"Enabled": true
+		},
+		{
+			"Name": "ModelViewViewModelPreview",
+			"Enabled": true
+		},
+		{
+			"Name": "DraggableWindowUMG",
+			"Enabled": true
 		}
 	]
 }

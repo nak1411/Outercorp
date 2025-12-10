@@ -14,6 +14,7 @@ class UInputAction;
 class UUserWidget;
 class UInventoryComponent;
 class UInventoryWidget;
+class UCharacterWidget;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -42,9 +43,25 @@ class AOutercorpCharacter : public ACharacter
 	UPROPERTY()
 	UUserWidget* CrosshairWidget;
 
-	/** Inventory widget */
-	UPROPERTY()
+	/** Base HUD widget (contains canvas for draggable windows) */
+	UPROPERTY(BlueprintReadOnly, Category="UI", meta = (AllowPrivateAccess = "true"))
+	UUserWidget* BaseHUDWidget;
+
+	/** Inventory widget (the actual content widget) */
+	UPROPERTY(BlueprintReadWrite, Category="UI", meta = (AllowPrivateAccess = "true"))
 	UInventoryWidget* InventoryWidget;
+
+	/** Draggable window that wraps the inventory widget */
+	UPROPERTY(BlueprintReadWrite, Category="UI", meta = (AllowPrivateAccess = "true"))
+	UUserWidget* InventoryDraggableWindow;
+
+	/** Character widget (the actual content widget) */
+	UPROPERTY(BlueprintReadWrite, Category="UI", meta = (AllowPrivateAccess = "true"))
+	UCharacterWidget* CharacterWidget;
+
+	/** Draggable window that wraps the character widget */
+	UPROPERTY(BlueprintReadWrite, Category="UI", meta = (AllowPrivateAccess = "true"))
+	UUserWidget* CharacterDraggableWindow;
 
 protected:
 
@@ -52,9 +69,21 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UUserWidget> CrosshairWidgetClass;
 
+	/** Base HUD widget class */
+	UPROPERTY(EditDefaultsOnly, Category="UI")
+	TSubclassOf<UUserWidget> BaseHUDWidgetClass;
+
 	/** Inventory widget class */
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UInventoryWidget> InventoryWidgetClass;
+
+	/** Character widget class */
+	UPROPERTY(EditDefaultsOnly, Category="UI")
+	TSubclassOf<UCharacterWidget> CharacterWidgetClass;
+
+	/** Draggable window class for wrapping widgets */
+	UPROPERTY(EditDefaultsOnly, Category="UI")
+	TSubclassOf<UUserWidget> DraggableWindowClass;
 
 	/** Jump Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
@@ -75,6 +104,10 @@ protected:
 	/** Inventory Toggle Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* InventoryAction;
+
+	/** Character Window Toggle Input Action */
+	UPROPERTY(EditAnywhere, Category ="Input")
+	class UInputAction* CharacterAction;
 
 public:
 	AOutercorpCharacter();
@@ -110,9 +143,69 @@ protected:
 	UFUNCTION(BlueprintCallable, Category="Inventory")
 	virtual void ToggleInventory();
 
+	/** Open inventory (BlueprintNativeEvent allows Blueprint override) */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Inventory")
+	void OpenInventory();
+
+	/** Called after inventory widget is created to bind events */
+	UFUNCTION(BlueprintCallable, Category="Inventory")
+	void BindInventoryEvents();
+
+	/** Get the HUD canvas panel for adding draggable windows */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="UI")
+	class UCanvasPanel* GetHUDCanvas() const;
+
+	/** Close inventory (to be called from Blueprint or C++) */
+	UFUNCTION(BlueprintCallable, Category="Inventory")
+	void CloseInventory();
+
 	/** Called when inventory widget is closed */
 	UFUNCTION()
 	void OnInventoryWidgetClosed();
+
+	/** Toggle character window display */
+	UFUNCTION(BlueprintCallable, Category="Character")
+	virtual void ToggleCharacter();
+
+	/** Open character window (BlueprintNativeEvent allows Blueprint override) */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Character")
+	void OpenCharacter();
+
+	/** Called after character widget is created to bind events */
+	UFUNCTION(BlueprintCallable, Category="Character")
+	void BindCharacterEvents();
+
+	/** Setup character widget in draggable window - call this after Create Draggable Window */
+	UFUNCTION(BlueprintCallable, Category="Character")
+	void SetupCharacterWidgetInWindow(UUserWidget* DraggableWindow);
+
+	/** Setup inventory widget in draggable window - call this after Create Draggable Window */
+	UFUNCTION(BlueprintCallable, Category="Inventory")
+	void SetupInventoryWidgetInWindow(UUserWidget* DraggableWindow);
+
+	/** Helper to get child widget from draggable window */
+	UFUNCTION(BlueprintCallable, Category="UI")
+	UUserWidget* GetDraggableWindowChild(UUserWidget* DraggableWindow) const;
+
+	/** Debug helper to print widget type */
+	UFUNCTION(BlueprintCallable, Category="UI")
+	void DebugPrintWidgetType(UUserWidget* Widget) const;
+
+	/** Close character window (to be called from Blueprint or C++) */
+	UFUNCTION(BlueprintCallable, Category="Character")
+	void CloseCharacter();
+
+	/** Called when character widget is closed */
+	UFUNCTION()
+	void OnCharacterWidgetClosed();
+
+	/** Close all open widgets */
+	UFUNCTION(BlueprintCallable, Category="UI")
+	void CloseAllWidgets();
+
+	/** Check if any UI widget is currently open */
+	UFUNCTION(BlueprintCallable, Category="UI")
+	bool IsAnyUIWidgetOpen() const;
 
 protected:
 

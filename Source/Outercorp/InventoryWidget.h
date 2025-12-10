@@ -25,9 +25,7 @@ class OUTERCORP_API UInventoryWidget : public UUserWidget
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
-	virtual FReply NativeOnFocusReceived(const FGeometry& InGeometry, const FFocusEvent& InFocusEvent) override;
 	virtual bool NativeSupportsKeyboardFocus() const override { return true; }
 
 	/** Reference to the inventory component */
@@ -143,8 +141,4 @@ protected:
 
 	/** Check if item passes filter */
 	bool PassesFilter(const FInventoryItem& Item) const;
-
-private:
-	/** Timer to delay focus reclaim to avoid interfering with button clicks */
-	float FocusReclaimTimer = 0.0f;
 };

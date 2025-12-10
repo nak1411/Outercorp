@@ -13,13 +13,17 @@ void UInventoryWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// Enable keyboard focus for this widget
-	SetKeyboardFocus();
+	UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::NativeConstruct: Starting button binding"));
 
 	// Bind button events
 	if (CloseButton)
 	{
+		UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::NativeConstruct: CloseButton found, binding OnClicked"));
 		CloseButton->OnClicked.AddDynamic(this, &UInventoryWidget::OnCloseButtonClicked);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UInventoryWidget::NativeConstruct: CloseButton is NULL! Make sure you have a Button named 'CloseButton' in your widget Blueprint with BindWidget or BindWidgetOptional"));
 	}
 
 	if (SortByNameButton)
@@ -46,36 +50,7 @@ void UInventoryWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UInventoryWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
-{
-	Super::NativeTick(MyGeometry, InDeltaTime);
-
-	// Only reclaim focus if we've been without it for a short time
-	// This prevents interfering with button clicks
-	if (!HasKeyboardFocus())
-	{
-		FocusReclaimTimer += InDeltaTime;
-
-		// Wait 0.1 seconds before reclaiming focus
-		// This gives buttons time to process their clicks
-		if (FocusReclaimTimer > 0.1f)
-		{
-			SetKeyboardFocus();
-			FocusReclaimTimer = 0.0f;
-		}
-	}
-	else
-	{
-		FocusReclaimTimer = 0.0f;
-	}
-}
-
-FReply UInventoryWidget::NativeOnFocusReceived(const FGeometry& InGeometry, const FFocusEvent& InFocusEvent)
-{
-	return Super::NativeOnFocusReceived(InGeometry, InFocusEvent);
-}
-
-FReply UInventoryWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+FReply UInventoryWidget::NativeOnKeyDown(const FGeometry &InGeometry, const FKeyEvent &InKeyEvent)
 {
 	// Handle ESC or I key to close inventory
 	if (InKeyEvent.GetKey() == EKeys::Escape || InKeyEvent.GetKey() == EKeys::I)
@@ -87,7 +62,7 @@ FReply UInventoryWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKey
 	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
 
-void UInventoryWidget::InitializeInventory(UInventoryComponent* InInventoryComponent)
+void UInventoryWidget::InitializeInventory(UInventoryComponent *InInventoryComponent)
 {
 	if (!InInventoryComponent)
 	{
@@ -187,11 +162,13 @@ void UInventoryWidget::UpdateCapacityDisplay()
 
 void UInventoryWidget::CloseInventory()
 {
+	UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::CloseInventory: Broadcasting close event"));
+	// Just broadcast the close event - let the owning character handle cleanup
 	OnInventoryClosed.Broadcast();
-	RemoveFromParent();
+	UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::CloseInventory: Broadcast complete"));
 }
 
-void UInventoryWidget::OnInventoryUpdated(int32 SlotIndex, const FInventoryItem& Item)
+void UInventoryWidget::OnInventoryUpdated(int32 SlotIndex, const FInventoryItem &Item)
 {
 	RefreshSlot(SlotIndex);
 	UpdateCapacityDisplay();
@@ -206,6 +183,7 @@ void UInventoryWidget::OnCapacityChanged(int32 NewCapacity)
 
 void UInventoryWidget::OnCloseButtonClicked()
 {
+	UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::OnCloseButtonClicked: X button clicked"));
 	CloseInventory();
 }
 
@@ -225,7 +203,7 @@ void UInventoryWidget::OnSortByRarityClicked()
 	}
 }
 
-void UInventoryWidget::OnSearchTextChanged(const FText& Text)
+void UInventoryWidget::OnSearchTextChanged(const FText &Text)
 {
 	CurrentFilter = Text.ToString();
 	RefreshInventory();
@@ -247,7 +225,7 @@ void UInventoryWidget::CreateSlotWidgets()
 
 	for (int32 i = 0; i < NumSlots; ++i)
 	{
-		UInventorySlotWidget* SlotWidget = CreateWidget<UInventorySlotWidget>(this, SlotWidgetClass);
+		UInventorySlotWidget *SlotWidget = CreateWidget<UInventorySlotWidget>(this, SlotWidgetClass);
 		if (SlotWidget)
 		{
 			SlotWidget->SetSlotIndex(i);
@@ -262,7 +240,7 @@ void UInventoryWidget::CreateSlotWidgets()
 	}
 }
 
-bool UInventoryWidget::PassesFilter(const FInventoryItem& Item) const
+bool UInventoryWidget::PassesFilter(const FInventoryItem &Item) const
 {
 	if (CurrentFilter.IsEmpty() || !Item.IsValid())
 	{
