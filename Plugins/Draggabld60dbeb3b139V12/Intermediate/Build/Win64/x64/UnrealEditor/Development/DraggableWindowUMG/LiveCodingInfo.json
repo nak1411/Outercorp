@@ -5,8 +5,8 @@
 			"DraggableWindow.gen.cpp.obj",
 			"DraggableWindowUMG.init.gen.cpp.obj",
 			"PerModuleInline.gen.cpp.obj",
-			"DraggableWindow.cpp.obj",
-			"DraggableWindowUMG.cpp.obj"
+			"DraggableWindowUMG.cpp.obj",
+			"DraggableWindow.cpp.obj"
 		]
 	}
 }

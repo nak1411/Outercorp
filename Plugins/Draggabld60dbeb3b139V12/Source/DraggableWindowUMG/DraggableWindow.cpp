@@ -36,7 +36,7 @@ UDraggableWindow::UDraggableWindow(const FObjectInitializer& ObjectInitializer) 
 	ResizeMaxHeight = 0.f;
 
 	bEnableDrag = bEnableResizing = bEnableMaximizing = true;
-	bIsMouseButtonDown = bIsDragging = bIsResizing = bIsAlignmentAccountedFor = bStartInCenterScreen = bIsMaximized = false;
+	bIsMouseButtonDown = bIsDragging = bIsResizing = bIsAlignmentAccountedFor = bStartInCenterScreen = bIsMaximized = bIsMouseOverResizeArea = false;
 	LastMousePosition = PreResizeAlignment = PreResizeOffset = PreDragSize = StartSize = FVector2D::ZeroVector;
 
 	DragKey = FKey(FName("LeftMouseButton"));
@@ -167,6 +167,14 @@ void UDraggableWindow::NativeConstruct()
 FReply UDraggableWindow::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+
+	// Check if mouse is over resize area for cursor feedback
+	if (bEnableResizing && ResizeAreaWidget && !bIsMouseButtonDown)
+	{
+		FGeometry ResizeGeometry = ResizeAreaWidget->GetCachedGeometry();
+		bIsMouseOverResizeArea = ResizeGeometry.IsUnderLocation(InMouseEvent.GetScreenSpacePosition());
+	}
+
 	if (bIsMouseButtonDown && ParentSlot)
 	{
 		FVector2D OutPixelPosition, OutViewportPosition;
@@ -189,13 +197,33 @@ FReply UDraggableWindow::NativeOnMouseMove(const FGeometry& InGeometry, const FP
 		{
 			if (bIsAlignmentAccountedFor)
 			{
+				PRINT_LOG(FString::Printf(TEXT("Mouse Delta: X=%.2f, Y=%.2f"), MouseDelta.X, MouseDelta.Y));
 				const FVector2D RequestedSize = Internal_DetermineNewSize(MouseDelta);
 				ParentSlot->SetSize(RequestedSize);
+
+				// Log after setting size to verify it actually changed
+				PRINT_LOG(FString::Printf(TEXT("Actual Size after SetSize: (%.2f,%.2f)"),
+					ParentSlot->GetSize().X, ParentSlot->GetSize().Y));
 			}
 			else
 			{
+				// Get current geometry position before changing anchors
+				FVector2D CurrentPosition = ParentSlot->GetPosition();
+				FVector2D CurrentSize = ParentSlot->GetSize();
+				FAnchors CurrentAnchors = ParentSlot->GetAnchors();
+
+				// Calculate the absolute position in viewport
+				FVector2D AnchorMin = FVector2D(CurrentAnchors.Minimum.X * ViewportSize.X, CurrentAnchors.Minimum.Y * ViewportSize.Y);
+				FVector2D AbsolutePosition = AnchorMin + CurrentPosition - (CurrentSize * PreResizeAlignment);
+
+				PRINT_LOG(FString::Printf(TEXT("Before anchor change - Pos: (%.2f,%.2f) | AnchorMin: (%.2f,%.2f) | AbsolutePos: (%.2f,%.2f)"),
+					CurrentPosition.X, CurrentPosition.Y, AnchorMin.X, AnchorMin.Y, AbsolutePosition.X, AbsolutePosition.Y));
+
+				// Reset to non-stretched anchors for size-based resizing
+				ParentSlot->SetAnchors(FAnchors(0.f, 0.f, 0.f, 0.f));
 				ParentSlot->SetAlignment(FVector2D::ZeroVector);
-				ParentSlot->SetPosition(ParentSlot->GetPosition() - PreResizeOffset);
+				ParentSlot->SetPosition(AbsolutePosition);
+
 				bIsAlignmentAccountedFor = true;
 				return FReply::Handled();
 			}
@@ -224,10 +252,23 @@ void UDraggableWindow::Internal_OnMouseButtonUpEvent()
 {
 	if (bIsResizing && bIsAlignmentAccountedFor && ParentSlot)
 	{
-		const FVector2D SizeDifference = ParentSlot->GetSize() - PreDragSize;
-		const FVector2D NewPosition = (SizeDifference * PreResizeAlignment) + PreResizeOffset + (ParentSlot->GetPosition());
-		ParentSlot->SetPosition(NewPosition);
+		// Get current absolute position with zero anchors
+		FVector2D CurrentAbsolutePosition = ParentSlot->GetPosition();
+		FVector2D CurrentSize = ParentSlot->GetSize();
+
+		// Restore original anchors
+		ParentSlot->SetAnchors(PreResizeAnchors);
 		ParentSlot->SetAlignment(PreResizeAlignment);
+
+		// Calculate new position relative to the restored anchors
+		const FVector2D ViewportSize = UWidgetLayoutLibrary::GetViewportSize(this);
+		FVector2D NewAnchorMin = FVector2D(PreResizeAnchors.Minimum.X * ViewportSize.X, PreResizeAnchors.Minimum.Y * ViewportSize.Y);
+		FVector2D NewRelativePosition = CurrentAbsolutePosition - NewAnchorMin + (CurrentSize * PreResizeAlignment);
+
+		ParentSlot->SetPosition(NewRelativePosition);
+
+		PRINT_LOG(FString::Printf(TEXT("Resize End - Restored to Pos: (%.2f,%.2f) | Size: (%.2f,%.2f)"),
+			NewRelativePosition.X, NewRelativePosition.Y, CurrentSize.X, CurrentSize.Y));
 	}
 
 	bIsAlignmentAccountedFor = false;
@@ -253,10 +294,14 @@ FVector2D UDraggableWindow::Internal_DetermineNewSize(const FVector2D& InDelta) 
 		{
 			const float Local_ValueToClamp = Local_OriginalX + Local_DeltaX;
 			TempWidth = FMath::Clamp(Local_ValueToClamp, ResizeMinWidth, ResizeMaxWidth);
+			PRINT_LOG(FString::Printf(TEXT("Width calc (clamped): %.2f + %.2f = %.2f, clamped to [%.2f, %.2f] = %.2f"),
+				Local_OriginalX, Local_DeltaX, Local_ValueToClamp, ResizeMinWidth, ResizeMaxWidth, TempWidth));
 		}
 		else
 		{
 			TempWidth = FMath::Max<float>((Local_OriginalX + Local_DeltaX), ResizeMinWidth);
+			PRINT_LOG(FString::Printf(TEXT("Width calc (no max): %.2f + %.2f = %.2f, max(%.2f) = %.2f"),
+				Local_OriginalX, Local_DeltaX, (Local_OriginalX + Local_DeltaX), ResizeMinWidth, TempWidth));
 		}
 
 		if (ResizeMaxHeight > 0.f)
@@ -268,6 +313,9 @@ FVector2D UDraggableWindow::Internal_DetermineNewSize(const FVector2D& InDelta) 
 		{
 			TempHeight = FMath::Max<float>((Local_OriginalY + Local_DeltaY), ResizeMinHeight);
 		}
+
+		PRINT_LOG(FString::Printf(TEXT("Resize Delta: X=%.2f, Y=%.2f | Original: X=%.2f, Y=%.2f | New: X=%.2f, Y=%.2f"),
+			Local_DeltaX, Local_DeltaY, Local_OriginalX, Local_OriginalY, TempWidth, TempHeight));
 
 		return FVector2D(TempWidth, TempHeight);
 	}
@@ -310,9 +358,20 @@ FEventReply UDraggableWindow::Internal_OnMouseButtonDown_ResizeArea(FGeometry In
 	{
 		FVector2D OutPixelPosition;
 		USlateBlueprintLibrary::AbsoluteToViewport(this, InMouseEvent.GetScreenSpacePosition(), OutPixelPosition, LastMousePosition);
+
+		// Store pre-resize state
+		PreResizeAnchors = ParentSlot->GetAnchors();
 		PreResizeAlignment = ParentSlot->GetAlignment();
 		PreDragSize = ParentSlot->GetSize();
 		PreResizeOffset = PreDragSize * PreResizeAlignment;
+
+		// Log initial state
+		PRINT_LOG(FString::Printf(TEXT("Resize Start - Anchors: Min(%.2f,%.2f) Max(%.2f,%.2f) | Alignment: (%.2f,%.2f) | Size: (%.2f,%.2f)"),
+			PreResizeAnchors.Minimum.X, PreResizeAnchors.Minimum.Y,
+			PreResizeAnchors.Maximum.X, PreResizeAnchors.Maximum.Y,
+			PreResizeAlignment.X, PreResizeAlignment.Y,
+			PreDragSize.X, PreDragSize.Y));
+
 		EventReply = UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, DragKey);
 		K2_OnResizeStart(InMouseEvent);
 	}
@@ -423,6 +482,16 @@ void UDraggableWindow::Internal_AddContentWidget(const bool bClearPrevious)
 		ChildSlot->SetOffsets(FMargin(0.f));
 		K2_OnContentWidgetAdded(ChildWidget);
 	}
+}
+
+FCursorReply UDraggableWindow::NativeOnCursorQuery(const FGeometry& InGeometry, const FPointerEvent& InCursorEvent)
+{
+	if (bIsMouseOverResizeArea && bEnableResizing)
+	{
+		return FCursorReply::Cursor(EMouseCursor::ResizeSouthEast);
+	}
+
+	return Super::NativeOnCursorQuery(InGeometry, InCursorEvent);
 }
 
 #undef PRINT_LOG

@@ -71,6 +71,7 @@ protected:
 	uint8 bIsResizing : 1;
 	uint8 bIsAlignmentAccountedFor : 1;
 	uint8 bStartInCenterScreen : 1;
+	uint8 bIsMouseOverResizeArea : 1;
 
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Draggable Window Widget")
 	uint8 bIsMaximized : 1;
@@ -86,6 +87,8 @@ protected:
 
 	FAnchors PreFullscreenAnchors;
 	FMargin PreFullscreenMargin;
+
+	FAnchors PreResizeAnchors;
 
 	EOperatingSystemWindowStartupState StartupState;
 
@@ -149,6 +152,7 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FCursorReply NativeOnCursorQuery(const FGeometry& InGeometry, const FPointerEvent& InCursorEvent) override;
 
 private:
 
