@@ -180,13 +180,6 @@ FReply UDraggableWindow::NativeOnMouseMove(const FGeometry& InGeometry, const FP
 		FVector2D OutPixelPosition, OutViewportPosition;
 		USlateBlueprintLibrary::AbsoluteToViewport(this, InMouseEvent.GetScreenSpacePosition(), OutPixelPosition, OutViewportPosition);
 		const FVector2D ViewportSize = UWidgetLayoutLibrary::GetViewportSize(this);
-		if (OutPixelPosition.X < 5.f || OutPixelPosition.Y < 5.f || OutPixelPosition.X >(ViewportSize.X - 5.f) || OutPixelPosition.Y >(ViewportSize.Y - 5.f))
-		{
-			Internal_OnMouseButtonUpEvent();
-			return FReply::Handled();
-		}
-
-		USlateBlueprintLibrary::AbsoluteToViewport(this, InMouseEvent.GetScreenSpacePosition(), OutPixelPosition, OutViewportPosition);
 		const FVector2D MouseDelta = OutViewportPosition - LastMousePosition;
 		FEventReply EventReply = UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, DragKey);
 		if (bIsDragging)
@@ -197,7 +190,14 @@ FReply UDraggableWindow::NativeOnMouseMove(const FGeometry& InGeometry, const FP
 		{
 			if (bIsAlignmentAccountedFor)
 			{
-				PRINT_LOG(FString::Printf(TEXT("Mouse Delta: X=%.2f, Y=%.2f"), MouseDelta.X, MouseDelta.Y));
+				// Log position during resize
+				FVector2D DuringResizeScreenPos = InGeometry.GetAbsolutePosition();
+				FVector2D DuringResizeOutPixel, DuringResizeViewportPos;
+				USlateBlueprintLibrary::AbsoluteToViewport(this, DuringResizeScreenPos, DuringResizeOutPixel, DuringResizeViewportPos);
+
+				PRINT_LOG(FString::Printf(TEXT("DURING RESIZE - Mouse Delta: (%.2f,%.2f) | Current Viewport Pos: (%.2f,%.2f)"),
+					MouseDelta.X, MouseDelta.Y, DuringResizeViewportPos.X, DuringResizeViewportPos.Y));
+
 				const FVector2D RequestedSize = Internal_DetermineNewSize(MouseDelta);
 				ParentSlot->SetSize(RequestedSize);
 
@@ -207,22 +207,35 @@ FReply UDraggableWindow::NativeOnMouseMove(const FGeometry& InGeometry, const FP
 			}
 			else
 			{
-				// Get current geometry position before changing anchors
-				FVector2D CurrentPosition = ParentSlot->GetPosition();
-				FVector2D CurrentSize = ParentSlot->GetSize();
+				// Always use geometry to get the actual rendered position, regardless of anchor type
+				// This is the only reliable way to get the true top-left corner position
+				FVector2D ScreenPos = InGeometry.GetAbsolutePosition();
+				FVector2D OutPixel, AbsolutePosition;
+				USlateBlueprintLibrary::AbsoluteToViewport(this, ScreenPos, OutPixel, AbsolutePosition);
+
+				// Get current size from geometry for stretched anchors, or from slot for normal anchors
 				FAnchors CurrentAnchors = ParentSlot->GetAnchors();
+				FVector2D CurrentSize;
 
-				// Calculate the absolute position in viewport
-				FVector2D AnchorMin = FVector2D(CurrentAnchors.Minimum.X * ViewportSize.X, CurrentAnchors.Minimum.Y * ViewportSize.Y);
-				FVector2D AbsolutePosition = AnchorMin + CurrentPosition - (CurrentSize * PreResizeAlignment);
+				if (CurrentAnchors.IsStretchedHorizontal() || CurrentAnchors.IsStretchedVertical())
+				{
+					CurrentSize = InGeometry.GetLocalSize();
+					PRINT_LOG(FString::Printf(TEXT("STRETCHED ANCHORS - Using geometry size: (%.2f,%.2f)"), CurrentSize.X, CurrentSize.Y));
+				}
+				else
+				{
+					CurrentSize = ParentSlot->GetSize();
+					PRINT_LOG(FString::Printf(TEXT("NORMAL ANCHORS - Using slot size: (%.2f,%.2f)"), CurrentSize.X, CurrentSize.Y));
+				}
 
-				PRINT_LOG(FString::Printf(TEXT("Before anchor change - Pos: (%.2f,%.2f) | AnchorMin: (%.2f,%.2f) | AbsolutePos: (%.2f,%.2f)"),
-					CurrentPosition.X, CurrentPosition.Y, AnchorMin.X, AnchorMin.Y, AbsolutePosition.X, AbsolutePosition.Y));
+				PRINT_LOG(FString::Printf(TEXT("BEFORE RESIZE - Geometry Viewport Position: (%.2f,%.2f) | Size: (%.2f,%.2f)"),
+					AbsolutePosition.X, AbsolutePosition.Y, CurrentSize.X, CurrentSize.Y));
 
 				// Reset to non-stretched anchors for size-based resizing
 				ParentSlot->SetAnchors(FAnchors(0.f, 0.f, 0.f, 0.f));
 				ParentSlot->SetAlignment(FVector2D::ZeroVector);
 				ParentSlot->SetPosition(AbsolutePosition);
+				ParentSlot->SetSize(CurrentSize);
 
 				bIsAlignmentAccountedFor = true;
 				return FReply::Handled();
@@ -256,19 +269,26 @@ void UDraggableWindow::Internal_OnMouseButtonUpEvent()
 		FVector2D CurrentAbsolutePosition = ParentSlot->GetPosition();
 		FVector2D CurrentSize = ParentSlot->GetSize();
 
-		// Restore original anchors
-		ParentSlot->SetAnchors(PreResizeAnchors);
-		ParentSlot->SetAlignment(PreResizeAlignment);
+		PRINT_LOG(FString::Printf(TEXT("RESIZE END START - Current Pos: (%.2f,%.2f) | Size: (%.2f,%.2f) | PreResizeAnchors: Min(%.2f,%.2f) Max(%.2f,%.2f)"),
+			CurrentAbsolutePosition.X, CurrentAbsolutePosition.Y, CurrentSize.X, CurrentSize.Y,
+			PreResizeAnchors.Minimum.X, PreResizeAnchors.Minimum.Y, PreResizeAnchors.Maximum.X, PreResizeAnchors.Maximum.Y));
 
-		// Calculate new position relative to the restored anchors
-		const FVector2D ViewportSize = UWidgetLayoutLibrary::GetViewportSize(this);
-		FVector2D NewAnchorMin = FVector2D(PreResizeAnchors.Minimum.X * ViewportSize.X, PreResizeAnchors.Minimum.Y * ViewportSize.Y);
-		FVector2D NewRelativePosition = CurrentAbsolutePosition - NewAnchorMin + (CurrentSize * PreResizeAlignment);
-
-		ParentSlot->SetPosition(NewRelativePosition);
-
-		PRINT_LOG(FString::Printf(TEXT("Resize End - Restored to Pos: (%.2f,%.2f) | Size: (%.2f,%.2f)"),
-			NewRelativePosition.X, NewRelativePosition.Y, CurrentSize.X, CurrentSize.Y));
+		// Check if we were maximized (stretched anchors)
+		if (PreResizeAnchors.IsStretchedHorizontal() && PreResizeAnchors.IsStretchedVertical())
+		{
+			// If we were fullscreen and user resized, exit fullscreen mode
+			// Keep the current non-stretched anchors (0,0,0,0) and current position/size
+			bIsMaximized = false;
+			PRINT_LOG(FString::Printf(TEXT("RESIZE END - Exited fullscreen. Keeping Pos: (%.2f,%.2f) | Size: (%.2f,%.2f)"),
+				CurrentAbsolutePosition.X, CurrentAbsolutePosition.Y, CurrentSize.X, CurrentSize.Y));
+		}
+		else
+		{
+			// After resizing, keep the window with (0,0,0,0) anchors at its current position
+			// Don't try to restore original anchors - the window is already correctly positioned
+			PRINT_LOG(FString::Printf(TEXT("RESIZE END - Keeping simple anchors. Pos: (%.2f,%.2f) | Size: (%.2f,%.2f)"),
+				CurrentAbsolutePosition.X, CurrentAbsolutePosition.Y, CurrentSize.X, CurrentSize.Y));
+		}
 	}
 
 	bIsAlignmentAccountedFor = false;
