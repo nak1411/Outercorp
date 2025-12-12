@@ -9,6 +9,7 @@
 
 class UInventorySlotWidget;
 class UUniformGridPanel;
+class UScrollBox;
 class UTextBlock;
 class UProgressBar;
 class UButton;
@@ -35,6 +36,10 @@ protected:
 	/** Grid panel containing item slots */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	TObjectPtr<UUniformGridPanel> ItemGrid;
+
+	/** Scroll box containing the item grid (optional - will be used if present) */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UScrollBox> ItemScrollBox;
 
 	/** Weight display text */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
@@ -74,7 +79,15 @@ protected:
 
 	/** Number of columns in grid */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
-	int32 GridColumns = 6;
+	int32 GridColumns = 10;
+
+	/** Padding between inventory slots */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	FMargin SlotPadding = FMargin(2.0f);
+
+	/** Size for each slot */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory", meta = (ClampMin = "32.0"))
+	float SlotSize = 64.0f;
 
 	/** Array of slot widgets */
 	UPROPERTY()

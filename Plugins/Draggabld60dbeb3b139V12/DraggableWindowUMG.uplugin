@@ -1,0 +1,30 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "os-version: 3.3.4",
+	"FriendlyName": "DraggableWindowUMG",
+	"Description": "Create a window widget that you can drag around using mouse in game.",
+	"Category": "YetiTech Studios",
+	"CreatedBy": "YetiTech Studios",
+	"CreatedByURL": "https://www.yetitechstudios.com/",
+	"DocsURL": "https://docs.yetitechstudios.com/",
+	"MarketplaceURL": "",
+	"SupportURL": "https://discord.gg/S7ykM2q",
+	"EngineVersion": "5.7.0",
+	"CanContainContent": true,
+	"Installed": true,
+	"Modules": [
+		{
+			"Name": "DraggableWindowUMG",
+			"Type": "Runtime",
+			"LoadingPhase": "PreDefault",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux",
+				"Mac",
+				"Android",
+				"IOS"
+			]
+		}
+	]
+}

@@ -3,6 +3,9 @@
 #include "InventoryWidget.h"
 #include "InventorySlotWidget.h"
 #include "Components/UniformGridPanel.h"
+#include "Components/ScrollBox.h"
+#include "Components/SizeBox.h"
+#include "Components/SizeBoxSlot.h"
 #include "Components/TextBlock.h"
 #include "Components/ProgressBar.h"
 #include "Components/Button.h"
@@ -110,11 +113,26 @@ void UInventoryWidget::RefreshSlot(int32 SlotIndex)
 
 	if (SlotWidgets[SlotIndex])
 	{
-		// Check if item passes filter
-		bool bShouldShow = !Item.IsValid() || PassesFilter(Item);
-
 		SlotWidgets[SlotIndex]->SetItem(Item);
-		SlotWidgets[SlotIndex]->SetVisibility(bShouldShow ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+		// Show/hide based on whether slot has an item and passes filter
+		bool bHasItem = Item.IsValid();
+		bool bPassesFilter = !bHasItem || PassesFilter(Item);
+
+		// Empty slots are hidden but still accept drag-drop (HitTestInvisible)
+		// Filtered slots are completely collapsed
+		if (!bPassesFilter)
+		{
+			SlotWidgets[SlotIndex]->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else if (!bHasItem)
+		{
+			SlotWidgets[SlotIndex]->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+		else
+		{
+			SlotWidgets[SlotIndex]->SetVisibility(ESlateVisibility::Visible);
+		}
 	}
 }
 
@@ -170,6 +188,7 @@ void UInventoryWidget::CloseInventory()
 
 void UInventoryWidget::OnInventoryUpdated(int32 SlotIndex, const FInventoryItem &Item)
 {
+	// Just refresh the specific slot - all slots are already created
 	RefreshSlot(SlotIndex);
 	UpdateCapacityDisplay();
 }
@@ -220,7 +239,13 @@ void UInventoryWidget::CreateSlotWidgets()
 	ItemGrid->ClearChildren();
 	SlotWidgets.Empty();
 
-	// Create new slot widgets
+	// Set the slot padding and size on the grid panel
+	ItemGrid->SetSlotPadding(SlotPadding);
+	ItemGrid->SetMinDesiredSlotWidth(SlotSize);
+	ItemGrid->SetMinDesiredSlotHeight(SlotSize);
+
+	// Create all slots - Eve Online style
+	// All slots exist but empty ones will be invisible (not collapsed, just invisible)
 	int32 NumSlots = InventoryComponent->MaxSlots;
 
 	for (int32 i = 0; i < NumSlots; ++i)
@@ -234,7 +259,14 @@ void UInventoryWidget::CreateSlotWidgets()
 			int32 Row = i / GridColumns;
 			int32 Column = i % GridColumns;
 
-			ItemGrid->AddChildToUniformGrid(SlotWidget, Row, Column);
+			// Wrap in a SizeBox to enforce the exact slot size
+			USizeBox* SizeBox = NewObject<USizeBox>(this);
+			SizeBox->SetWidthOverride(SlotSize);
+			SizeBox->SetHeightOverride(SlotSize);
+			SizeBox->AddChild(SlotWidget);
+
+			// Add to grid
+			ItemGrid->AddChildToUniformGrid(SizeBox, Row, Column);
 			SlotWidgets.Add(SlotWidget);
 		}
 	}
