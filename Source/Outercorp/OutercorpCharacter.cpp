@@ -17,6 +17,7 @@
 #include "InventoryWidget.h"
 #include "CharacterWidget.h"
 #include "Outercorp.h"
+#include "Window.h"
 
 AOutercorpCharacter::AOutercorpCharacter()
 {
@@ -68,6 +69,74 @@ void AOutercorpCharacter::BeginPlay()
 			if (BaseHUDWidget)
 			{
 				BaseHUDWidget->AddToViewport(0); // Base layer
+
+				// Get the WindowCanvas to add our modular windows to
+				UCanvasPanel* WindowCanvas = GetHUDCanvas();
+				if (WindowCanvas && ModularWindowClass)
+				{
+					// Create the inventory window and add it to the canvas
+					InventoryWindow = CreateWidget<UUserWidget>(GetWorld(), ModularWindowClass);
+					if (InventoryWindow)
+					{
+						UCanvasPanelSlot* Slot = WindowCanvas->AddChildToCanvas(InventoryWindow);
+						if (Slot)
+						{
+							// Set position and size for the window
+							Slot->SetPosition(FVector2D(100, 100));
+							Slot->SetSize(FVector2D(600, 400));
+							Slot->SetAnchors(FAnchors(0, 0, 0, 0));
+							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Set inventory window slot properties"));
+						}
+
+						// Call Init() on the window to initialize the modular window system
+						UWindow* Window = Cast<UWindow>(InventoryWindow);
+						if (Window)
+						{
+							bool bInitSuccess = Window->Init();
+							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Inventory window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
+						}
+
+						InventoryWindow->SetVisibility(ESlateVisibility::Hidden);
+						UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Created and hid InventoryWindow"));
+					}
+
+					// Create the character window and add it to the canvas
+					CharacterWindow = CreateWidget<UUserWidget>(GetWorld(), ModularWindowClass);
+					if (CharacterWindow)
+					{
+						UCanvasPanelSlot* Slot = WindowCanvas->AddChildToCanvas(CharacterWindow);
+						if (Slot)
+						{
+							// Set position and size for the window
+							Slot->SetPosition(FVector2D(750, 100));
+							Slot->SetSize(FVector2D(400, 500));
+							Slot->SetAnchors(FAnchors(0, 0, 0, 0));
+							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Set character window slot properties"));
+						}
+
+						// Call Init() on the window to initialize the modular window system
+						UWindow* Window = Cast<UWindow>(CharacterWindow);
+						if (Window)
+						{
+							bool bInitSuccess = Window->Init();
+							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Character window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
+						}
+
+						CharacterWindow->SetVisibility(ESlateVisibility::Hidden);
+						UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Created and hid CharacterWindow"));
+					}
+				}
+				else
+				{
+					if (!WindowCanvas)
+					{
+						UE_LOG(LogOutercorp, Error, TEXT("BeginPlay: WindowCanvas not found"));
+					}
+					if (!ModularWindowClass)
+					{
+						UE_LOG(LogOutercorp, Error, TEXT("BeginPlay: ModularWindowClass not set"));
+					}
+				}
 			}
 		}
 
@@ -193,8 +262,8 @@ void AOutercorpCharacter::ToggleInventory()
 		return;
 	}
 
-	// If inventory is open, close it (check if the reference exists, not IsInViewport)
-	if (InventoryDraggableWindow != nullptr)
+	// Check if inventory is open by checking visibility
+	if (InventoryWindow != nullptr && InventoryWindow->GetVisibility() == ESlateVisibility::Visible)
 	{
 		UE_LOG(LogOutercorp, Log, TEXT("ToggleInventory: Closing inventory"));
 		CloseInventory();
@@ -208,12 +277,37 @@ void AOutercorpCharacter::ToggleInventory()
 
 void AOutercorpCharacter::OpenInventory_Implementation()
 {
-	// This function should be overridden in Blueprint to create the draggable window
-	// Blueprint should:
-	// 1. Create Draggable Window with InventoryWidgetClass as child
-	// 2. Set InventoryDraggableWindow variable
-	// 3. Set InventoryWidget variable (from the content of draggable window)
-	// 4. Call BindInventoryEvents()
+	UE_LOG(LogOutercorp, Log, TEXT("OpenInventory_Implementation: Called"));
+
+	// If the window already exists (was pre-created in HUD)
+	if (InventoryWindow)
+	{
+		UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: InventoryWindow exists"));
+
+		// If the inventory widget hasn't been created yet, create it now
+		if (!InventoryWidget)
+		{
+			UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: Setting up inventory widget in existing window"));
+			SetupInventoryWidgetInWindow(InventoryWindow);
+		}
+		else
+		{
+			UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: InventoryWidget already exists"));
+		}
+
+		ESlateVisibility CurrentVisibility = InventoryWindow->GetVisibility();
+		UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: Current visibility: %d"), (int32)CurrentVisibility);
+
+		InventoryWindow->SetVisibility(ESlateVisibility::Visible);
+		UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: Set window to Visible"));
+
+		ESlateVisibility NewVisibility = InventoryWindow->GetVisibility();
+		UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: New visibility: %d"), (int32)NewVisibility);
+	}
+	else
+	{
+		UE_LOG(LogOutercorp, Error, TEXT("OpenInventory: InventoryWindow is null!"));
+	}
 
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (PC)
@@ -224,6 +318,7 @@ void AOutercorpCharacter::OpenInventory_Implementation()
 		InputMode.SetHideCursorDuringCapture(false);
 		PC->SetInputMode(InputMode);
 		PC->SetShowMouseCursor(true);
+		UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: Set input mode and mouse cursor"));
 	}
 }
 
@@ -271,16 +366,15 @@ UCanvasPanel* AOutercorpCharacter::GetHUDCanvas() const
 
 void AOutercorpCharacter::CloseInventory()
 {
-	// Remove the draggable window from its parent (HUD canvas)
-	if (InventoryDraggableWindow)
+	// Hide the modular window instead of removing it (to keep it in canvas hierarchy)
+	if (InventoryWindow)
 	{
-		InventoryDraggableWindow->RemoveFromParent();
-		UE_LOG(LogOutercorp, Log, TEXT("CloseInventory: Removed draggable window from parent"));
+		InventoryWindow->SetVisibility(ESlateVisibility::Hidden);
+		UE_LOG(LogOutercorp, Log, TEXT("CloseInventory: Hidden inventory window"));
 	}
 
-	// Clear references
-	InventoryDraggableWindow = nullptr;
-	InventoryWidget = nullptr;
+	// Don't null out references - we'll reuse them
+	// The window and widget stay intact for next time
 
 	// Call the closed callback
 	OnInventoryWidgetClosed();
@@ -293,8 +387,8 @@ void AOutercorpCharacter::OnInventoryWidgetClosed()
 	// Only restore game input if no other UI widgets are open
 	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
-		// Check if character window is still open
-		bool bAnyWidgetOpen = (CharacterDraggableWindow != nullptr);
+		// Check if character window is still open (by visibility)
+		bool bAnyWidgetOpen = (CharacterWindow != nullptr && CharacterWindow->GetVisibility() == ESlateVisibility::Visible);
 
 		UE_LOG(LogOutercorp, Log, TEXT("OnInventoryWidgetClosed: bAnyWidgetOpen = %s"), bAnyWidgetOpen ? TEXT("true") : TEXT("false"));
 
@@ -327,8 +421,8 @@ void AOutercorpCharacter::ToggleCharacter()
 		return;
 	}
 
-	// If character window is open, close it (check if the reference exists, not IsInViewport)
-	if (CharacterDraggableWindow != nullptr)
+	// Check if character window is open by checking visibility
+	if (CharacterWindow != nullptr && CharacterWindow->GetVisibility() == ESlateVisibility::Visible)
 	{
 		UE_LOG(LogOutercorp, Log, TEXT("ToggleCharacter: Closing character window"));
 		CloseCharacter();
@@ -342,12 +436,29 @@ void AOutercorpCharacter::ToggleCharacter()
 
 void AOutercorpCharacter::OpenCharacter_Implementation()
 {
-	// This function should be overridden in Blueprint to create the draggable window
-	// Blueprint should:
-	// 1. Create Draggable Window with CharacterWidgetClass as child
-	// 2. Set CharacterDraggableWindow variable
-	// 3. Set CharacterWidget variable (from the content of draggable window)
-	// 4. Call BindCharacterEvents()
+	// If the window already exists (was pre-created in HUD)
+	if (CharacterWindow)
+	{
+		// If the character widget hasn't been created yet, create it now
+		if (!CharacterWidget)
+		{
+			UE_LOG(LogOutercorp, Log, TEXT("OpenCharacter: Setting up character widget in existing window"));
+			SetupCharacterWidgetInWindow(CharacterWindow);
+		}
+
+		CharacterWindow->SetVisibility(ESlateVisibility::Visible);
+		UE_LOG(LogOutercorp, Log, TEXT("OpenCharacter: Showing existing character window"));
+	}
+	else
+	{
+		// This function should be overridden in Blueprint to create the modular window
+		// Blueprint should:
+		// 1. Create Modular Window with CharacterWidgetClass as child
+		// 2. Set CharacterWindow variable
+		// 3. Set CharacterWidget variable (from the content of modular window)
+		// 4. Call BindCharacterEvents()
+		UE_LOG(LogOutercorp, Log, TEXT("OpenCharacter: CharacterWindow is null, needs to be created in Blueprint"));
+	}
 
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (PC)
@@ -377,16 +488,15 @@ void AOutercorpCharacter::BindCharacterEvents()
 
 void AOutercorpCharacter::CloseCharacter()
 {
-	// Remove the draggable window from its parent (HUD canvas)
-	if (CharacterDraggableWindow)
+	// Hide the modular window instead of removing it (to keep it in canvas hierarchy)
+	if (CharacterWindow)
 	{
-		CharacterDraggableWindow->RemoveFromParent();
-		UE_LOG(LogOutercorp, Log, TEXT("CloseCharacter: Removed draggable window from parent"));
+		CharacterWindow->SetVisibility(ESlateVisibility::Hidden);
+		UE_LOG(LogOutercorp, Log, TEXT("CloseCharacter: Hidden character window"));
 	}
 
-	// Clear references
-	CharacterDraggableWindow = nullptr;
-	CharacterWidget = nullptr;
+	// Don't null out references - we'll reuse them
+	// The window and widget stay intact for next time
 
 	// Call the closed callback
 	OnCharacterWidgetClosed();
@@ -399,8 +509,8 @@ void AOutercorpCharacter::OnCharacterWidgetClosed()
 	// Only restore game input if no other UI widgets are open
 	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
-		// Check if inventory window is still open
-		bool bAnyWidgetOpen = (InventoryDraggableWindow != nullptr);
+		// Check if inventory window is still open (by visibility)
+		bool bAnyWidgetOpen = (InventoryWindow != nullptr && InventoryWindow->GetVisibility() == ESlateVisibility::Visible);
 
 		UE_LOG(LogOutercorp, Log, TEXT("OnCharacterWidgetClosed: bAnyWidgetOpen = %s"), bAnyWidgetOpen ? TEXT("true") : TEXT("false"));
 
@@ -428,13 +538,13 @@ void AOutercorpCharacter::OnCharacterWidgetClosed()
 void AOutercorpCharacter::CloseAllWidgets()
 {
 	// Close inventory if open
-	if (InventoryDraggableWindow != nullptr)
+	if (InventoryWindow != nullptr)
 	{
 		CloseInventory();
 	}
 
 	// Close character window if open
-	if (CharacterDraggableWindow != nullptr)
+	if (CharacterWindow != nullptr)
 	{
 		CloseCharacter();
 	}
@@ -450,25 +560,27 @@ void AOutercorpCharacter::CloseAllWidgets()
 
 bool AOutercorpCharacter::IsAnyUIWidgetOpen() const
 {
-	return (InventoryDraggableWindow != nullptr) || (CharacterDraggableWindow != nullptr);
+	bool bInventoryOpen = (InventoryWindow != nullptr && InventoryWindow->GetVisibility() == ESlateVisibility::Visible);
+	bool bCharacterOpen = (CharacterWindow != nullptr && CharacterWindow->GetVisibility() == ESlateVisibility::Visible);
+	return bInventoryOpen || bCharacterOpen;
 }
 
-UUserWidget* AOutercorpCharacter::GetDraggableWindowChild(UUserWidget* DraggableWindow) const
+UUserWidget* AOutercorpCharacter::GetModularWindowChild(UUserWidget* ModularWindow) const
 {
-	if (!DraggableWindow)
+	if (!ModularWindow)
 	{
-		UE_LOG(LogOutercorp, Warning, TEXT("GetDraggableWindowChild: DraggableWindow is null"));
+		UE_LOG(LogOutercorp, Warning, TEXT("GetModularWindowChild: ModularWindow is null"));
 		return nullptr;
 	}
 
-	UE_LOG(LogOutercorp, Log, TEXT("GetDraggableWindowChild: Searching in window type: %s"), *DraggableWindow->GetClass()->GetName());
+	UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Searching in window type: %s"), *ModularWindow->GetClass()->GetName());
 
 	// First, try getting the root widget and traversing from there
-	UPanelWidget* RootWidget = DraggableWindow->GetRootWidget() ? Cast<UPanelWidget>(DraggableWindow->GetRootWidget()) : nullptr;
+	UPanelWidget* RootWidget = ModularWindow->GetRootWidget() ? Cast<UPanelWidget>(ModularWindow->GetRootWidget()) : nullptr;
 
 	if (RootWidget)
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("GetDraggableWindowChild: Root widget type: %s, child count: %d"),
+		UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Root widget type: %s, child count: %d"),
 			*RootWidget->GetClass()->GetName(), RootWidget->GetChildrenCount());
 
 		// Iterate through all children of root widget
@@ -477,7 +589,7 @@ UUserWidget* AOutercorpCharacter::GetDraggableWindowChild(UUserWidget* Draggable
 			UWidget* Child = RootWidget->GetChildAt(i);
 			if (Child)
 			{
-				UE_LOG(LogOutercorp, Log, TEXT("GetDraggableWindowChild: Root child %d: %s (name: %s)"),
+				UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Root child %d: %s (name: %s)"),
 					i, *Child->GetClass()->GetName(), *Child->GetName());
 
 				// Check if this child is a UUserWidget
@@ -486,7 +598,7 @@ UUserWidget* AOutercorpCharacter::GetDraggableWindowChild(UUserWidget* Draggable
 					// Check if it's our target widget type
 					if (UserWidgetChild->IsA(UCharacterWidget::StaticClass()) || UserWidgetChild->IsA(UInventoryWidget::StaticClass()))
 					{
-						UE_LOG(LogOutercorp, Log, TEXT("GetDraggableWindowChild: Found target widget at root child %d"), i);
+						UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Found target widget at root child %d"), i);
 						return UserWidgetChild;
 					}
 				}
@@ -494,20 +606,20 @@ UUserWidget* AOutercorpCharacter::GetDraggableWindowChild(UUserWidget* Draggable
 				// If it's a panel, check its children too
 				if (UPanelWidget* Panel = Cast<UPanelWidget>(Child))
 				{
-					UE_LOG(LogOutercorp, Log, TEXT("GetDraggableWindowChild: Child %d is a panel with %d children"), i, Panel->GetChildrenCount());
+					UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Child %d is a panel with %d children"), i, Panel->GetChildrenCount());
 					for (int32 j = 0; j < Panel->GetChildrenCount(); ++j)
 					{
 						UWidget* PanelChild = Panel->GetChildAt(j);
 						if (PanelChild)
 						{
-							UE_LOG(LogOutercorp, Log, TEXT("GetDraggableWindowChild: Panel child %d: %s (name: %s)"),
+							UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Panel child %d: %s (name: %s)"),
 								j, *PanelChild->GetClass()->GetName(), *PanelChild->GetName());
 
 							if (UUserWidget* UserWidgetChild = Cast<UUserWidget>(PanelChild))
 							{
 								if (UserWidgetChild->IsA(UCharacterWidget::StaticClass()) || UserWidgetChild->IsA(UInventoryWidget::StaticClass()))
 								{
-									UE_LOG(LogOutercorp, Log, TEXT("GetDraggableWindowChild: Found target widget in panel at index %d"), j);
+									UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Found target widget in panel at index %d"), j);
 									return UserWidgetChild;
 								}
 							}
@@ -529,9 +641,9 @@ UUserWidget* AOutercorpCharacter::GetDraggableWindowChild(UUserWidget* Draggable
 
 	for (const FName& Name : PossibleNames)
 	{
-		if (UWidget* Widget = DraggableWindow->GetWidgetFromName(Name))
+		if (UWidget* Widget = ModularWindow->GetWidgetFromName(Name))
 		{
-			UE_LOG(LogOutercorp, Log, TEXT("GetDraggableWindowChild: Found widget by name '%s': %s"), *Name.ToString(), *Widget->GetClass()->GetName());
+			UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Found widget by name '%s': %s"), *Name.ToString(), *Widget->GetClass()->GetName());
 			if (UUserWidget* UserWidget = Cast<UUserWidget>(Widget))
 			{
 				return UserWidget;
@@ -539,7 +651,7 @@ UUserWidget* AOutercorpCharacter::GetDraggableWindowChild(UUserWidget* Draggable
 		}
 	}
 
-	UE_LOG(LogOutercorp, Warning, TEXT("GetDraggableWindowChild: Could not find child widget in draggable window after exhaustive search"));
+	UE_LOG(LogOutercorp, Warning, TEXT("GetModularWindowChild: Could not find child widget in modular window after exhaustive search"));
 	return nullptr;
 }
 
@@ -559,22 +671,22 @@ void AOutercorpCharacter::DebugPrintWidgetType(UUserWidget* Widget) const
 	UE_LOG(LogOutercorp, Log, TEXT("DebugPrintWidgetType: Is CharacterWidget? %s"), Widget->IsA(UCharacterWidget::StaticClass()) ? TEXT("YES") : TEXT("NO"));
 }
 
-void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* DraggableWindow)
+void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* ModularWindow)
 {
-	if (!DraggableWindow)
+	if (!ModularWindow)
 	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupCharacterWidgetInWindow: DraggableWindow is null"));
+		UE_LOG(LogOutercorp, Error, TEXT("SetupCharacterWidgetInWindow: ModularWindow is null"));
 		return;
 	}
 
-	// Store the draggable window reference
-	CharacterDraggableWindow = DraggableWindow;
+	// Store the modular window reference
+	CharacterWindow = ModularWindow;
 
-	// Get the ChildWidgetCanvas from the draggable window
-	UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(DraggableWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
+	// Get the ChildWidgetCanvas from the modular window
+	UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
 	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupCharacterWidgetInWindow: Could not find ChildWidgetCanvas in draggable window"));
+		UE_LOG(LogOutercorp, Error, TEXT("SetupCharacterWidgetInWindow: Could not find ChildWidgetCanvas in modular window"));
 		return;
 	}
 
@@ -601,30 +713,26 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* DraggableWin
 		Slot->SetOffsets(FMargin(0.0f, 0.0f, 0.0f, 0.0f));
 	}
 
-	UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Successfully added character widget to draggable window"));
+	UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Successfully added character widget to modular window"));
 
 	// Bind events
 	BindCharacterEvents();
 
-	// Try to bind to the draggable window's close button
-	UButton* WindowCloseButton = Cast<UButton>(DraggableWindow->GetWidgetFromName(FName("CloseBtn")));
+	// Try to bind to the modular window's close button
+	UButton* WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
 	if (WindowCloseButton)
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Found CloseBtn in draggable window, binding to CloseCharacter"));
+		UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Found CloseBtn in modular window, binding to CloseCharacter"));
 		WindowCloseButton->OnClicked.AddDynamic(this, &AOutercorpCharacter::CloseCharacter);
 	}
 	else
 	{
-		UE_LOG(LogOutercorp, Warning, TEXT("SetupCharacterWidgetInWindow: Could not find CloseBtn in draggable window - X button won't work!"));
+		UE_LOG(LogOutercorp, Warning, TEXT("SetupCharacterWidgetInWindow: Could not find CloseBtn in modular window - X button won't work!"));
 	}
 
-	// Add the draggable window to HUD canvas
-	UCanvasPanel* HUDCanvas = GetHUDCanvas();
-	if (HUDCanvas)
-	{
-		HUDCanvas->AddChildToCanvas(CharacterDraggableWindow);
-		UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Added draggable window to HUD canvas"));
-	}
+	// Note: The modular window should already be added to the HUD canvas in Blueprint
+	// to ensure the canvas slot is set up before Init() is called.
+	// We don't add it here to avoid duplicates.
 
 	// Set keyboard focus to the character widget so it can receive ESC/I key events
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -642,22 +750,22 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* DraggableWin
 	}
 }
 
-void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* DraggableWindow)
+void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* ModularWindow)
 {
-	if (!DraggableWindow)
+	if (!ModularWindow)
 	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupInventoryWidgetInWindow: DraggableWindow is null"));
+		UE_LOG(LogOutercorp, Error, TEXT("SetupInventoryWidgetInWindow: ModularWindow is null"));
 		return;
 	}
 
-	// Store the draggable window reference
-	InventoryDraggableWindow = DraggableWindow;
+	// Store the modular window reference
+	InventoryWindow = ModularWindow;
 
-	// Get the ChildWidgetCanvas from the draggable window
-	UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(DraggableWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
+	// Get the ChildWidgetCanvas from the modular window
+	UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
 	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupInventoryWidgetInWindow: Could not find ChildWidgetCanvas in draggable window"));
+		UE_LOG(LogOutercorp, Error, TEXT("SetupInventoryWidgetInWindow: Could not find ChildWidgetCanvas in modular window"));
 		return;
 	}
 
@@ -684,30 +792,26 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* DraggableWin
 		Slot->SetOffsets(FMargin(0.0f, 0.0f, 0.0f, 0.0f));
 	}
 
-	UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Successfully added inventory widget to draggable window"));
+	UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Successfully added inventory widget to modular window"));
 
 	// Bind events
 	BindInventoryEvents();
 
-	// Try to bind to the draggable window's close button
-	UButton* WindowCloseButton = Cast<UButton>(DraggableWindow->GetWidgetFromName(FName("CloseBtn")));
+	// Try to bind to the modular window's close button
+	UButton* WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
 	if (WindowCloseButton)
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Found CloseBtn in draggable window, binding to CloseInventory"));
+		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Found CloseBtn in modular window, binding to CloseInventory"));
 		WindowCloseButton->OnClicked.AddDynamic(this, &AOutercorpCharacter::CloseInventory);
 	}
 	else
 	{
-		UE_LOG(LogOutercorp, Warning, TEXT("SetupInventoryWidgetInWindow: Could not find CloseBtn in draggable window - X button won't work!"));
+		UE_LOG(LogOutercorp, Warning, TEXT("SetupInventoryWidgetInWindow: Could not find CloseBtn in modular window - X button won't work!"));
 	}
 
-	// Add the draggable window to HUD canvas
-	UCanvasPanel* HUDCanvas = GetHUDCanvas();
-	if (HUDCanvas)
-	{
-		HUDCanvas->AddChildToCanvas(InventoryDraggableWindow);
-		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Added draggable window to HUD canvas"));
-	}
+	// Note: The modular window should already be added to the HUD canvas in Blueprint
+	// to ensure the canvas slot is set up before Init() is called.
+	// We don't add it here to avoid duplicates.
 
 	// Set keyboard focus to the inventory widget so it can receive ESC/C key events
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))

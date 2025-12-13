@@ -28,86 +28,85 @@ class AOutercorpCharacter : public ACharacter
 	GENERATED_BODY()
 
 	/** Pawn mesh: first person view (arms; seen only by self) */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
-	USkeletalMeshComponent* FirstPersonMesh;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	USkeletalMeshComponent *FirstPersonMesh;
 
 	/** First person camera */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
-	UCameraComponent* FirstPersonCameraComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UCameraComponent *FirstPersonCameraComponent;
 
 	/** Inventory component */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
-	UInventoryComponent* InventoryComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UInventoryComponent *InventoryComponent;
 
 	/** Crosshair widget */
 	UPROPERTY()
-	UUserWidget* CrosshairWidget;
+	UUserWidget *CrosshairWidget;
 
-	/** Base HUD widget (contains canvas for draggable windows) */
-	UPROPERTY(BlueprintReadOnly, Category="UI", meta = (AllowPrivateAccess = "true"))
-	UUserWidget* BaseHUDWidget;
-
-	/** Inventory widget (the actual content widget) */
-	UPROPERTY(BlueprintReadWrite, Category="UI", meta = (AllowPrivateAccess = "true"))
-	UInventoryWidget* InventoryWidget;
-
-	/** Draggable window that wraps the inventory widget */
-	UPROPERTY(BlueprintReadWrite, Category="UI", meta = (AllowPrivateAccess = "true"))
-	UUserWidget* InventoryDraggableWindow;
-
-	/** Character widget (the actual content widget) */
-	UPROPERTY(BlueprintReadWrite, Category="UI", meta = (AllowPrivateAccess = "true"))
-	UCharacterWidget* CharacterWidget;
-
-	/** Draggable window that wraps the character widget */
-	UPROPERTY(BlueprintReadWrite, Category="UI", meta = (AllowPrivateAccess = "true"))
-	UUserWidget* CharacterDraggableWindow;
+	/** Base HUD widget (contains canvas for modular windows) */
+	UPROPERTY(BlueprintReadOnly, Category = "UI", meta = (AllowPrivateAccess = "true"))
+	UUserWidget *BaseHUDWidget;
 
 protected:
+	/** Inventory widget (the actual content widget) */
+	UPROPERTY(BlueprintReadWrite, Category = "UI")
+	UInventoryWidget *InventoryWidget;
+
+	/** Modular window that wraps the inventory widget */
+	UPROPERTY(BlueprintReadWrite, Category = "UI")
+	UUserWidget *InventoryWindow;
+
+	/** Character widget (the actual content widget) */
+	UPROPERTY(BlueprintReadWrite, Category = "UI")
+	UCharacterWidget *CharacterWidget;
+
+	/** Modular window that wraps the character widget */
+	UPROPERTY(BlueprintReadWrite, Category = "UI")
+	UUserWidget *CharacterWindow;
 
 	/** Crosshair widget class */
-	UPROPERTY(EditDefaultsOnly, Category="UI")
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> CrosshairWidgetClass;
 
 	/** Base HUD widget class */
-	UPROPERTY(EditDefaultsOnly, Category="UI")
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> BaseHUDWidgetClass;
 
 	/** Inventory widget class */
-	UPROPERTY(EditDefaultsOnly, Category="UI")
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UInventoryWidget> InventoryWidgetClass;
 
 	/** Character widget class */
-	UPROPERTY(EditDefaultsOnly, Category="UI")
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UCharacterWidget> CharacterWidgetClass;
 
-	/** Draggable window class for wrapping widgets */
-	UPROPERTY(EditDefaultsOnly, Category="UI")
-	TSubclassOf<UUserWidget> DraggableWindowClass;
+	/** Modular window class for wrapping widgets */
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UUserWidget> ModularWindowClass;
 
 	/** Jump Input Action */
-	UPROPERTY(EditAnywhere, Category ="Input")
-	UInputAction* JumpAction;
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction *JumpAction;
 
 	/** Move Input Action */
-	UPROPERTY(EditAnywhere, Category ="Input")
-	UInputAction* MoveAction;
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction *MoveAction;
 
 	/** Look Input Action */
-	UPROPERTY(EditAnywhere, Category ="Input")
-	class UInputAction* LookAction;
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *LookAction;
 
 	/** Mouse Look Input Action */
-	UPROPERTY(EditAnywhere, Category ="Input")
-	class UInputAction* MouseLookAction;
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *MouseLookAction;
 
 	/** Inventory Toggle Input Action */
-	UPROPERTY(EditAnywhere, Category ="Input")
-	class UInputAction* InventoryAction;
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *InventoryAction;
 
 	/** Character Window Toggle Input Action */
-	UPROPERTY(EditAnywhere, Category ="Input")
-	class UInputAction* CharacterAction;
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *CharacterAction;
 
 public:
 	AOutercorpCharacter();
@@ -116,47 +115,46 @@ public:
 	virtual void BeginPlay() override;
 
 protected:
-
 	/** Called from Input Actions for movement input */
-	void MoveInput(const FInputActionValue& Value);
+	void MoveInput(const FInputActionValue &Value);
 
 	/** Called from Input Actions for looking input */
-	void LookInput(const FInputActionValue& Value);
+	void LookInput(const FInputActionValue &Value);
 
 	/** Handles aim inputs from either controls or UI interfaces */
-	UFUNCTION(BlueprintCallable, Category="Input")
+	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoAim(float Yaw, float Pitch);
 
 	/** Handles move inputs from either controls or UI interfaces */
-	UFUNCTION(BlueprintCallable, Category="Input")
+	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoMove(float Right, float Forward);
 
 	/** Handles jump start inputs from either controls or UI interfaces */
-	UFUNCTION(BlueprintCallable, Category="Input")
+	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoJumpStart();
 
 	/** Handles jump end inputs from either controls or UI interfaces */
-	UFUNCTION(BlueprintCallable, Category="Input")
+	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoJumpEnd();
 
 	/** Toggle inventory display */
-	UFUNCTION(BlueprintCallable, Category="Inventory")
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	virtual void ToggleInventory();
 
 	/** Open inventory (BlueprintNativeEvent allows Blueprint override) */
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Inventory")
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Inventory")
 	void OpenInventory();
 
 	/** Called after inventory widget is created to bind events */
-	UFUNCTION(BlueprintCallable, Category="Inventory")
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void BindInventoryEvents();
 
 	/** Get the HUD canvas panel for adding draggable windows */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category="UI")
-	class UCanvasPanel* GetHUDCanvas() const;
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "UI")
+	class UCanvasPanel *GetHUDCanvas() const;
 
 	/** Close inventory (to be called from Blueprint or C++) */
-	UFUNCTION(BlueprintCallable, Category="Inventory")
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void CloseInventory();
 
 	/** Called when inventory widget is closed */
@@ -164,35 +162,35 @@ protected:
 	void OnInventoryWidgetClosed();
 
 	/** Toggle character window display */
-	UFUNCTION(BlueprintCallable, Category="Character")
+	UFUNCTION(BlueprintCallable, Category = "Character")
 	virtual void ToggleCharacter();
 
 	/** Open character window (BlueprintNativeEvent allows Blueprint override) */
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category="Character")
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Character")
 	void OpenCharacter();
 
 	/** Called after character widget is created to bind events */
-	UFUNCTION(BlueprintCallable, Category="Character")
+	UFUNCTION(BlueprintCallable, Category = "Character")
 	void BindCharacterEvents();
 
-	/** Setup character widget in draggable window - call this after Create Draggable Window */
-	UFUNCTION(BlueprintCallable, Category="Character")
-	void SetupCharacterWidgetInWindow(UUserWidget* DraggableWindow);
+	/** Setup character widget in modular window - call this after Create Modular Window */
+	UFUNCTION(BlueprintCallable, Category = "Character")
+	void SetupCharacterWidgetInWindow(UUserWidget *ModularWindow);
 
-	/** Setup inventory widget in draggable window - call this after Create Draggable Window */
-	UFUNCTION(BlueprintCallable, Category="Inventory")
-	void SetupInventoryWidgetInWindow(UUserWidget* DraggableWindow);
+	/** Setup inventory widget in modular window - call this after Create Modular Window */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void SetupInventoryWidgetInWindow(UUserWidget *ModularWindow);
 
-	/** Helper to get child widget from draggable window */
-	UFUNCTION(BlueprintCallable, Category="UI")
-	UUserWidget* GetDraggableWindowChild(UUserWidget* DraggableWindow) const;
+	/** Helper to get child widget from modular window */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	UUserWidget *GetModularWindowChild(UUserWidget *ModularWindow) const;
 
 	/** Debug helper to print widget type */
-	UFUNCTION(BlueprintCallable, Category="UI")
-	void DebugPrintWidgetType(UUserWidget* Widget) const;
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void DebugPrintWidgetType(UUserWidget *Widget) const;
 
 	/** Close character window (to be called from Blueprint or C++) */
-	UFUNCTION(BlueprintCallable, Category="Character")
+	UFUNCTION(BlueprintCallable, Category = "Character")
 	void CloseCharacter();
 
 	/** Called when character widget is closed */
@@ -200,29 +198,24 @@ protected:
 	void OnCharacterWidgetClosed();
 
 	/** Close all open widgets */
-	UFUNCTION(BlueprintCallable, Category="UI")
+	UFUNCTION(BlueprintCallable, Category = "UI")
 	void CloseAllWidgets();
 
 	/** Check if any UI widget is currently open */
-	UFUNCTION(BlueprintCallable, Category="UI")
+	UFUNCTION(BlueprintCallable, Category = "UI")
 	bool IsAnyUIWidgetOpen() const;
 
 protected:
-
 	/** Set up input action bindings */
-	virtual void SetupPlayerInputComponent(UInputComponent* InputComponent) override;
-	
+	virtual void SetupPlayerInputComponent(UInputComponent *InputComponent) override;
 
 public:
-
 	/** Returns the first person mesh **/
-	USkeletalMeshComponent* GetFirstPersonMesh() const { return FirstPersonMesh; }
+	USkeletalMeshComponent *GetFirstPersonMesh() const { return FirstPersonMesh; }
 
 	/** Returns first person camera component **/
-	UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
+	UCameraComponent *GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
 
 	/** Returns inventory component **/
-	UInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }
-
+	UInventoryComponent *GetInventoryComponent() const { return InventoryComponent; }
 };
-

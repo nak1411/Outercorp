@@ -1,0 +1,28 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "2.0",
+	"FriendlyName": "Modular Window",
+	"Description": "Provides basic/low-level functionality that you would typically expect from a 'Program Window'.",
+	"Category": "UI",
+	"CreatedBy": "Nyaunix",
+	"CreatedByURL": "",
+	"DocsURL": "https://docs.google.com/document/d/1i4ZSgACVlzmAD8a-KULwKLsvYTOIPvYvstd1szBdqC0/edit?usp=sharing",
+	"MarketplaceURL": "com.epicgames.launcher://ue/Fab/product/4d99d313-4a15-4ad7-b412-d1e4e914115e",
+	"SupportURL": "",
+	"EngineVersion": "5.7.0",
+	"CanContainContent": true,
+	"Installed": true,
+	"Modules": [
+		{
+			"Name": "NX_ModularWindow",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux",
+				"Mac"
+			]
+		}
+	]
+}

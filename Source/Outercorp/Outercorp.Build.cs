@@ -19,7 +19,8 @@ public class Outercorp : ModuleRules
 			"GameplayStateTreeModule",
 			"UMG",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"NX_ModularWindow"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

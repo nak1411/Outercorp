@@ -1,0 +1,14 @@
+{
+    "Version": "1.2",
+    "Data": {
+        "Source": "d:\\nakdev\\outercorp\\plugins\\modularwcdb682fc546fv1\\source\\nx_modularwindow\\private\\nx_modularwindow.cpp",
+        "ProvidedModule": "",
+        "PCH": "d:\\nakdev\\outercorp\\intermediate\\build\\win64\\x64\\outercorpeditor\\development\\unrealed\\sharedpch.unrealed.project.valapi.valexpapi.cpp20.h.pch",
+        "Includes": [
+            "d:\\nakdev\\outercorp\\plugins\\modularwcdb682fc546fv1\\intermediate\\build\\win64\\x64\\unrealeditor\\development\\nx_modularwindow\\definitions.nx_modularwindow.h",
+            "d:\\nakdev\\outercorp\\plugins\\modularwcdb682fc546fv1\\source\\nx_modularwindow\\public\\nx_modularwindow.h"
+        ],
+        "ImportedModules": [],
+        "ImportedHeaderUnits": []
+    }
+}
