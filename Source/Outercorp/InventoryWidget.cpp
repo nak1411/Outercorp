@@ -10,11 +10,20 @@
 #include "Components/ProgressBar.h"
 #include "Components/Button.h"
 #include "Components/EditableText.h"
+#include "Components/PanelSlot.h"
 #include "Input/Reply.h"
+#include "Widgets/Layout/SScrollBox.h"
 
 void UInventoryWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// Initialize grid tracking variables
+	CachedGridSize = FVector2D::ZeroVector;
+	CurrentVisibleColumns = 0;
+	CurrentVisibleRows = 0;
+	CurrentVisibleSlots = 0;
+	bWaitingForGeometry = false;
 
 	UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::NativeConstruct: Starting button binding"));
 
@@ -53,6 +62,32 @@ void UInventoryWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
+void UInventoryWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// If we're waiting for geometry and slots haven't been created yet, try to create them
+	if (bWaitingForGeometry && SlotWidgets.Num() == 0)
+	{
+		FVector2D AvailableSize = FVector2D::ZeroVector;
+		if (ItemScrollBox)
+		{
+			AvailableSize = ItemScrollBox->GetCachedGeometry().GetLocalSize();
+		}
+		else if (ItemGrid)
+		{
+			AvailableSize = ItemGrid->GetCachedGeometry().GetLocalSize();
+		}
+
+		// Once we have valid geometry, create the slots
+		if (AvailableSize.X > 0 && AvailableSize.Y > 0)
+		{
+			CreateSlotWidgets();
+			bWaitingForGeometry = false;
+		}
+	}
+}
+
 FReply UInventoryWidget::NativeOnKeyDown(const FGeometry &InGeometry, const FKeyEvent &InKeyEvent)
 {
 	// Handle ESC or I key to close inventory
@@ -78,11 +113,19 @@ void UInventoryWidget::InitializeInventory(UInventoryComponent *InInventoryCompo
 	InventoryComponent->OnInventoryUpdated.AddDynamic(this, &UInventoryWidget::OnInventoryUpdated);
 	InventoryComponent->OnInventoryCapacityChanged.AddDynamic(this, &UInventoryWidget::OnCapacityChanged);
 
-	// Create slot widgets
+	// Try to create slot widgets immediately
 	CreateSlotWidgets();
 
-	// Initial refresh
-	RefreshInventory();
+	// If slots weren't created (no geometry yet), flag to try on next tick
+	if (SlotWidgets.Num() == 0)
+	{
+		bWaitingForGeometry = true;
+	}
+	else
+	{
+		// Initial refresh if slots were created
+		RefreshInventory();
+	}
 }
 
 void UInventoryWidget::RefreshInventory()
@@ -119,18 +162,15 @@ void UInventoryWidget::RefreshSlot(int32 SlotIndex)
 		bool bHasItem = Item.IsValid();
 		bool bPassesFilter = !bHasItem || PassesFilter(Item);
 
-		// Empty slots are hidden but still accept drag-drop (HitTestInvisible)
+		// Empty slots must be Visible to accept drag-drop events
 		// Filtered slots are completely collapsed
 		if (!bPassesFilter)
 		{
 			SlotWidgets[SlotIndex]->SetVisibility(ESlateVisibility::Collapsed);
 		}
-		else if (!bHasItem)
-		{
-			SlotWidgets[SlotIndex]->SetVisibility(ESlateVisibility::HitTestInvisible);
-		}
 		else
 		{
+			// Both empty and filled slots need to be Visible to receive drag-drop events
 			SlotWidgets[SlotIndex]->SetVisibility(ESlateVisibility::Visible);
 		}
 	}
@@ -228,6 +268,110 @@ void UInventoryWidget::OnSearchTextChanged(const FText &Text)
 	RefreshInventory();
 }
 
+void UInventoryWidget::ApplyClippingSettings()
+{
+	// Configure outer ScrollBox for vertical scrolling
+	if (ItemScrollBox)
+	{
+		ItemScrollBox->SetClipping(EWidgetClipping::ClipToBounds);
+		ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::WhenScrollingPossible);
+		ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Visible);
+		ItemScrollBox->SetAllowOverscroll(false);
+		ItemScrollBox->SetOrientation(EOrientation::Orient_Vertical);
+
+		UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: Vertical ScrollBox configured"));
+	}
+
+	// Configure inner ScrollBox for horizontal scrolling
+	if (HorizontalScrollBox)
+	{
+		HorizontalScrollBox->SetClipping(EWidgetClipping::ClipToBounds);
+		HorizontalScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::Never); // Let vertical handle mouse wheel
+		HorizontalScrollBox->SetScrollBarVisibility(ESlateVisibility::Collapsed);
+		HorizontalScrollBox->SetAllowOverscroll(false);
+		HorizontalScrollBox->SetOrientation(EOrientation::Orient_Horizontal);
+		HorizontalScrollBox->SetAlwaysShowScrollbar(false);
+
+		UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: Horizontal ScrollBox configured"));
+	}
+
+	// Force the UniformGridPanel to use exact slot sizes without compression
+	if (ItemGrid)
+	{
+		// Set slot padding and force minimum sizes
+		ItemGrid->SetSlotPadding(SlotPadding);
+		ItemGrid->SetMinDesiredSlotWidth(SlotSize);
+		ItemGrid->SetMinDesiredSlotHeight(SlotSize);
+
+		// Calculate the fixed width needed for the grid based on actual columns used
+		// Use CurrentVisibleColumns if set, otherwise fall back to GridColumns
+		int32 ColumnsForWidth = (CurrentVisibleColumns > 0) ? CurrentVisibleColumns : GridColumns;
+		float GridWidth = (ColumnsForWidth * SlotSize) + ((ColumnsForWidth + 1) * SlotPadding.Left);
+
+		// Check if ItemGrid is already wrapped in a SizeBox at Blueprint level
+		UPanelSlot* GridSlot = ItemGrid->Slot;
+		USizeBox* ParentSizeBox = GridSlot ? Cast<USizeBox>(GridSlot->Parent) : nullptr;
+
+		if (ParentSizeBox)
+		{
+			// Already in a SizeBox, set fixed width to prevent compression
+			ParentSizeBox->SetWidthOverride(GridWidth);
+			ParentSizeBox->SetMinDesiredWidth(GridWidth);
+			ParentSizeBox->SetMaxDesiredWidth(GridWidth);
+
+			// Let height auto-grow based on content
+			ParentSizeBox->SetHeightOverride(0.0f);
+			ParentSizeBox->SetMinDesiredHeight(0.0f);
+
+			UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: SizeBox - Fixed width: %f (%d columns), Auto height"), GridWidth, ColumnsForWidth);
+		}
+		else if (!GridSizeBox)
+		{
+			// Create a SizeBox wrapper at runtime to enforce fixed width
+			GridSizeBox = NewObject<USizeBox>(this);
+			GridSizeBox->SetWidthOverride(GridWidth);
+			GridSizeBox->SetMinDesiredWidth(GridWidth);
+			GridSizeBox->SetMaxDesiredWidth(GridWidth);
+			GridSizeBox->SetHeightOverride(0.0f); // Auto height
+
+			UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: Created SizeBox wrapper - Fixed width: %f (%d columns)"), GridWidth, ColumnsForWidth);
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: Grid slot size %f x %f, fixed width: %f for %d columns"), SlotSize, SlotSize, GridWidth, ColumnsForWidth);
+	}
+}
+
+void UInventoryWidget::EnableHorizontalScrolling()
+{
+	if (!ItemScrollBox)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EnableHorizontalScrolling: ItemScrollBox is null"));
+		return;
+	}
+
+	// Access the underlying Slate widget to enable horizontal scrolling
+	TSharedPtr<SWidget> SlateWidget = ItemScrollBox->GetCachedWidget();
+	if (!SlateWidget.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EnableHorizontalScrolling: Could not get Slate widget"));
+		return;
+	}
+
+	TSharedPtr<SScrollBox> SlateScrollBox = StaticCastSharedPtr<SScrollBox>(SlateWidget);
+	if (SlateScrollBox.IsValid())
+	{
+		// Enable both vertical and horizontal scrolling
+		SlateScrollBox->SetScrollBarRightClickDragAllowed(true);
+		SlateScrollBox->SetAllowOverscroll(EAllowOverscroll::No);
+
+		UE_LOG(LogTemp, Log, TEXT("EnableHorizontalScrolling: Horizontal scrolling enabled via Slate"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EnableHorizontalScrolling: Failed to cast to SScrollBox"));
+	}
+}
+
 void UInventoryWidget::CreateSlotWidgets()
 {
 	if (!ItemGrid || !SlotWidgetClass || !InventoryComponent)
@@ -235,20 +379,30 @@ void UInventoryWidget::CreateSlotWidgets()
 		return;
 	}
 
-	// Clear existing widgets
-	ItemGrid->ClearChildren();
-	SlotWidgets.Empty();
+	// Only create slots once - don't recreate on resize
+	if (SlotWidgets.Num() > 0)
+	{
+		return;
+	}
 
-	// Set the slot padding and size on the grid panel
-	ItemGrid->SetSlotPadding(SlotPadding);
-	ItemGrid->SetMinDesiredSlotWidth(SlotSize);
-	ItemGrid->SetMinDesiredSlotHeight(SlotSize);
+	// Always use MaxPreCreatedColumns to create slots
+	// This allows the grid to expand when window is resized wider
+	int32 ColumnsToUse = MaxPreCreatedColumns;
 
-	// Create all slots - Eve Online style
-	// All slots exist but empty ones will be invisible (not collapsed, just invisible)
-	int32 NumSlots = InventoryComponent->MaxSlots;
+	// Calculate total rows needed based on max columns
+	int32 RowsNeeded = FMath::CeilToInt(static_cast<float>(InventoryComponent->MaxSlots) / static_cast<float>(ColumnsToUse));
+	RowsNeeded = FMath::Min(RowsNeeded, MaxPreCreatedRows);
 
-	for (int32 i = 0; i < NumSlots; ++i)
+	UE_LOG(LogTemp, Log, TEXT("CreateSlotWidgets: Pre-creating maximum grid %d x %d for inventory capacity of %d"),
+		ColumnsToUse, RowsNeeded, InventoryComponent->MaxSlots);
+
+	// Pre-create all slots in a fixed grid layout
+	int32 TotalSlots = ColumnsToUse * RowsNeeded;
+
+	UE_LOG(LogTemp, Log, TEXT("CreateSlotWidgets: Creating grid %d x %d = %d slots for inventory capacity of %d"),
+		ColumnsToUse, RowsNeeded, TotalSlots, InventoryComponent->MaxSlots);
+
+	for (int32 i = 0; i < TotalSlots; ++i)
 	{
 		UInventorySlotWidget *SlotWidget = CreateWidget<UInventorySlotWidget>(this, SlotWidgetClass);
 		if (SlotWidget)
@@ -256,18 +410,68 @@ void UInventoryWidget::CreateSlotWidgets()
 			SlotWidget->SetSlotIndex(i);
 			SlotWidget->SetInventoryComponent(InventoryComponent);
 
-			int32 Row = i / GridColumns;
-			int32 Column = i % GridColumns;
+			int32 Row = i / ColumnsToUse;
+			int32 Column = i % ColumnsToUse;
 
-			// Wrap in a SizeBox to enforce the exact slot size
+			// Wrap in a SizeBox to enforce the exact slot size and prevent compression
 			USizeBox* SizeBox = NewObject<USizeBox>(this);
 			SizeBox->SetWidthOverride(SlotSize);
 			SizeBox->SetHeightOverride(SlotSize);
+			SizeBox->SetMinDesiredWidth(SlotSize);
+			SizeBox->SetMinDesiredHeight(SlotSize);
+			SizeBox->SetMaxDesiredWidth(SlotSize);
+			SizeBox->SetMaxDesiredHeight(SlotSize);
 			SizeBox->AddChild(SlotWidget);
 
 			// Add to grid
 			ItemGrid->AddChildToUniformGrid(SizeBox, Row, Column);
 			SlotWidgets.Add(SlotWidget);
+		}
+	}
+
+	// Store the column count used
+	CurrentVisibleColumns = ColumnsToUse;
+	CurrentVisibleRows = RowsNeeded;
+
+	// Apply clipping settings with the actual column count
+	ApplyClippingSettings();
+
+	UE_LOG(LogTemp, Log, TEXT("CreateSlotWidgets: Grid created with %d columns, slots will not compress on resize"), ColumnsToUse);
+
+	// Update visibility after creating slots
+	UpdateSlotVisibility();
+}
+
+void UInventoryWidget::RecalculateGridLayout(const FVector2D& AvailableSize)
+{
+	// No longer needed - all slots are pre-created
+	// This function is kept for compatibility but does nothing
+}
+
+void UInventoryWidget::UpdateSlotVisibility()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	int32 MaxSlots = InventoryComponent->MaxSlots;
+
+	// Update visibility for all slot widgets
+	for (int32 i = 0; i < SlotWidgets.Num(); ++i)
+	{
+		if (SlotWidgets[i])
+		{
+			// Slots beyond the inventory capacity should be completely hidden
+			if (i >= MaxSlots)
+			{
+				SlotWidgets[i]->SetVisibility(ESlateVisibility::Collapsed);
+			}
+			else
+			{
+				// Let RefreshSlot handle the visibility based on item and filter
+				RefreshSlot(i);
+			}
 		}
 	}
 }

@@ -150,14 +150,16 @@ void UInventorySlotWidget::UpdateAppearance()
 		// Set item icon
 		if (ItemIcon)
 		{
+			ItemIcon->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+
 			if (CurrentItem.ItemData->ItemIcon.IsNull())
 			{
-				ItemIcon->SetOpacity(0.3f);
+				ItemIcon->SetOpacity(ItemNoIconOpacity);
 				ItemIcon->SetBrushFromTexture(nullptr);
 			}
 			else
 			{
-				ItemIcon->SetOpacity(1.0f);
+				ItemIcon->SetOpacity(ItemIconOpacity);
 				// Load icon asynchronously
 				UTexture2D* IconTexture = CurrentItem.ItemData->ItemIcon.LoadSynchronous();
 				ItemIcon->SetBrushFromTexture(IconTexture);
@@ -178,29 +180,33 @@ void UInventorySlotWidget::UpdateAppearance()
 			}
 		}
 
+		// Set quantity border visibility
+		if (QuantityBorder)
+		{
+			if (CurrentItem.Quantity > 1)
+			{
+				QuantityBorder->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+			}
+			else
+			{
+				QuantityBorder->SetVisibility(ESlateVisibility::Hidden);
+			}
+		}
+
 		// Set rarity border color
 		if (RarityBorder)
 		{
+			RarityBorder->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 			FLinearColor RarityColor = CurrentItem.ItemData->GetRarityColor();
 			RarityBorder->SetBrushColor(RarityColor);
 		}
 	}
 	else
 	{
-		// Empty slot
+		// Empty slot - hide icon completely
 		if (ItemIcon)
 		{
-			if (EmptySlotIcon.IsNull())
-			{
-				ItemIcon->SetOpacity(0.1f);
-				ItemIcon->SetBrushFromTexture(nullptr);
-			}
-			else
-			{
-				ItemIcon->SetOpacity(0.3f);
-				UTexture2D* EmptyTexture = EmptySlotIcon.LoadSynchronous();
-				ItemIcon->SetBrushFromTexture(EmptyTexture);
-			}
+			ItemIcon->SetVisibility(ESlateVisibility::Hidden);
 		}
 
 		if (QuantityText)
@@ -208,9 +214,14 @@ void UInventorySlotWidget::UpdateAppearance()
 			QuantityText->SetVisibility(ESlateVisibility::Hidden);
 		}
 
+		if (QuantityBorder)
+		{
+			QuantityBorder->SetVisibility(ESlateVisibility::Hidden);
+		}
+
 		if (RarityBorder)
 		{
-			RarityBorder->SetBrushColor(FLinearColor(0.1f, 0.1f, 0.1f, 0.5f));
+			RarityBorder->SetVisibility(ESlateVisibility::Hidden);
 		}
 	}
 

@@ -73,6 +73,10 @@ protected:
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> RarityBorder;
 
+	/** Quantity border */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UBorder> QuantityBorder;
+
 	/** Background border */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BackgroundBorder;
@@ -93,16 +97,20 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
 	TObjectPtr<UInventoryComponent> InventoryComponent;
 
-	/** Default icon for empty slot */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
-	TSoftObjectPtr<UTexture2D> EmptySlotIcon;
+	/** Opacity for item icon when item has no icon */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ItemNoIconOpacity = 0.3f;
+
+	/** Opacity for item icon when item has an icon */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ItemIconOpacity = 1.0f;
 
 	/** Color for drag hover state */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
 	FLinearColor HoverColor = FLinearColor(0.2f, 0.5f, 1.0f, 0.5f);
 
 	/** Normal background color */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
 	FLinearColor NormalColor = FLinearColor(0.05f, 0.05f, 0.05f, 0.9f);
 
 public:
