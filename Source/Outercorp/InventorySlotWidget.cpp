@@ -6,9 +6,16 @@
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
+#include "Blueprint/SlateBlueprintLibrary.h"
 #include "Engine/Texture2D.h"
 #include "Input/Reply.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
+#include "ContextMenuWidget.h"
+
+// Initialize static member
+TWeakObjectPtr<UUserWidget> UInventorySlotWidget::CurrentOpenContextMenu = nullptr;
 
 void UInventorySlotWidget::NativeConstruct()
 {
@@ -26,12 +33,39 @@ void UInventorySlotWidget::NativeConstruct()
 
 FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	// Start drag detection
+	UE_LOG(LogTemp, Log, TEXT("InventorySlotWidget::NativeOnMouseButtonDown called for slot %d"), SlotIndex);
+
+	// Handle right-click for context menu - call Blueprint event
+	if (InMouseEvent.IsMouseButtonDown(EKeys::RightMouseButton))
+	{
+		UE_LOG(LogTemp, Log, TEXT("Right-click detected on slot %d"), SlotIndex);
+
+		// IMPORTANT: Close any existing context menu FIRST
+		CloseCurrentContextMenu();
+
+		// Get mouse position in viewport pixel coordinates
+		APlayerController* PC = GetOwningPlayer();
+		if (PC)
+		{
+			float MouseX, MouseY;
+			PC->GetMousePosition(MouseX, MouseY);
+			FVector2D MousePosition(MouseX, MouseY);
+
+			// Call Blueprint implementable event
+			OnRightClicked(MousePosition);
+		}
+
+		return FReply::Handled();
+	}
+
+	// Start drag detection for left-click
 	if (InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton) && CurrentItem.IsValid())
 	{
+		UE_LOG(LogTemp, Log, TEXT("Left-click drag detection"));
 		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
 	}
 
+	UE_LOG(LogTemp, Log, TEXT("Calling Super::NativeOnMouseButtonDown"));
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
@@ -54,7 +88,7 @@ void UInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, con
 	DragDropOp->bIsSplitOperation = InMouseEvent.IsShiftDown() && CurrentItem.Quantity > 1;
 
 	// Create visual widget for dragging
-	UInventorySlotWidget* DragVisual = CreateWidget<UInventorySlotWidget>(this, GetClass());
+	UInventorySlotWidget* DragVisual = CreateWidget<UInventorySlotWidget>(GetOwningPlayer(), GetClass());
 	if (DragVisual)
 	{
 		DragVisual->SetItem(CurrentItem);
@@ -135,12 +169,127 @@ void UInventorySlotWidget::SetItem(const FInventoryItem& Item)
 
 void UInventorySlotWidget::OnSlotClicked()
 {
-	// Right-click or use functionality can be implemented here
+	// Left-click functionality can be implemented here
 	// For now, just broadcast that slot was clicked
 	if (CurrentItem.IsValid())
 	{
 		UE_LOG(LogTemp, Log, TEXT("Slot %d clicked: %s"), SlotIndex, *CurrentItem.ItemData->ItemName.ToString());
 	}
+}
+
+void UInventorySlotWidget::HandleContextMenuAction(FName ActionID)
+{
+	UE_LOG(LogTemp, Log, TEXT("Context menu action: %s"), *ActionID.ToString());
+
+	if (ActionID == "Split")
+	{
+		HandleSplitItem();
+	}
+	else if (ActionID == "Destroy")
+	{
+		HandleDestroyItem();
+	}
+	else if (ActionID == "ShowInfo")
+	{
+		HandleShowInfo();
+	}
+	else if (ActionID == "StackAll")
+	{
+		HandleStackAll();
+	}
+}
+
+void UInventorySlotWidget::HandleSplitItem()
+{
+	if (!CurrentItem.IsValid() || !InventoryComponent)
+	{
+		return;
+	}
+
+	if (CurrentItem.Quantity <= 1)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Cannot split item with quantity 1 or less"));
+		return;
+	}
+
+	// Find first empty slot
+	int32 EmptySlot = InventoryComponent->FindEmptySlot();
+	if (EmptySlot == -1)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No empty slot available for split"));
+		return;
+	}
+
+	// Split stack in half
+	int32 SplitAmount = CurrentItem.Quantity / 2;
+	InventoryComponent->SplitStack(SlotIndex, EmptySlot, SplitAmount);
+
+	UE_LOG(LogTemp, Log, TEXT("Split %d items from slot %d to slot %d"), SplitAmount, SlotIndex, EmptySlot);
+}
+
+void UInventorySlotWidget::HandleDestroyItem()
+{
+	if (!CurrentItem.IsValid() || !InventoryComponent)
+	{
+		return;
+	}
+
+	// Cache the values we need before any widgets are destroyed
+	int32 CachedSlotIndex = SlotIndex;
+	int32 CachedQuantity = CurrentItem.Quantity;
+	FString ItemName = CurrentItem.ItemData->ItemName.ToString();
+	UInventoryComponent* CachedInventoryComponent = InventoryComponent;
+
+	// CRITICAL: Defer the actual item removal until the next frame
+	// This prevents the inventory update broadcast from destroying the slot widget
+	// while the context menu button is still processing the click event
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick([CachedInventoryComponent, CachedSlotIndex, CachedQuantity, ItemName]()
+		{
+			if (IsValid(CachedInventoryComponent))
+			{
+				// Now it's safe to remove the item and trigger the inventory update
+				CachedInventoryComponent->RemoveItemAtSlot(CachedSlotIndex, CachedQuantity);
+
+				UE_LOG(LogTemp, Log, TEXT("Destroyed %d x %s from slot %d"),
+					CachedQuantity,
+					*ItemName,
+					CachedSlotIndex);
+			}
+		});
+	}
+}
+
+void UInventorySlotWidget::HandleShowInfo()
+{
+	if (!CurrentItem.IsValid())
+	{
+		return;
+	}
+
+	// Call Blueprint event to show UI
+	ShowItemInfoUI(CurrentItem);
+}
+
+void UInventorySlotWidget::HandleStackAll()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	// Placeholder: Stack all similar items into this slot
+	// This is a simplified implementation
+	UE_LOG(LogTemp, Log, TEXT("Stack All triggered for slot %d"), SlotIndex);
+
+	// In a real implementation, you would:
+	// 1. Find all items of the same type in the inventory
+	// 2. Merge them into existing stacks, prioritizing filling up partial stacks
+	// 3. Move consolidated stacks to fill gaps
+
+	// For now, just log that it was called
+	UE_LOG(LogTemp, Warning, TEXT("Stack All functionality - to be implemented"));
 }
 
 void UInventorySlotWidget::UpdateAppearance()
@@ -230,4 +379,43 @@ void UInventorySlotWidget::UpdateAppearance()
 	{
 		BackgroundBorder->SetBrushColor(NormalColor);
 	}
+}
+
+void UInventorySlotWidget::CloseCurrentContextMenu()
+{
+	if (CurrentOpenContextMenu.IsValid())
+	{
+		UE_LOG(LogTemp, Log, TEXT("Closing previous context menu"));
+
+		UUserWidget* MenuToClose = CurrentOpenContextMenu.Get();
+
+		// Clear the reference FIRST before closing
+		// This prevents IsValid checks in Blueprint from finding stale references
+		CurrentOpenContextMenu = nullptr;
+
+		// Then close the menu
+		if (UContextMenuWidget* ContextMenu = Cast<UContextMenuWidget>(MenuToClose))
+		{
+			ContextMenu->CloseMenu();
+		}
+		else
+		{
+			// Fallback for generic widgets
+			MenuToClose->RemoveFromParent();
+		}
+	}
+}
+
+void UInventorySlotWidget::SetCurrentContextMenu(UUserWidget* ContextMenu)
+{
+	if (ContextMenu)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Setting new current context menu"));
+		CurrentOpenContextMenu = ContextMenu;
+	}
+}
+
+UUserWidget* UInventorySlotWidget::GetCurrentContextMenu()
+{
+	return CurrentOpenContextMenu.IsValid() ? CurrentOpenContextMenu.Get() : nullptr;
 }

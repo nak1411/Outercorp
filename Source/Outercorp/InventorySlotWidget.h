@@ -141,4 +141,46 @@ protected:
 
 	/** Update visual appearance based on item */
 	void UpdateAppearance();
+
+	/** Blueprint event called when right-clicked - implement context menu in Blueprint */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
+	void OnRightClicked(FVector2D MousePosition);
+
+	/** Close any currently open context menu before opening a new one */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	static void CloseCurrentContextMenu();
+
+	/** Set the currently open context menu (call this after creating the menu) */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	static void SetCurrentContextMenu(UUserWidget* ContextMenu);
+
+	/** Get the current open context menu (useful for Blueprint IsValid checks) */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	static UUserWidget* GetCurrentContextMenu();
+
+private:
+	/** Static reference to currently open context menu (shared across all slots) */
+	static TWeakObjectPtr<UUserWidget> CurrentOpenContextMenu;
+
+public:
+	/** Blueprint-callable function to handle context menu actions */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void HandleContextMenuAction(FName ActionID);
+
+protected:
+	/** Handle split item action */
+	void HandleSplitItem();
+
+	/** Handle destroy item action */
+	void HandleDestroyItem();
+
+	/** Handle show info action */
+	void HandleShowInfo();
+
+	/** Blueprint event for showing item info UI */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
+	void ShowItemInfoUI(const FInventoryItem& Item);
+
+	/** Handle stack all action */
+	void HandleStackAll();
 };
