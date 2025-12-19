@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
+#include "InventoryItemData.h"
 #include "OutercorpCharacter.generated.h"
 
 class UInputComponent;
@@ -64,6 +65,18 @@ protected:
 	UPROPERTY(BlueprintReadWrite, Category = "UI")
 	UUserWidget *CharacterWindow;
 
+	/** Item info widget (the actual content widget) */
+	UPROPERTY(BlueprintReadWrite, Category = "UI")
+	UUserWidget *ItemInfoWidget;
+
+	/** Modular window that wraps the item info widget */
+	UPROPERTY(BlueprintReadWrite, Category = "UI")
+	UUserWidget *ItemInfoWindow;
+
+	/** Currently displayed item in the item info window */
+	UPROPERTY(BlueprintReadOnly, Category = "UI")
+	FInventoryItem CurrentDisplayedItem;
+
 	/** Crosshair widget class */
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> CrosshairWidgetClass;
@@ -79,6 +92,10 @@ protected:
 	/** Character widget class */
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UCharacterWidget> CharacterWidgetClass;
+
+	/** Item info widget class */
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UUserWidget> ItemInfoWidgetClass;
 
 	/** Modular window class for wrapping widgets */
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
@@ -180,6 +197,26 @@ protected:
 	/** Setup inventory widget in modular window - call this after Create Modular Window */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void SetupInventoryWidgetInWindow(UUserWidget *ModularWindow);
+
+	/** Setup item info widget in modular window - call this after Create Modular Window */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void SetupItemInfoWidgetInWindow(UUserWidget *ModularWindow);
+
+	/** Open item info window with item data */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void OpenItemInfo(const FInventoryItem& Item);
+
+	/** Update item info widget with current item data - implement this in Blueprint */
+	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
+	void UpdateItemInfoDisplay();
+
+	/** Close item info window */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void CloseItemInfo();
+
+	/** Called when item info widget is closed */
+	UFUNCTION()
+	void OnItemInfoWidgetClosed();
 
 	/** Helper to get child widget from modular window */
 	UFUNCTION(BlueprintCallable, Category = "UI")

@@ -125,6 +125,32 @@ void AOutercorpCharacter::BeginPlay()
 						CharacterWindow->SetVisibility(ESlateVisibility::Hidden);
 						UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Created and hid CharacterWindow"));
 					}
+
+					// Create the item info window and add it to the canvas
+					ItemInfoWindow = CreateWidget<UUserWidget>(GetWorld(), ModularWindowClass);
+					if (ItemInfoWindow)
+					{
+						UCanvasPanelSlot* Slot = WindowCanvas->AddChildToCanvas(ItemInfoWindow);
+						if (Slot)
+						{
+							// Set position and size for the window
+							Slot->SetPosition(FVector2D(400, 200));
+							Slot->SetSize(FVector2D(350, 450));
+							Slot->SetAnchors(FAnchors(0, 0, 0, 0));
+							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Set item info window slot properties"));
+						}
+
+						// Call Init() on the window to initialize the modular window system
+						UWindow* Window = Cast<UWindow>(ItemInfoWindow);
+						if (Window)
+						{
+							bool bInitSuccess = Window->Init();
+							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Item info window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
+						}
+
+						ItemInfoWindow->SetVisibility(ESlateVisibility::Hidden);
+						UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Created and hid ItemInfoWindow"));
+					}
 				}
 				else
 				{
@@ -549,6 +575,12 @@ void AOutercorpCharacter::CloseAllWidgets()
 		CloseCharacter();
 	}
 
+	// Close item info window if open
+	if (ItemInfoWindow != nullptr)
+	{
+		CloseItemInfo();
+	}
+
 	// Restore input mode to game only
 	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
@@ -562,7 +594,8 @@ bool AOutercorpCharacter::IsAnyUIWidgetOpen() const
 {
 	bool bInventoryOpen = (InventoryWindow != nullptr && InventoryWindow->GetVisibility() == ESlateVisibility::Visible);
 	bool bCharacterOpen = (CharacterWindow != nullptr && CharacterWindow->GetVisibility() == ESlateVisibility::Visible);
-	return bInventoryOpen || bCharacterOpen;
+	bool bItemInfoOpen = (ItemInfoWindow != nullptr && ItemInfoWindow->GetVisibility() == ESlateVisibility::Visible);
+	return bInventoryOpen || bCharacterOpen || bItemInfoOpen;
 }
 
 UUserWidget* AOutercorpCharacter::GetModularWindowChild(UUserWidget* ModularWindow) const
@@ -826,5 +859,152 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* ModularWindo
 		PC->SetInputMode(InputMode);
 		PC->SetShowMouseCursor(true);
 		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Set input mode to Game and UI"));
+	}
+}
+
+void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget* ModularWindow)
+{
+	if (!ModularWindow)
+	{
+		UE_LOG(LogOutercorp, Error, TEXT("SetupItemInfoWidgetInWindow: ModularWindow is null"));
+		return;
+	}
+
+	// Store the modular window reference
+	ItemInfoWindow = ModularWindow;
+
+	// Get the ChildWidgetCanvas from the modular window
+	UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
+	if (!ChildCanvas)
+	{
+		UE_LOG(LogOutercorp, Error, TEXT("SetupItemInfoWidgetInWindow: Could not find ChildWidgetCanvas in modular window"));
+		return;
+	}
+
+	// Create the item info widget
+	if (!ItemInfoWidgetClass)
+	{
+		UE_LOG(LogOutercorp, Error, TEXT("SetupItemInfoWidgetInWindow: ItemInfoWidgetClass is not set"));
+		return;
+	}
+
+	ItemInfoWidget = CreateWidget<UUserWidget>(GetWorld(), ItemInfoWidgetClass);
+	if (!ItemInfoWidget)
+	{
+		UE_LOG(LogOutercorp, Error, TEXT("SetupItemInfoWidgetInWindow: Failed to create ItemInfoWidget"));
+		return;
+	}
+
+	// Add the item info widget to the child canvas
+	UCanvasPanelSlot* Slot = ChildCanvas->AddChildToCanvas(ItemInfoWidget);
+	if (Slot)
+	{
+		// Make the widget fill the entire canvas
+		Slot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		Slot->SetOffsets(FMargin(0.0f, 0.0f, 0.0f, 0.0f));
+	}
+
+	UE_LOG(LogOutercorp, Log, TEXT("SetupItemInfoWidgetInWindow: Successfully added item info widget to modular window"));
+
+	// Try to bind to the modular window's close button
+	UButton* WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
+	if (WindowCloseButton)
+	{
+		UE_LOG(LogOutercorp, Log, TEXT("SetupItemInfoWidgetInWindow: Found CloseBtn in modular window, binding to CloseItemInfo"));
+		WindowCloseButton->OnClicked.AddDynamic(this, &AOutercorpCharacter::CloseItemInfo);
+	}
+	else
+	{
+		UE_LOG(LogOutercorp, Warning, TEXT("SetupItemInfoWidgetInWindow: Could not find CloseBtn in modular window - X button won't work!"));
+	}
+}
+
+void AOutercorpCharacter::OpenItemInfo(const FInventoryItem& Item)
+{
+	UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Called for item %s"), Item.IsValid() ? *Item.ItemData->ItemName.ToString() : TEXT("Invalid"));
+
+	// Store the item data
+	CurrentDisplayedItem = Item;
+
+	// If the window already exists (was pre-created in HUD)
+	if (ItemInfoWindow)
+	{
+		// If the item info widget hasn't been created yet, create it now
+		if (!ItemInfoWidget)
+		{
+			UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Setting up item info widget in existing window"));
+			SetupItemInfoWidgetInWindow(ItemInfoWindow);
+		}
+
+		// Show the window first
+		ItemInfoWindow->SetVisibility(ESlateVisibility::Visible);
+		UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Showing item info window"));
+
+		// Call Blueprint event to update the display with the item data
+		UpdateItemInfoDisplay();
+		UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Called UpdateItemInfoDisplay"));
+	}
+	else
+	{
+		UE_LOG(LogOutercorp, Error, TEXT("OpenItemInfo: ItemInfoWindow is null!"));
+	}
+
+	// Ensure UI input mode is enabled
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC)
+	{
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
+		PC->SetInputMode(InputMode);
+		PC->SetShowMouseCursor(true);
+		UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Set input mode and mouse cursor"));
+	}
+}
+
+void AOutercorpCharacter::CloseItemInfo()
+{
+	// Hide the modular window instead of removing it
+	if (ItemInfoWindow)
+	{
+		ItemInfoWindow->SetVisibility(ESlateVisibility::Hidden);
+		UE_LOG(LogOutercorp, Log, TEXT("CloseItemInfo: Hidden item info window"));
+	}
+
+	// Call the closed callback
+	OnItemInfoWidgetClosed();
+}
+
+void AOutercorpCharacter::OnItemInfoWidgetClosed()
+{
+	UE_LOG(LogOutercorp, Log, TEXT("OnItemInfoWidgetClosed: Called"));
+
+	// Only restore game input if no other UI widgets are open
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		// Check if other windows are still open
+		bool bAnyWidgetOpen = (InventoryWindow != nullptr && InventoryWindow->GetVisibility() == ESlateVisibility::Visible) ||
+							  (CharacterWindow != nullptr && CharacterWindow->GetVisibility() == ESlateVisibility::Visible);
+
+		UE_LOG(LogOutercorp, Log, TEXT("OnItemInfoWidgetClosed: bAnyWidgetOpen = %s"), bAnyWidgetOpen ? TEXT("true") : TEXT("false"));
+
+		if (bAnyWidgetOpen)
+		{
+			// Keep UI mode
+			FInputModeGameAndUI InputMode;
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			InputMode.SetHideCursorDuringCapture(false);
+			PC->SetInputMode(InputMode);
+			PC->SetShowMouseCursor(true);
+			UE_LOG(LogOutercorp, Log, TEXT("OnItemInfoWidgetClosed: Keeping UI mode (other widgets open)"));
+		}
+		else
+		{
+			// No widgets open, restore game input
+			FInputModeGameOnly InputMode;
+			PC->SetInputMode(InputMode);
+			PC->SetShowMouseCursor(false);
+			UE_LOG(LogOutercorp, Log, TEXT("OnItemInfoWidgetClosed: Restored game-only input mode"));
+		}
 	}
 }
