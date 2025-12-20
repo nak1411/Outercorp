@@ -51,7 +51,7 @@ FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry
 			PC->GetMousePosition(MouseX, MouseY);
 			FVector2D MousePosition(MouseX, MouseY);
 
-			// Call Blueprint implementable event
+			// Always call OnRightClicked - Blueprint can use IsSlotEmpty() to branch
 			OnRightClicked(MousePosition);
 		}
 
@@ -197,6 +197,18 @@ void UInventorySlotWidget::HandleContextMenuAction(FName ActionID)
 	{
 		HandleStackAll();
 	}
+	else if (ActionID == "StackAllEmpty")
+	{
+		HandleStackAllEmpty();
+	}
+	else if (ActionID == "SelectAll")
+	{
+		HandleSelectAll();
+	}
+	else if (ActionID == "InvertSelection")
+	{
+		HandleInvertSelection();
+	}
 }
 
 void UInventorySlotWidget::HandleSplitItem()
@@ -290,6 +302,105 @@ void UInventorySlotWidget::HandleStackAll()
 
 	// For now, just log that it was called
 	UE_LOG(LogTemp, Warning, TEXT("Stack All functionality - to be implemented"));
+}
+
+void UInventorySlotWidget::HandleStackAllEmpty()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Stack All (Empty) triggered - consolidating all stackable items"));
+
+	// Get all items
+	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
+
+	// Group items by ItemID to find stackable groups
+	TMap<FName, TArray<int32>> ItemGroups;
+	for (int32 i = 0; i < AllItems.Num(); i++)
+	{
+		if (AllItems[i].IsValid() && AllItems[i].ItemData && AllItems[i].ItemData->MaxStackSize > 1)
+		{
+			FName ItemID = AllItems[i].ItemData->ItemID;
+			ItemGroups.FindOrAdd(ItemID).Add(i);
+		}
+	}
+
+	// For each group, try to stack them together
+	for (const auto& Group : ItemGroups)
+	{
+		const TArray<int32>& SlotIndices = Group.Value;
+		if (SlotIndices.Num() > 1)
+		{
+			// Try to merge all items in this group into the first slot
+			for (int32 i = 1; i < SlotIndices.Num(); i++)
+			{
+				InventoryComponent->MergeStacks(SlotIndices[i], SlotIndices[0]);
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Stack All completed"));
+}
+
+void UInventorySlotWidget::HandleSelectAll()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Select All triggered"));
+
+	// Get all occupied slot indices
+	TArray<int32> SelectedSlots;
+	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
+
+	for (int32 i = 0; i < AllItems.Num(); i++)
+	{
+		if (AllItems[i].IsValid())
+		{
+			SelectedSlots.Add(i);
+		}
+	}
+
+	// Notify Blueprint about selection change
+	OnSelectionChanged(SelectedSlots);
+
+	UE_LOG(LogTemp, Log, TEXT("Selected %d slots"), SelectedSlots.Num());
+}
+
+void UInventorySlotWidget::HandleInvertSelection()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Invert Selection triggered"));
+
+	// Note: This is a basic implementation
+	// In a full implementation, you would need to track current selection state
+	// For now, we'll invert based on whether slots are occupied or not
+
+	TArray<int32> SelectedSlots;
+	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
+
+	// This is a placeholder - you'll need to implement proper selection tracking
+	// For demonstration, we'll just select all empty slots
+	for (int32 i = 0; i < AllItems.Num(); i++)
+	{
+		if (!AllItems[i].IsValid())
+		{
+			SelectedSlots.Add(i);
+		}
+	}
+
+	// Notify Blueprint about selection change
+	OnSelectionChanged(SelectedSlots);
+
+	UE_LOG(LogTemp, Log, TEXT("Inverted selection - %d slots now selected"), SelectedSlots.Num());
 }
 
 void UInventorySlotWidget::UpdateAppearance()

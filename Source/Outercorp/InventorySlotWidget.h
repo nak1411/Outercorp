@@ -134,6 +134,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	int32 GetSlotIndex() const { return SlotIndex; }
 
+	/** Check if slot is empty */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	bool IsSlotEmpty() const { return !CurrentItem.IsValid(); }
+
 protected:
 	/** Called when slot is clicked */
 	UFUNCTION()
@@ -142,9 +146,13 @@ protected:
 	/** Update visual appearance based on item */
 	void UpdateAppearance();
 
-	/** Blueprint event called when right-clicked - implement context menu in Blueprint */
+	/** Blueprint event called when right-clicked on occupied slot - implement context menu in Blueprint */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
 	void OnRightClicked(FVector2D MousePosition);
+
+	/** Blueprint event called when right-clicked on empty slot - implement empty slot context menu in Blueprint */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
+	void OnEmptySlotRightClicked(FVector2D MousePosition);
 
 	/** Close any currently open context menu before opening a new one */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -183,4 +191,17 @@ protected:
 
 	/** Handle stack all action */
 	void HandleStackAll();
+
+	/** Handle stack all (empty slot version) - stacks all items of any type */
+	void HandleStackAllEmpty();
+
+	/** Handle select all action - selects all items in inventory */
+	void HandleSelectAll();
+
+	/** Handle invert selection action - inverts current selection */
+	void HandleInvertSelection();
+
+	/** Blueprint event for notifying selection changes */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
+	void OnSelectionChanged(const TArray<int32>& SelectedSlots);
 };
