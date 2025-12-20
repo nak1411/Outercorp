@@ -100,6 +100,7 @@ void UInventoryWidget::NativeConstruct()
 	CurrentVisibleColumns = 0;
 	CurrentVisibleRows = 0;
 	CurrentVisibleSlots = 0;
+	PendingColumnCount = 0;
 	bWaitingForGeometry = false;
 
 	// Set up click capture for deselecting items when clicking outside
@@ -145,10 +146,11 @@ void UInventoryWidget::NativeConstruct()
 
 void UInventoryWidget::NativeDestruct()
 {
-	// Clean up timer
+	// Clean up timers
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(SetupTimerHandle);
+		World->GetTimerManager().ClearTimer(ReflowDebounceTimerHandle);
 	}
 
 	// Remove input processor
@@ -188,6 +190,48 @@ void UInventoryWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 		{
 			CreateSlotWidgets();
 			bWaitingForGeometry = false;
+		}
+	}
+
+	// Dynamically reflow items when window is resized (debounced)
+	if (ItemScrollBox)
+	{
+		FVector2D CurrentSize = ItemScrollBox->GetCachedGeometry().GetLocalSize();
+		if (!CachedGridSize.Equals(CurrentSize, 1.0f))
+		{
+			bool bWidthChanged = !FMath::IsNearlyEqual(CachedGridSize.X, CurrentSize.X, 1.0f);
+			bool bHeightChanged = !FMath::IsNearlyEqual(CachedGridSize.Y, CurrentSize.Y, 1.0f);
+
+			CachedGridSize = CurrentSize;
+
+			// Calculate how many columns can fit in the current width
+			int32 NewColumnCount = CalculateColumnsFromWidth(CurrentSize.X);
+
+			// Schedule debounced reflow if width changed (column count may have changed)
+			// or if height changed (need to compress items to fit new visible area)
+			bool bNeedsReflow = (bWidthChanged && NewColumnCount != CurrentVisibleColumns && NewColumnCount > 0);
+			bool bNeedsCompress = bHeightChanged;
+
+			if (bNeedsReflow || bNeedsCompress)
+			{
+				if (bNeedsReflow)
+				{
+					PendingColumnCount = NewColumnCount;
+				}
+
+				// Cancel any existing timer and start a new one
+				if (UWorld* World = GetWorld())
+				{
+					World->GetTimerManager().ClearTimer(ReflowDebounceTimerHandle);
+					World->GetTimerManager().SetTimer(
+						ReflowDebounceTimerHandle,
+						this,
+						&UInventoryWidget::ExecuteDebouncedReflow,
+						0.2f,  // 200ms delay after resize stops
+						false
+					);
+				}
+			}
 		}
 	}
 }
@@ -255,6 +299,17 @@ void UInventoryWidget::RefreshInventory()
 		return;
 	}
 
+	// Update the tracking set with current state
+	PreviouslyOccupiedSlots.Empty();
+	for (int32 i = 0; i < InventoryComponent->MaxSlots; ++i)
+	{
+		FInventoryItem Item = InventoryComponent->GetItemAtSlot(i);
+		if (Item.IsValid())
+		{
+			PreviouslyOccupiedSlots.Add(i);
+		}
+	}
+
 	// Refresh all slots
 	for (int32 i = 0; i < SlotWidgets.Num(); ++i)
 	{
@@ -263,6 +318,9 @@ void UInventoryWidget::RefreshInventory()
 
 	// Update capacity display
 	UpdateCapacityDisplay();
+
+	// Update scrollbar visibility based on items
+	UpdateScrollbarVisibility();
 }
 
 void UInventoryWidget::RefreshSlot(int32 SlotIndex)
@@ -351,6 +409,26 @@ void UInventoryWidget::OnInventoryUpdated(int32 SlotIndex, const FInventoryItem 
 	// Just refresh the specific slot - all slots are already created
 	RefreshSlot(SlotIndex);
 	UpdateCapacityDisplay();
+
+	// Update scrollbar visibility when items change
+	UpdateScrollbarVisibility();
+
+	// Check if this is a NEWLY occupied slot (for split/add operations)
+	bool bWasPreviouslyEmpty = !PreviouslyOccupiedSlots.Contains(SlotIndex);
+	bool bIsNowOccupied = Item.IsValid();
+
+	// Update the tracking set
+	if (bIsNowOccupied)
+	{
+		PreviouslyOccupiedSlots.Add(SlotIndex);
+	}
+	else
+	{
+		PreviouslyOccupiedSlots.Remove(SlotIndex);
+	}
+
+	// Don't auto-scroll - it causes issues with view jumping around
+	// User can manually compress if needed
 }
 
 void UInventoryWidget::OnCapacityChanged(int32 NewCapacity)
@@ -395,11 +473,13 @@ void UInventoryWidget::ApplyClippingSettings()
 	{
 		ItemScrollBox->SetClipping(EWidgetClipping::ClipToBounds);
 		ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::WhenScrollingPossible);
-		ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Visible);
 		ItemScrollBox->SetAllowOverscroll(false);
 		ItemScrollBox->SetOrientation(EOrientation::Orient_Vertical);
 
 		UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: Vertical ScrollBox configured"));
+
+		// Update scrollbar visibility based on current items
+		UpdateScrollbarVisibility();
 	}
 
 	// Configure inner ScrollBox for horizontal scrolling
@@ -439,11 +519,11 @@ void UInventoryWidget::ApplyClippingSettings()
 			ParentSizeBox->SetMinDesiredWidth(GridWidth);
 			ParentSizeBox->SetMaxDesiredWidth(GridWidth);
 
-			// Let height auto-grow based on content
-			ParentSizeBox->SetHeightOverride(0.0f);
+			// Remove height override to let content determine height naturally
+			ParentSizeBox->ClearHeightOverride();
 			ParentSizeBox->SetMinDesiredHeight(0.0f);
 
-			UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: SizeBox - Fixed width: %f (%d columns), Auto height"), GridWidth, ColumnsForWidth);
+			UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: SizeBox - Fixed width: %f (%d columns), Natural height"), GridWidth, ColumnsForWidth);
 		}
 		else if (!GridSizeBox)
 		{
@@ -452,7 +532,7 @@ void UInventoryWidget::ApplyClippingSettings()
 			GridSizeBox->SetWidthOverride(GridWidth);
 			GridSizeBox->SetMinDesiredWidth(GridWidth);
 			GridSizeBox->SetMaxDesiredWidth(GridWidth);
-			GridSizeBox->SetHeightOverride(0.0f); // Auto height
+			// Don't set height override - let grid determine its natural height
 
 			UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: Created SizeBox wrapper - Fixed width: %f (%d columns)"), GridWidth, ColumnsForWidth);
 		}
@@ -556,7 +636,22 @@ void UInventoryWidget::CreateSlotWidgets()
 	// Apply clipping settings with the actual column count
 	ApplyClippingSettings();
 
-	UE_LOG(LogTemp, Log, TEXT("CreateSlotWidgets: Grid created with %d columns, slots will not compress on resize"), ColumnsToUse);
+	// If we have valid geometry, calculate the actual visible columns based on width
+	if (ItemScrollBox)
+	{
+		FVector2D CurrentSize = ItemScrollBox->GetCachedGeometry().GetLocalSize();
+		if (CurrentSize.X > 0.0f)
+		{
+			int32 CalculatedColumns = CalculateColumnsFromWidth(CurrentSize.X);
+			if (CalculatedColumns > 0)
+			{
+				CurrentVisibleColumns = CalculatedColumns;
+				UE_LOG(LogTemp, Warning, TEXT("CreateSlotWidgets: Adjusted visible columns to %d based on width %.1f"), CurrentVisibleColumns, CurrentSize.X);
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("CreateSlotWidgets: Grid created with %d pre-created columns, %d visible columns"), ColumnsToUse, CurrentVisibleColumns);
 
 	// Update visibility after creating slots
 	UpdateSlotVisibility();
@@ -625,4 +720,335 @@ void UInventoryWidget::SetupClickCapture()
 
 		UE_LOG(LogTemp, Log, TEXT("Inventory click capture activated"));
 	}
+}
+
+void UInventoryWidget::UpdateScrollbarVisibility()
+{
+	if (!ItemScrollBox || !InventoryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility: ItemScrollBox or InventoryComponent is null"));
+		return;
+	}
+
+	// Find the first and last occupied slots
+	int32 FirstOccupiedSlot = -1;
+	int32 LastOccupiedSlot = -1;
+
+	for (int32 i = 0; i < InventoryComponent->MaxSlots; ++i)
+	{
+		FInventoryItem Item = InventoryComponent->GetItemAtSlot(i);
+		if (Item.IsValid())
+		{
+			if (FirstOccupiedSlot == -1)
+			{
+				FirstOccupiedSlot = i;
+			}
+			LastOccupiedSlot = i;
+		}
+	}
+
+	// If no items, hide scrollbar and disable scrolling
+	if (FirstOccupiedSlot == -1)
+	{
+		ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Collapsed);
+		ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::Never);
+		UE_LOG(LogTemp, Log, TEXT("UpdateScrollbarVisibility: No items, hiding scrollbar and disabling scroll"));
+		return;
+	}
+
+	int32 ColumnsToUse = (CurrentVisibleColumns > 0) ? CurrentVisibleColumns : GridColumns;
+
+	// Calculate the first and last rows containing items
+	int32 FirstRowWithItem = FirstOccupiedSlot / ColumnsToUse;
+	int32 LastRowWithItem = LastOccupiedSlot / ColumnsToUse;
+
+	// Get the available height of the scroll box
+	float AvailableHeight = ItemScrollBox->GetCachedGeometry().GetLocalSize().Y;
+	float RowHeight = SlotSize + (SlotPadding.Top + SlotPadding.Bottom);
+
+	UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility DEBUG: LastOccupiedSlot=%d, ColumnsToUse=%d, LastRowWithItem=%d, AvailableHeight=%.1f, RowHeight=%.1f"),
+		LastOccupiedSlot, ColumnsToUse, LastRowWithItem, AvailableHeight, RowHeight);
+
+	// If geometry is not valid yet, force scrollbar to be visible if there are items beyond first few rows
+	if (AvailableHeight <= 0.0f)
+	{
+		// No valid geometry yet - be conservative and show scrollbar if there are many items
+		if (LastRowWithItem > 3)
+		{
+			ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Visible);
+			ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::WhenScrollingPossible);
+			UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility: No valid geometry, but showing scrollbar due to LastRow=%d"), LastRowWithItem);
+		}
+		return;
+	}
+
+	// Calculate how many rows can fit in the visible area
+	int32 VisibleRows = FMath::FloorToInt(AvailableHeight / RowHeight);
+
+	// Calculate the total number of rows needed to display all items
+	// We need to check from row 0 to the last row with items
+	int32 TotalRowsNeeded = LastRowWithItem + 1;
+
+	UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility DEBUG: TotalRowsNeeded=%d, VisibleRows=%d"), TotalRowsNeeded, VisibleRows);
+
+	// Show scrollbar if the content needs more rows than can fit in the viewport
+	if (TotalRowsNeeded > VisibleRows)
+	{
+		ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Visible);
+		ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::WhenScrollingPossible);
+		UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility: SHOWING SCROLLBAR - Items need scrolling (TotalRows: %d, VisibleRows: %d, LastRow: %d)"),
+			TotalRowsNeeded, VisibleRows, LastRowWithItem);
+	}
+	else
+	{
+		ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Collapsed);
+		ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::Never);
+		UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility: HIDING SCROLLBAR - All items visible (TotalRows: %d, VisibleRows: %d, LastRow: %d)"),
+			TotalRowsNeeded, VisibleRows, LastRowWithItem);
+	}
+}
+
+void UInventoryWidget::CompressItems()
+{
+	if (!InventoryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CompressItems: InventoryComponent is null"));
+		return;
+	}
+
+	int32 ColumnsToUse = (CurrentVisibleColumns > 0) ? CurrentVisibleColumns : GridColumns;
+
+	UE_LOG(LogTemp, Warning, TEXT("CompressItems: Starting compression with %d columns"), ColumnsToUse);
+
+	// Build a list of all items with their current slot indices
+	TArray<TPair<int32, FInventoryItem>> OccupiedSlots;
+
+	for (int32 i = 0; i < InventoryComponent->MaxSlots; ++i)
+	{
+		FInventoryItem Item = InventoryComponent->GetItemAtSlot(i);
+		if (Item.IsValid())
+		{
+			OccupiedSlots.Add(TPair<int32, FInventoryItem>(i, Item));
+		}
+	}
+
+	if (OccupiedSlots.Num() == 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("CompressItems: No items to compress"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("CompressItems: Found %d occupied slots"), OccupiedSlots.Num());
+
+	// Calculate visible area based on current window size
+	float AvailableHeight = 0.0f;
+	if (ItemScrollBox)
+	{
+		AvailableHeight = ItemScrollBox->GetCachedGeometry().GetLocalSize().Y;
+	}
+
+	int32 MaxVisibleSlots = InventoryComponent->MaxSlots;
+
+	// If we have valid geometry, calculate how many slots fit in visible area
+	if (AvailableHeight > 0.0f)
+	{
+		float RowHeight = SlotSize + (SlotPadding.Top + SlotPadding.Bottom);
+		int32 VisibleRows = FMath::FloorToInt(AvailableHeight / RowHeight);
+		MaxVisibleSlots = ColumnsToUse * VisibleRows;
+		MaxVisibleSlots = FMath::Min(MaxVisibleSlots, InventoryComponent->MaxSlots);
+
+		UE_LOG(LogTemp, Warning, TEXT("CompressItems: Visible area can fit %d rows x %d columns = %d slots"),
+			VisibleRows, ColumnsToUse, MaxVisibleSlots);
+	}
+
+	// Move each item to the earliest available slot within visible area
+	// Process from the beginning to ensure we fill slots in order
+	int32 NextTargetSlot = 0;
+
+	for (const TPair<int32, FInventoryItem>& SlotPair : OccupiedSlots)
+	{
+		int32 CurrentSlot = SlotPair.Key;
+
+		// If the item is already in the target slot, just advance to next
+		if (CurrentSlot == NextTargetSlot)
+		{
+			NextTargetSlot++;
+			continue;
+		}
+
+		// Move the item from CurrentSlot to NextTargetSlot
+		if (NextTargetSlot < InventoryComponent->MaxSlots)
+		{
+			// Use the inventory component's MoveItem function to properly handle the move
+			bool bMoveSuccess = InventoryComponent->MoveItem(CurrentSlot, NextTargetSlot);
+
+			if (bMoveSuccess)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("CompressItems: Moved item from slot %d to slot %d"), CurrentSlot, NextTargetSlot);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("CompressItems: Failed to move item from slot %d to slot %d"), CurrentSlot, NextTargetSlot);
+			}
+
+			NextTargetSlot++;
+		}
+	}
+
+	// Refresh the entire inventory display
+	RefreshInventory();
+
+	// Update scrollbar visibility after compression
+	UpdateScrollbarVisibility();
+
+	UE_LOG(LogTemp, Warning, TEXT("CompressItems: Compression complete, items now occupy slots 0-%d"), NextTargetSlot - 1);
+}
+
+void UInventoryWidget::ScrollToSlot(int32 TargetSlotIndex)
+{
+	if (!ItemScrollBox || !InventoryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ScrollToSlot: ItemScrollBox or InventoryComponent is null"));
+		return;
+	}
+
+	if (TargetSlotIndex < 0 || TargetSlotIndex >= InventoryComponent->MaxSlots)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ScrollToSlot: Invalid slot index %d"), TargetSlotIndex);
+		return;
+	}
+
+	// First, update scrollbar visibility to ensure it's shown if needed
+	UpdateScrollbarVisibility();
+
+	int32 ColumnsToUse = (CurrentVisibleColumns > 0) ? CurrentVisibleColumns : GridColumns;
+	int32 TargetRow = TargetSlotIndex / ColumnsToUse;
+
+	// Get the available height of the scroll box
+	float AvailableHeight = ItemScrollBox->GetCachedGeometry().GetLocalSize().Y;
+	float RowHeight = SlotSize + (SlotPadding.Top + SlotPadding.Bottom);
+
+	if (AvailableHeight <= 0.0f || RowHeight <= 0.0f)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ScrollToSlot: Invalid geometry (AvailableHeight=%.1f, RowHeight=%.1f)"), AvailableHeight, RowHeight);
+		return;
+	}
+
+	// Calculate how many rows can fit in the visible area
+	int32 VisibleRows = FMath::FloorToInt(AvailableHeight / RowHeight);
+
+	// Get current scroll offset
+	float CurrentScrollOffset = ItemScrollBox->GetScrollOffset();
+	int32 FirstVisibleRow = FMath::FloorToInt(CurrentScrollOffset / RowHeight);
+	int32 LastVisibleRow = FirstVisibleRow + VisibleRows - 1;
+
+	UE_LOG(LogTemp, Warning, TEXT("ScrollToSlot: Slot %d is in row %d, currently visible rows %d-%d"),
+		TargetSlotIndex, TargetRow, FirstVisibleRow, LastVisibleRow);
+
+	// Check if target row is already visible
+	if (TargetRow >= FirstVisibleRow && TargetRow <= LastVisibleRow)
+	{
+		UE_LOG(LogTemp, Log, TEXT("ScrollToSlot: Slot %d is already visible"), TargetSlotIndex);
+		return;
+	}
+
+	// Calculate the scroll offset to make the target row visible
+	float TargetScrollOffset;
+	if (TargetRow < FirstVisibleRow)
+	{
+		// Target is above visible area - scroll to show it at the top
+		TargetScrollOffset = TargetRow * RowHeight;
+	}
+	else
+	{
+		// Target is below visible area - scroll to show it at the bottom
+		TargetScrollOffset = (TargetRow - VisibleRows + 1) * RowHeight;
+		TargetScrollOffset = FMath::Max(0.0f, TargetScrollOffset);
+	}
+
+	ItemScrollBox->SetScrollOffset(TargetScrollOffset);
+	UE_LOG(LogTemp, Warning, TEXT("ScrollToSlot: Scrolled to offset %.1f to show row %d"), TargetScrollOffset, TargetRow);
+}
+
+int32 UInventoryWidget::CalculateColumnsFromWidth(float AvailableWidth) const
+{
+	if (AvailableWidth <= 0.0f)
+	{
+		return GridColumns; // Fallback to default
+	}
+
+	// Account for padding on both sides of each slot
+	float SlotTotalWidth = SlotSize + (SlotPadding.Left + SlotPadding.Right);
+
+	// Calculate how many slots can fit
+	int32 ColumnsFit = FMath::FloorToInt(AvailableWidth / SlotTotalWidth);
+
+	// Clamp to reasonable values
+	ColumnsFit = FMath::Clamp(ColumnsFit, 1, MaxPreCreatedColumns);
+
+	return ColumnsFit;
+}
+
+void UInventoryWidget::ReflowItemsToGrid()
+{
+	if (!InventoryComponent || !ItemGrid || SlotWidgets.Num() == 0)
+	{
+		return;
+	}
+
+	int32 ColumnsToUse = (CurrentVisibleColumns > 0) ? CurrentVisibleColumns : GridColumns;
+
+	UE_LOG(LogTemp, Warning, TEXT("ReflowItemsToGrid: Reflowing to %d columns"), ColumnsToUse);
+
+	// Clear the grid
+	ItemGrid->ClearChildren();
+
+	// Re-add all slots to the grid with the new column layout
+	for (int32 i = 0; i < SlotWidgets.Num(); ++i)
+	{
+		if (SlotWidgets[i])
+		{
+			int32 Row = i / ColumnsToUse;
+			int32 Column = i % ColumnsToUse;
+
+			// Get the SizeBox parent of the slot widget
+			UWidget* SlotParent = SlotWidgets[i]->GetParent();
+			if (SlotParent)
+			{
+				// Add the SizeBox back to the grid at the new position
+				ItemGrid->AddChildToUniformGrid(SlotParent, Row, Column);
+			}
+		}
+	}
+
+	// Update clipping settings with the new layout
+	ApplyClippingSettings();
+
+	UE_LOG(LogTemp, Warning, TEXT("ReflowItemsToGrid: Grid reflowed with %d columns"), ColumnsToUse);
+}
+
+void UInventoryWidget::ExecuteDebouncedReflow()
+{
+	// Check if column count changed (horizontal resize)
+	bool bColumnsChanged = (PendingColumnCount > 0 && PendingColumnCount != CurrentVisibleColumns);
+
+	if (!bColumnsChanged)
+	{
+		// No column change, but we were called - this means vertical resize
+		// Just compress items to fit the new visible area
+		UE_LOG(LogTemp, Warning, TEXT("ExecuteDebouncedReflow: Vertical resize detected, compressing items"));
+		CompressItems();
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("ExecuteDebouncedReflow: Reflowing from %d to %d columns after resize complete"),
+		CurrentVisibleColumns, PendingColumnCount);
+
+	CurrentVisibleColumns = PendingColumnCount;
+
+	// First reflow the grid layout
+	ReflowItemsToGrid();
+
+	// Then compress items to move any out-of-bounds items back into view
+	CompressItems();
 }

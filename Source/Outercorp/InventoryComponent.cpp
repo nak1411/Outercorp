@@ -320,6 +320,13 @@ int32 UInventoryComponent::FindEmptySlot() const
 	return -1;
 }
 
+int32 UInventoryComponent::FindEmptySlotWithinColumns(int32 MaxColumns) const
+{
+	// This function is kept for compatibility but now just calls FindEmptySlot()
+	// The compress/reflow system handles moving items into proper grid positions
+	return FindEmptySlot();
+}
+
 int32 UInventoryComponent::FindItemByID(FName ItemID) const
 {
 	for (int32 i = 0; i < Items.Num(); ++i)

@@ -358,6 +358,9 @@ void UInventorySlotWidget::HandleSplitItem()
 		return;
 	}
 
+	// Try to get parent inventory widget
+	UInventoryWidget* ParentInventoryWidget = Cast<UInventoryWidget>(GetTypedOuter<UInventoryWidget>());
+
 	// Find first empty slot
 	int32 EmptySlot = InventoryComponent->FindEmptySlot();
 	if (EmptySlot == -1)
@@ -370,7 +373,21 @@ void UInventorySlotWidget::HandleSplitItem()
 	int32 SplitAmount = CurrentItem.Quantity / 2;
 	InventoryComponent->SplitStack(SlotIndex, EmptySlot, SplitAmount);
 
-	UE_LOG(LogTemp, Log, TEXT("Split %d items from slot %d to slot %d"), SplitAmount, SlotIndex, EmptySlot);
+	// Reflow and compress to ensure the split item is within visible area
+	if (ParentInventoryWidget)
+	{
+		// First reflow the grid to respect current visible columns
+		ParentInventoryWidget->ReflowItemsToGrid();
+
+		// Then compress to move items to sequential slots
+		ParentInventoryWidget->CompressItems();
+
+		UE_LOG(LogTemp, Log, TEXT("Split %d items from slot %d to slot %d, then reflowed and compressed"), SplitAmount, SlotIndex, EmptySlot);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("Split %d items from slot %d to slot %d"), SplitAmount, SlotIndex, EmptySlot);
+	}
 }
 
 void UInventorySlotWidget::HandleDestroyItem()

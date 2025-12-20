@@ -134,6 +134,9 @@ protected:
 	/** Whether we're waiting for valid geometry to create slots */
 	bool bWaitingForGeometry;
 
+	/** Track which slots were occupied before the last update (for detecting new items) */
+	TSet<int32> PreviouslyOccupiedSlots;
+
 	/** Input processor for detecting clicks outside inventory */
 	TSharedPtr<class IInputProcessor> InputProcessor;
 
@@ -143,8 +146,17 @@ protected:
 	/** Timer handle for delayed click detection setup */
 	FTimerHandle SetupTimerHandle;
 
+	/** Timer handle for debounced reflow after resize */
+	FTimerHandle ReflowDebounceTimerHandle;
+
+	/** Pending column count for debounced reflow */
+	int32 PendingColumnCount;
+
 	/** Setup click capture for deselecting on outside clicks */
 	void SetupClickCapture();
+
+	/** Execute the debounced reflow */
+	void ExecuteDebouncedReflow();
 
 public:
 	/** Initialize widget with inventory component */
@@ -174,6 +186,26 @@ public:
 	/** Enable horizontal scrolling in the ScrollBox */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void EnableHorizontalScrolling();
+
+	/** Update scrollbar visibility based on items */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void UpdateScrollbarVisibility();
+
+	/** Compress items to fit within visible area by moving them to earliest available slots */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void CompressItems();
+
+	/** Scroll to make a specific slot visible */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void ScrollToSlot(int32 TargetSlotIndex);
+
+	/** Get the current visible column count */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	int32 GetCurrentVisibleColumns() const { return (CurrentVisibleColumns > 0) ? CurrentVisibleColumns : GridColumns; }
+
+	/** Reflow items to fit the current grid column count */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void ReflowItemsToGrid();
 
 	/** Delegate called when inventory is closed */
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryClosed);
@@ -214,6 +246,9 @@ protected:
 
 	/** Update slot visibility based on current grid layout */
 	void UpdateSlotVisibility();
+
+	/** Calculate how many columns can fit in the given width */
+	int32 CalculateColumnsFromWidth(float AvailableWidth) const;
 
 	/** Check if item passes filter */
 	bool PassesFilter(const FInventoryItem& Item) const;

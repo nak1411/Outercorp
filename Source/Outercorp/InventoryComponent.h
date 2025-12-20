@@ -105,6 +105,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	int32 FindEmptySlot() const;
 
+	/** Find first empty slot that fits within column bounds (for wrapping) */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	int32 FindEmptySlotWithinColumns(int32 MaxColumns) const;
+
 	/** Find item by ID */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	int32 FindItemByID(FName ItemID) const;
