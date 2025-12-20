@@ -29,6 +29,7 @@ protected:
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual bool NativeSupportsKeyboardFocus() const override { return true; }
 
 	/** Reference to the inventory component */
@@ -99,9 +100,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory", meta = (ClampMin = "32.0"))
 	float SlotSize = 64.0f;
 
+public:
 	/** Array of slot widgets */
-	UPROPERTY()
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
 	TArray<TObjectPtr<UInventorySlotWidget>> SlotWidgets;
+
+protected:
 
 	/** Current search filter */
 	UPROPERTY()
@@ -129,6 +133,18 @@ protected:
 
 	/** Whether we're waiting for valid geometry to create slots */
 	bool bWaitingForGeometry;
+
+	/** Input processor for detecting clicks outside inventory */
+	TSharedPtr<class IInputProcessor> InputProcessor;
+
+	/** Whether click capture is currently active */
+	bool bIsClickCaptureActive = false;
+
+	/** Timer handle for delayed click detection setup */
+	FTimerHandle SetupTimerHandle;
+
+	/** Setup click capture for deselecting on outside clicks */
+	void SetupClickCapture();
 
 public:
 	/** Initialize widget with inventory component */

@@ -2,6 +2,7 @@
 
 #include "InventorySlotWidget.h"
 #include "InventoryComponent.h"
+#include "InventoryWidget.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
@@ -14,12 +15,21 @@
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "ContextMenuWidget.h"
 
-// Initialize static member
+// Initialize static members
 TWeakObjectPtr<UUserWidget> UInventorySlotWidget::CurrentOpenContextMenu = nullptr;
+TMap<UInventoryComponent*, TSet<int32>> UInventorySlotWidget::InventorySelections;
+TMap<UInventoryComponent*, TArray<TWeakObjectPtr<UInventorySlotWidget>>> UInventorySlotWidget::SlotWidgetRegistry;
 
 void UInventorySlotWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// Register this slot widget with the registry
+	if (InventoryComponent)
+	{
+		TArray<TWeakObjectPtr<UInventorySlotWidget>>& Slots = SlotWidgetRegistry.FindOrAdd(InventoryComponent);
+		Slots.AddUnique(this);
+	}
 
 	// Bind button click
 	if (SlotButton)
@@ -33,12 +43,14 @@ void UInventorySlotWidget::NativeConstruct()
 
 FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	UE_LOG(LogTemp, Log, TEXT("InventorySlotWidget::NativeOnMouseButtonDown called for slot %d"), SlotIndex);
 
 	// Handle right-click for context menu - call Blueprint event
 	if (InMouseEvent.IsMouseButtonDown(EKeys::RightMouseButton))
 	{
-		UE_LOG(LogTemp, Log, TEXT("Right-click detected on slot %d"), SlotIndex);
+		UE_LOG(LogTemp, Log, TEXT("Right-click detected on slot %d, IsSlotEmpty=%d, ItemData=%s, Quantity=%d"),
+			SlotIndex, IsSlotEmpty(),
+			CurrentItem.ItemData ? *CurrentItem.ItemData->ItemName.ToString() : TEXT("null"),
+			CurrentItem.Quantity);
 
 		// IMPORTANT: Close any existing context menu FIRST
 		CloseCurrentContextMenu();
@@ -51,32 +63,117 @@ FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry
 			PC->GetMousePosition(MouseX, MouseY);
 			FVector2D MousePosition(MouseX, MouseY);
 
-			// Always call OnRightClicked - Blueprint can use IsSlotEmpty() to branch
-			OnRightClicked(MousePosition);
+			// Check if slot is empty and call appropriate event
+			if (IsSlotEmpty())
+			{
+				UE_LOG(LogTemp, Log, TEXT("Calling OnEmptySlotRightClicked for slot %d at position (%f, %f)"), SlotIndex, MousePosition.X, MousePosition.Y);
+				OnEmptySlotRightClicked(MousePosition);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Log, TEXT("Calling OnRightClicked for slot %d at position (%f, %f)"), SlotIndex, MousePosition.X, MousePosition.Y);
+				OnRightClicked(MousePosition);
+			}
 		}
 
 		return FReply::Handled();
 	}
 
-	// Start drag detection for left-click
-	if (InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton) && CurrentItem.IsValid())
+	// Handle left-click - only if slot has an item
+	if (InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton))
 	{
-		UE_LOG(LogTemp, Log, TEXT("Left-click drag detection"));
-		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
+		if (CurrentItem.IsValid())
+		{
+			// Reset drag flag
+			bDragStarted = false;
+
+			// Start drag detection
+			return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
+		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Calling Super::NativeOnMouseButtonDown"));
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply UInventorySlotWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	UE_LOG(LogTemp, Log, TEXT("NativeOnMouseButtonUp: Slot %d, Button=%s, bDragStarted=%d"),
+		SlotIndex,
+		*InMouseEvent.GetEffectingButton().ToString(),
+		bDragStarted);
+
+	// If left mouse button released and we didn't start a drag
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && !bDragStarted)
+	{
+		UE_LOG(LogTemp, Log, TEXT("  Left mouse up without drag on slot %d"), SlotIndex);
+
+		// Check if slot has an item
+		if (CurrentItem.IsValid())
+		{
+			UE_LOG(LogTemp, Log, TEXT("  Slot %d has valid item"), SlotIndex);
+
+			// Check if Ctrl is held
+			if (InMouseEvent.IsControlDown())
+			{
+				// Ctrl+Click: Toggle this item's selection
+				UE_LOG(LogTemp, Log, TEXT("  Ctrl+Click - toggling selection for slot %d"), SlotIndex);
+				ToggleSelection();
+			}
+			else
+			{
+				// Normal click: Clear all selections and select only this item
+				if (!InventoryComponent)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("  No InventoryComponent!"));
+					return FReply::Handled();
+				}
+
+				UE_LOG(LogTemp, Log, TEXT("  Normal click - selecting only slot %d"), SlotIndex);
+
+				// Clear and set new selection in one operation to avoid double broadcast
+				TSet<int32>& SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
+				SelectionSet.Empty();
+				SelectionSet.Add(SlotIndex);
+
+				// Broadcast once
+				BroadcastSelectionChanged();
+			}
+
+			return FReply::Handled();
+		}
+		else
+		{
+			// Clicked on empty slot - clear all selections
+			if (InventoryComponent)
+			{
+				TSet<int32>& SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
+				if (SelectionSet.Num() > 0)
+				{
+					SelectionSet.Empty();
+					BroadcastSelectionChanged();
+				}
+			}
+
+			return FReply::Handled();
+		}
+	}
+
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
 void UInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
 {
 	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
 
+	// Mark that we started dragging (so mouse up doesn't trigger selection)
+	bDragStarted = true;
+
 	if (!CurrentItem.IsValid() || !InventoryComponent)
 	{
 		return;
 	}
+
+	UE_LOG(LogTemp, Log, TEXT("Drag detected on slot %d"), SlotIndex);
 
 	// Create drag-drop operation
 	UInventoryDragDropOperation* DragDropOp = NewObject<UInventoryDragDropOperation>();
@@ -107,11 +204,13 @@ bool UInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDrag
 	UInventoryDragDropOperation* DragDropOp = Cast<UInventoryDragDropOperation>(InOperation);
 	if (!DragDropOp || !InventoryComponent)
 	{
+		// Reset drag flag even if drop fails
+		bDragStarted = false;
 		return false;
 	}
 
-	// Reset background color
-	if (BackgroundBorder)
+	// Reset background color - but preserve selection if selected
+	if (BackgroundBorder && !bIsSelected)
 	{
 		BackgroundBorder->SetBrushColor(NormalColor);
 	}
@@ -119,6 +218,7 @@ bool UInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDrag
 	// Don't drop on same slot
 	if (DragDropOp->SourceSlotIndex == SlotIndex)
 	{
+		bDragStarted = false;
 		return false;
 	}
 
@@ -129,13 +229,44 @@ bool UInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDrag
 		if (SplitAmount > 0)
 		{
 			InventoryComponent->SplitStack(DragDropOp->SourceSlotIndex, SlotIndex, SplitAmount);
+
+			// When splitting, deselect the source (since it's now two different items)
+			TSet<int32>& SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
+			if (SelectionSet.Contains(DragDropOp->SourceSlotIndex))
+			{
+				SelectionSet.Remove(DragDropOp->SourceSlotIndex);
+				BroadcastSelectionChanged();
+				UE_LOG(LogTemp, Log, TEXT("Deselected slot %d after split"), DragDropOp->SourceSlotIndex);
+			}
 		}
+		bDragStarted = false;
 		return true;
+	}
+
+	// When moving items, update selection to follow the item BEFORE moving
+	// This ensures bIsSelected is correct when UpdateAppearance is called during MoveItem
+	TSet<int32>& SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
+	bool bSourceWasSelected = SelectionSet.Contains(DragDropOp->SourceSlotIndex);
+
+	if (bSourceWasSelected)
+	{
+		// Remove source slot from selection
+		SelectionSet.Remove(DragDropOp->SourceSlotIndex);
+
+		// Add destination slot to selection (item moved here)
+		SelectionSet.Add(SlotIndex);
+
+		// Broadcast the change BEFORE moving the item
+		// This ensures all slots have correct bIsSelected when UpdateAppearance is called
+		BroadcastSelectionChanged();
+
+		UE_LOG(LogTemp, Log, TEXT("Moved selection from slot %d to slot %d"), DragDropOp->SourceSlotIndex, SlotIndex);
 	}
 
 	// Handle normal move/swap
 	InventoryComponent->MoveItem(DragDropOp->SourceSlotIndex, SlotIndex);
 
+	bDragStarted = false;
 	return true;
 }
 
@@ -154,11 +285,14 @@ void UInventorySlotWidget::NativeOnDragLeave(const FDragDropEvent& InDragDropEve
 {
 	Super::NativeOnDragLeave(InDragDropEvent, InOperation);
 
-	// Reset background color
-	if (BackgroundBorder)
+	// Reset background color - but preserve selection color if selected
+	if (BackgroundBorder && !bIsSelected)
 	{
 		BackgroundBorder->SetBrushColor(NormalColor);
 	}
+
+	// Reset drag flag when drag leaves
+	bDragStarted = false;
 }
 
 void UInventorySlotWidget::SetItem(const FInventoryItem& Item)
@@ -169,11 +303,11 @@ void UInventorySlotWidget::SetItem(const FInventoryItem& Item)
 
 void UInventorySlotWidget::OnSlotClicked()
 {
-	// Left-click functionality can be implemented here
-	// For now, just broadcast that slot was clicked
+	// This is called by the button, but we handle selection in NativeOnMouseButtonDown instead
+	// Keep this for potential future use or debugging
 	if (CurrentItem.IsValid())
 	{
-		UE_LOG(LogTemp, Log, TEXT("Slot %d clicked: %s"), SlotIndex, *CurrentItem.ItemData->ItemName.ToString());
+		UE_LOG(LogTemp, Log, TEXT("Slot %d button clicked: %s"), SlotIndex, *CurrentItem.ItemData->ItemName.ToString());
 	}
 }
 
@@ -353,22 +487,24 @@ void UInventorySlotWidget::HandleSelectAll()
 
 	UE_LOG(LogTemp, Log, TEXT("Select All triggered"));
 
-	// Get all occupied slot indices
-	TArray<int32> SelectedSlots;
 	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
+	TSet<int32>& SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
+
+	// Clear and rebuild selection set with all occupied slots
+	SelectionSet.Empty();
 
 	for (int32 i = 0; i < AllItems.Num(); i++)
 	{
 		if (AllItems[i].IsValid())
 		{
-			SelectedSlots.Add(i);
+			SelectionSet.Add(i);
 		}
 	}
 
-	// Notify Blueprint about selection change
-	OnSelectionChanged(SelectedSlots);
+	// Broadcast to all slots in the inventory
+	BroadcastSelectionChanged();
 
-	UE_LOG(LogTemp, Log, TEXT("Selected %d slots"), SelectedSlots.Num());
+	UE_LOG(LogTemp, Log, TEXT("Selected %d slots"), SelectionSet.Num());
 }
 
 void UInventorySlotWidget::HandleInvertSelection()
@@ -378,29 +514,40 @@ void UInventorySlotWidget::HandleInvertSelection()
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Invert Selection triggered"));
-
-	// Note: This is a basic implementation
-	// In a full implementation, you would need to track current selection state
-	// For now, we'll invert based on whether slots are occupied or not
-
-	TArray<int32> SelectedSlots;
 	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
+	TSet<int32>& SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
 
-	// This is a placeholder - you'll need to implement proper selection tracking
-	// For demonstration, we'll just select all empty slots
+	UE_LOG(LogTemp, Log, TEXT("Invert Selection - Before: %d items selected"), SelectionSet.Num());
+
+	// Build a new selection set with inverted state
+	TSet<int32> NewSelection;
+
 	for (int32 i = 0; i < AllItems.Num(); i++)
 	{
-		if (!AllItems[i].IsValid())
+		// Only process slots that have items
+		if (AllItems[i].IsValid())
 		{
-			SelectedSlots.Add(i);
+			bool bWasSelected = SelectionSet.Contains(i);
+			// Invert: if currently selected, deselect; if not selected, select
+			if (!bWasSelected)
+			{
+				NewSelection.Add(i);
+				UE_LOG(LogTemp, Log, TEXT("  Slot %d: was NOT selected, now selecting"), i);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Log, TEXT("  Slot %d: was selected, now deselecting"), i);
+			}
 		}
 	}
 
-	// Notify Blueprint about selection change
-	OnSelectionChanged(SelectedSlots);
+	// Update the shared selection state
+	SelectionSet = NewSelection;
 
-	UE_LOG(LogTemp, Log, TEXT("Inverted selection - %d slots now selected"), SelectedSlots.Num());
+	UE_LOG(LogTemp, Log, TEXT("Invert Selection - After: %d items selected"), SelectionSet.Num());
+
+	// Broadcast to all slots in the inventory
+	BroadcastSelectionChanged();
 }
 
 void UInventorySlotWidget::UpdateAppearance()
@@ -485,11 +632,12 @@ void UInventorySlotWidget::UpdateAppearance()
 		}
 	}
 
-	// Set background color
-	if (BackgroundBorder)
+	// Set background color - but preserve selection color if selected
+	if (BackgroundBorder && !bIsSelected)
 	{
 		BackgroundBorder->SetBrushColor(NormalColor);
 	}
+	// Note: If bIsSelected is true, don't override the selection color set by Blueprint
 }
 
 void UInventorySlotWidget::CloseCurrentContextMenu()
@@ -529,4 +677,115 @@ void UInventorySlotWidget::SetCurrentContextMenu(UUserWidget* ContextMenu)
 UUserWidget* UInventorySlotWidget::GetCurrentContextMenu()
 {
 	return CurrentOpenContextMenu.IsValid() ? CurrentOpenContextMenu.Get() : nullptr;
+}
+
+void UInventorySlotWidget::SetSelected(bool bSelected)
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	// Update shared selection state
+	TSet<int32>& SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
+
+	if (bSelected)
+	{
+		SelectionSet.Add(SlotIndex);
+	}
+	else
+	{
+		SelectionSet.Remove(SlotIndex);
+	}
+
+	// Broadcast to all slots in the inventory
+	BroadcastSelectionChanged();
+
+	UE_LOG(LogTemp, Log, TEXT("Slot %d selection state: %s"), SlotIndex, bSelected ? TEXT("Selected") : TEXT("Deselected"));
+}
+
+void UInventorySlotWidget::ToggleSelection()
+{
+	SetSelected(!bIsSelected);
+}
+
+TArray<int32> UInventorySlotWidget::GetSelectedSlots() const
+{
+	if (!InventoryComponent)
+	{
+		return TArray<int32>();
+	}
+
+	const TSet<int32>* SelectionSet = InventorySelections.Find(InventoryComponent);
+	if (SelectionSet)
+	{
+		return SelectionSet->Array();
+	}
+
+	return TArray<int32>();
+}
+
+void UInventorySlotWidget::ClearAllSelections()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	// Clear the selection set for this inventory
+	InventorySelections.Remove(InventoryComponent);
+
+	// Broadcast to all slots in the inventory
+	BroadcastSelectionChanged();
+
+	UE_LOG(LogTemp, Log, TEXT("Cleared all selections for inventory"));
+}
+
+bool UInventorySlotWidget::HasAnySelection() const
+{
+	if (!InventoryComponent)
+	{
+		return false;
+	}
+
+	const TSet<int32>* SelectionSet = InventorySelections.Find(InventoryComponent);
+	return SelectionSet && SelectionSet->Num() > 0;
+}
+
+void UInventorySlotWidget::BroadcastSelectionChanged()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	// Get the current selection array
+	TArray<int32> SelectedSlots = GetSelectedSlots();
+
+	// Use the registry to find all slot widgets for this inventory component
+	TArray<TWeakObjectPtr<UInventorySlotWidget>>* AllSlots = SlotWidgetRegistry.Find(InventoryComponent);
+	if (AllSlots)
+	{
+		// Clean up invalid weak pointers and notify all valid slots
+		for (int32 i = AllSlots->Num() - 1; i >= 0; i--)
+		{
+			if (!(*AllSlots)[i].IsValid())
+			{
+				// Remove invalid weak pointer
+				AllSlots->RemoveAt(i);
+				continue;
+			}
+
+			UInventorySlotWidget* SlotWidget = (*AllSlots)[i].Get();
+			if (SlotWidget)
+			{
+				// Update each slot's selection state
+				const TSet<int32>* SelectionSet = InventorySelections.Find(InventoryComponent);
+				SlotWidget->bIsSelected = SelectionSet && SelectionSet->Contains(SlotWidget->SlotIndex);
+
+				// Fire the Blueprint event on each slot
+				SlotWidget->OnSelectionChanged(SelectedSlots);
+			}
+		}
+	}
 }

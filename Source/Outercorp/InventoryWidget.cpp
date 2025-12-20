@@ -13,6 +13,83 @@
 #include "Components/PanelSlot.h"
 #include "Input/Reply.h"
 #include "Widgets/Layout/SScrollBox.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Framework/Application/IInputProcessor.h"
+
+/**
+ * Input processor that captures clicks outside the inventory widget
+ */
+class FInventoryInputProcessor : public IInputProcessor
+{
+public:
+	FInventoryInputProcessor(UInventoryWidget* InInventoryWidget)
+		: InventoryWidget(InInventoryWidget)
+	{
+	}
+
+	virtual void Tick(const float DeltaTime, FSlateApplication& SlateApp, TSharedRef<ICursor> Cursor) override
+	{
+	}
+
+	virtual bool HandleMouseButtonDownEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent) override
+	{
+		if (!InventoryWidget.IsValid())
+		{
+			return false;
+		}
+
+		// Only handle left mouse button for deselecting
+		if (MouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+		{
+			// Don't deselect if there's an open context menu - let the context menu handle its own clicks
+			// The context menu will close itself when clicked outside, and then we can deselect
+			if (InventoryWidget->SlotWidgets.Num() > 0 && InventoryWidget->SlotWidgets[0])
+			{
+				UUserWidget* OpenContextMenu = InventoryWidget->SlotWidgets[0]->GetCurrentContextMenu();
+				if (OpenContextMenu && OpenContextMenu->IsInViewport())
+				{
+					// Context menu is open - don't clear selections, let the menu handle the click
+					return false;
+				}
+			}
+
+			// Get the widget under the cursor
+			FWidgetPath WidgetPath = SlateApp.LocateWindowUnderMouse(MouseEvent.GetScreenSpacePosition(), SlateApp.GetInteractiveTopLevelWindows());
+
+			if (WidgetPath.IsValid())
+			{
+				// Check if the click is inside the inventory widget
+				TSharedPtr<SWidget> InventorySlateWidget = InventoryWidget->TakeWidget();
+
+				bool bClickedInsideInventory = false;
+				for (int32 i = 0; i < WidgetPath.Widgets.Num(); ++i)
+				{
+					// Check if clicked in inventory
+					if (WidgetPath.Widgets[i].Widget == InventorySlateWidget)
+					{
+						bClickedInsideInventory = true;
+						break;
+					}
+				}
+
+				// If clicked outside inventory, deselect all items
+				if (!bClickedInsideInventory)
+				{
+					if (InventoryWidget->SlotWidgets.Num() > 0 && InventoryWidget->SlotWidgets[0])
+					{
+						InventoryWidget->SlotWidgets[0]->ClearAllSelections();
+					}
+				}
+			}
+		}
+
+		// Don't consume the event - let it pass through
+		return false;
+	}
+
+private:
+	TWeakObjectPtr<UInventoryWidget> InventoryWidget;
+};
 
 void UInventoryWidget::NativeConstruct()
 {
@@ -24,6 +101,18 @@ void UInventoryWidget::NativeConstruct()
 	CurrentVisibleRows = 0;
 	CurrentVisibleSlots = 0;
 	bWaitingForGeometry = false;
+
+	// Set up click capture for deselecting items when clicking outside
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			SetupTimerHandle,
+			this,
+			&UInventoryWidget::SetupClickCapture,
+			0.1f,  // 100ms delay
+			false
+		);
+	}
 
 	UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::NativeConstruct: Starting button binding"));
 
@@ -56,6 +145,21 @@ void UInventoryWidget::NativeConstruct()
 
 void UInventoryWidget::NativeDestruct()
 {
+	// Clean up timer
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(SetupTimerHandle);
+	}
+
+	// Remove input processor
+	if (InputProcessor.IsValid() && FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().UnregisterInputPreProcessor(InputProcessor);
+		InputProcessor.Reset();
+	}
+
+	bIsClickCaptureActive = false;
+
 	// Delegates are automatically cleaned up when the widget is destroyed
 	// No need to manually unbind
 
@@ -98,6 +202,22 @@ FReply UInventoryWidget::NativeOnKeyDown(const FGeometry &InGeometry, const FKey
 	}
 
 	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
+FReply UInventoryWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// If clicking in the inventory widget (but not on a slot), deselect all items
+	// The slots will handle their own clicks and prevent this from being called
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && InventoryComponent)
+	{
+		// Clear all selections
+		if (SlotWidgets.Num() > 0 && SlotWidgets[0])
+		{
+			SlotWidgets[0]->ClearAllSelections();
+		}
+	}
+
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
 void UInventoryWidget::InitializeInventory(UInventoryComponent *InInventoryComponent)
@@ -486,4 +606,23 @@ bool UInventoryWidget::PassesFilter(const FInventoryItem &Item) const
 	// Check if item name contains filter text
 	FString ItemName = Item.ItemData->ItemName.ToString();
 	return ItemName.Contains(CurrentFilter, ESearchCase::IgnoreCase);
+}
+
+void UInventoryWidget::SetupClickCapture()
+{
+	if (bIsClickCaptureActive)
+	{
+		return;
+	}
+
+	// Create and register input processor for detecting clicks outside
+	// Use a very low priority (999) so other widgets process input first
+	if (FSlateApplication::IsInitialized())
+	{
+		InputProcessor = MakeShared<FInventoryInputProcessor>(this);
+		FSlateApplication::Get().RegisterInputPreProcessor(InputProcessor, 999);
+		bIsClickCaptureActive = true;
+
+		UE_LOG(LogTemp, Log, TEXT("Inventory click capture activated"));
+	}
 }
