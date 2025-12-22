@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "InventoryComponent.h"
+#include "InventoryContextMenuHandler.h"
 #include "InventoryWidget.generated.h"
 
 class UInventorySlotWidget;
@@ -24,7 +25,7 @@ class UListView;
  * Main inventory window widget (Eve Online style)
  */
 UCLASS()
-class OUTERCORP_API UInventoryWidget : public UUserWidget
+class OUTERCORP_API UInventoryWidget : public UUserWidget, public IInventoryContextMenuHandler
 {
 	GENERATED_BODY()
 
@@ -275,6 +276,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void PopulateTableView();
 
+	/** Blueprint-callable function to handle context menu actions from empty area */
+	virtual void HandleContextMenuAction_Implementation(FName ActionID) override;
+
 	/** Delegate called when inventory is closed */
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryClosed);
 
@@ -318,6 +322,10 @@ protected:
 	UFUNCTION()
 	void OnColumnHeaderClicked(FName ColumnName);
 
+	/** Blueprint event called when right-clicked on empty area in list view - implement empty context menu in Blueprint */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
+	void OnEmptyAreaRightClicked(FVector2D MousePosition);
+
 	/** Create slot widgets */
 	void CreateSlotWidgets();
 
@@ -332,4 +340,13 @@ protected:
 
 	/** Check if item passes filter */
 	bool PassesFilter(const FInventoryItem& Item) const;
+
+	/** Handle stack all (from empty area) action */
+	void HandleStackAllEmpty();
+
+	/** Handle select all action */
+	void HandleSelectAll();
+
+	/** Handle invert selection action */
+	void HandleInvertSelection();
 };

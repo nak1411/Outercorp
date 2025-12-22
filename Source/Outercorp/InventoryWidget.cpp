@@ -310,6 +310,22 @@ FReply UInventoryWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, co
 		// Clear list row selections
 		UInventoryListRowWidget::ClearAllRowSelections();
 	}
+	// Handle right-click in list view to show empty context menu
+	else if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton && bIsListView)
+	{
+		APlayerController* PC = GetOwningPlayer();
+		if (PC)
+		{
+			float MouseX, MouseY;
+			PC->GetMousePosition(MouseX, MouseY);
+			FVector2D MousePosition(MouseX, MouseY);
+
+			UE_LOG(LogTemp, Log, TEXT("Right-clicked in empty area of list view at position (%f, %f)"), MousePosition.X, MousePosition.Y);
+			OnEmptyAreaRightClicked(MousePosition);
+
+			return FReply::Handled();
+		}
+	}
 
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
@@ -1494,6 +1510,7 @@ void UInventoryWidget::PopulateTableView()
 	int32 FilteredOutCount = 0;
 
 	// Create row widgets for each valid item
+	int32 VisualRowIndex = 0; // Track visual row order (different from slot index)
 	for (int32 i = 0; i < Items.Num(); ++i)
 	{
 		const FInventoryItem& Item = Items[i];
@@ -1523,6 +1540,7 @@ void UInventoryWidget::PopulateTableView()
 				// Set data on row widget
 				RowWidget->ItemData = ItemData;
 				RowWidget->SetColumnSettings(ColumnSettings);
+				RowWidget->SetRowIndex(VisualRowIndex); // Set row index for alternating colors
 				RowWidget->RefreshDisplay();
 
 				// Add to vertical box
@@ -1536,12 +1554,197 @@ void UInventoryWidget::PopulateTableView()
 				// Cache the row widget
 				TableViewRows.Add(RowWidget);
 
-				UE_LOG(LogTemp, Log, TEXT("PopulateTableView: Added item '%s' at slot %d"),
-					*Item.ItemData->ItemName.ToString(), i);
+				UE_LOG(LogTemp, Log, TEXT("PopulateTableView: Added item '%s' at slot %d (visual row %d)"),
+					*Item.ItemData->ItemName.ToString(), i, VisualRowIndex);
+
+				VisualRowIndex++; // Increment visual row counter
 			}
 		}
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("PopulateTableView: Valid items: %d, Filtered out: %d, Rows created: %d"),
 		ValidItemCount, FilteredOutCount, TableViewRows.Num());
+}
+
+void UInventoryWidget::HandleContextMenuAction_Implementation(FName ActionID)
+{
+	UE_LOG(LogTemp, Warning, TEXT("===== INVENTORY WIDGET HandleContextMenuAction ====="));
+	UE_LOG(LogTemp, Warning, TEXT("ActionID: %s"), *ActionID.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("InventoryComponent valid: %s"), InventoryComponent ? TEXT("YES") : TEXT("NO"));
+
+	if (ActionID == "StackAll" || ActionID == "StackAllEmpty")
+	{
+		HandleStackAllEmpty();
+	}
+	else if (ActionID == "SelectAll")
+	{
+		HandleSelectAll();
+	}
+	else if (ActionID == "InvertSelection")
+	{
+		HandleInvertSelection();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("UNKNOWN ACTION ID: '%s'"), *ActionID.ToString());
+	}
+}
+
+void UInventoryWidget::HandleStackAllEmpty()
+{
+	if (!InventoryComponent)
+	{
+		UE_LOG(LogTemp, Error, TEXT("HandleStackAllEmpty: InventoryComponent is NULL!"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("========== Stack All (Empty) triggered - consolidating all stackable items =========="));
+
+	// Get all items
+	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
+	UE_LOG(LogTemp, Warning, TEXT("HandleStackAllEmpty: Found %d total items"), AllItems.Num());
+
+	// Group items by ItemID to find stackable groups
+	TMap<FName, TArray<int32>> ItemGroups;
+	for (int32 i = 0; i < AllItems.Num(); i++)
+	{
+		if (AllItems[i].IsValid() && AllItems[i].ItemData && AllItems[i].ItemData->MaxStackSize > 1)
+		{
+			FName ItemID = AllItems[i].ItemData->ItemID;
+			ItemGroups.FindOrAdd(ItemID).Add(i);
+			UE_LOG(LogTemp, Log, TEXT("  Slot %d: %s (qty=%d, max=%d)"),
+				i, *AllItems[i].ItemData->ItemName.ToString(), AllItems[i].Quantity, AllItems[i].ItemData->MaxStackSize);
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("HandleStackAllEmpty: Found %d different item types to potentially stack"), ItemGroups.Num());
+
+	// For each group, try to stack them together
+	for (const auto& Group : ItemGroups)
+	{
+		const TArray<int32>& SlotIndices = Group.Value;
+		if (SlotIndices.Num() > 1)
+		{
+			// Sort slots so we process them in order
+			TArray<int32> SortedSlots = SlotIndices;
+			SortedSlots.Sort();
+
+			// Merge all stacks together - process from the end backwards
+			for (int32 i = SortedSlots.Num() - 1; i > 0; i--)
+			{
+				int32 SourceSlot = SortedSlots[i];
+
+				// Try to find a target slot that has space (search from beginning)
+				for (int32 j = 0; j < i; j++)
+				{
+					int32 TargetSlot = SortedSlots[j];
+
+					// Re-fetch items each time to get current state
+					FInventoryItem SourceItem = InventoryComponent->GetItemAtSlot(SourceSlot);
+					FInventoryItem TargetItem = InventoryComponent->GetItemAtSlot(TargetSlot);
+
+					// Skip if source is already empty (already merged)
+					if (!SourceItem.IsValid())
+					{
+						break;
+					}
+
+					// Check if target has space
+					if (TargetItem.IsValid() && TargetItem.Quantity < TargetItem.ItemData->MaxStackSize)
+					{
+						UE_LOG(LogTemp, Log, TEXT("  Merging slot %d (qty=%d) into slot %d (qty=%d)"),
+							SourceSlot, SourceItem.Quantity, TargetSlot, TargetItem.Quantity);
+
+						InventoryComponent->MergeStacks(SourceSlot, TargetSlot);
+
+						// Check if source is now empty
+						SourceItem = InventoryComponent->GetItemAtSlot(SourceSlot);
+						if (!SourceItem.IsValid())
+						{
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Stack All completed"));
+
+	// Refresh the display after stacking
+	if (bIsListView)
+	{
+		if (ListViewRowContainer)
+		{
+			PopulateTableView();
+		}
+		else if (ItemListView)
+		{
+			PopulateListView();
+		}
+	}
+	else
+	{
+		RefreshInventory();
+	}
+}
+
+void UInventoryWidget::HandleSelectAll()
+{
+	UE_LOG(LogTemp, Log, TEXT("Select All triggered"));
+
+	if (bIsListView)
+	{
+		// Select all rows in list view
+		for (UInventoryListRowWidget* Row : TableViewRows)
+		{
+			if (Row && Row->IsValidLowLevel())
+			{
+				Row->SelectRow(true);
+			}
+		}
+	}
+	else
+	{
+		// Select all slots in grid view
+		for (UInventorySlotWidget* SlotWidget : SlotWidgets)
+		{
+			if (SlotWidget && SlotWidget->IsValidLowLevel())
+			{
+				SlotWidget->SetSelected(true);
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Select All completed"));
+}
+
+void UInventoryWidget::HandleInvertSelection()
+{
+	UE_LOG(LogTemp, Log, TEXT("Invert Selection triggered"));
+
+	if (bIsListView)
+	{
+		// Invert selection of all rows in list view
+		for (UInventoryListRowWidget* Row : TableViewRows)
+		{
+			if (Row && Row->IsValidLowLevel())
+			{
+				Row->ToggleSelection(true);
+			}
+		}
+	}
+	else
+	{
+		// Invert selection of all slots in grid view
+		for (UInventorySlotWidget* SlotWidget : SlotWidgets)
+		{
+			if (SlotWidget && SlotWidget->IsValidLowLevel())
+			{
+				SlotWidget->ToggleSelection();
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Invert Selection completed"));
 }

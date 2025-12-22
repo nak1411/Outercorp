@@ -6,6 +6,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/DragDropOperation.h"
 #include "InventoryItemData.h"
+#include "InventoryContextMenuHandler.h"
 #include "InventorySlotWidget.generated.h"
 
 class UInventoryComponent;
@@ -49,7 +50,7 @@ public:
  * Widget representing a single inventory slot
  */
 UCLASS()
-class OUTERCORP_API UInventorySlotWidget : public UUserWidget
+class OUTERCORP_API UInventorySlotWidget : public UUserWidget, public IInventoryContextMenuHandler
 {
 	GENERATED_BODY()
 
@@ -61,9 +62,14 @@ protected:
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 	virtual void NativeOnDragEnter(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 	virtual void NativeOnDragLeave(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
 	/** Track if we started a drag operation */
 	bool bDragStarted = false;
+
+	/** Track if mouse is currently hovering over this slot */
+	bool bIsHovered = false;
 
 	/** Item icon image */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
@@ -109,9 +115,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float ItemIconOpacity = 1.0f;
 
-	/** Color for drag hover state */
+	/** Color for drag hover state (when dragging over this slot) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
-	FLinearColor HoverColor = FLinearColor(0.2f, 0.5f, 1.0f, 0.5f);
+	FLinearColor DragHoverColor = FLinearColor(0.2f, 0.5f, 1.0f, 0.5f);
+
+	/** Color for mouse hover state (when mouse is over this slot) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
+	FLinearColor MouseHoverColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.1f);
 
 	/** Normal background color */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
@@ -175,8 +185,7 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	static UUserWidget* GetCurrentContextMenu();
 	/** Blueprint-callable function to handle context menu actions */
-	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	void HandleContextMenuAction(FName ActionID);
+	virtual void HandleContextMenuAction_Implementation(FName ActionID) override;
 
 protected:
 	/** Handle split item action */

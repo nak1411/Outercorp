@@ -7,6 +7,7 @@
 #include "Blueprint/IUserObjectListEntry.h"
 #include "Blueprint/DragDropOperation.h"
 #include "InventoryComponent.h"
+#include "InventoryContextMenuHandler.h"
 #include "InventoryListRowWidget.generated.h"
 
 class UTextBlock;
@@ -15,6 +16,7 @@ class UButton;
 class UBorder;
 class UInventoryColumnSettings;
 class USizeBox;
+class UInventorySlotWidget;
 
 /**
  * Data object for list view items
@@ -40,7 +42,7 @@ public:
  * Similar to EVE Online's "Details" view
  */
 UCLASS()
-class OUTERCORP_API UInventoryListRowWidget : public UUserWidget, public IUserObjectListEntry
+class OUTERCORP_API UInventoryListRowWidget : public UUserWidget, public IUserObjectListEntry, public IInventoryContextMenuHandler
 {
 	GENERATED_BODY()
 
@@ -85,6 +87,34 @@ protected:
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BackgroundBorder;
 
+	/** Color when row is selected */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection Style")
+	FLinearColor SelectedColor = FLinearColor(0.2f, 0.4f, 0.8f, 0.5f);
+
+	/** Color when row is not selected (if not using alternating rows) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection Style")
+	FLinearColor UnselectedColor = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+
+	/** Color when hovering over row with mouse */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection Style")
+	FLinearColor HoverColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.05f);
+
+	/** Color when dragging an item over this row (drop target highlight) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection Style")
+	FLinearColor DragDropHighlightColor = FLinearColor(0.2f, 0.5f, 1.0f, 0.5f);
+
+	/** Enable alternating row background colors */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Alternating Rows")
+	bool bUseAlternatingRowColors = false;
+
+	/** Background color for even rows (when alternating is enabled) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Alternating Rows", meta = (EditCondition = "bUseAlternatingRowColors"))
+	FLinearColor EvenRowColor = FLinearColor(0.1f, 0.1f, 0.1f, 0.3f);
+
+	/** Background color for odd rows (when alternating is enabled) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Alternating Rows", meta = (EditCondition = "bUseAlternatingRowColors"))
+	FLinearColor OddRowColor = FLinearColor(0.15f, 0.15f, 0.15f, 0.3f);
+
 	/** SizeBoxes for each column (optional - for dynamic width control) */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> IconColumnBox;
@@ -111,9 +141,16 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
 	bool bIsSelected = false;
 
+	/** The row index in the list (for alternating colors) */
+	int32 RowIndex = 0;
+
 	/** Shared column settings */
 	UPROPERTY(BlueprintReadWrite, Category = "Inventory")
 	TObjectPtr<UInventoryColumnSettings> ColumnSettings;
+
+	/** Widget class to use for drag visual (should be set to WBP_InventorySlot in Blueprint) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	TSubclassOf<UInventorySlotWidget> DragVisualClass;
 
 	/** Static set of all selected rows across all inventory widgets */
 	static TSet<UInventoryListRowWidget*> SelectedRows;
@@ -129,6 +166,10 @@ public:
 	/** Refresh the row display with current data */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void RefreshDisplay();
+
+	/** Set the row index for alternating row colors */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void SetRowIndex(int32 Index);
 
 	/** Get the slot index for this row */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
@@ -168,6 +209,7 @@ public:
 
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
@@ -184,6 +226,9 @@ protected:
 
 	/** Whether the mouse is currently hovering over this row (for drag preview) */
 	bool bIsHovered = false;
+
+	/** Track if we started a drag operation */
+	bool bDragStarted = false;
 
 	/** Visual state for drag and drop feedback */
 	void UpdateDragVisual(bool bIsDragTarget);
@@ -210,8 +255,7 @@ protected:
 	void OnEmptyRowRightClicked(FVector2D MousePosition);
 
 	/** Blueprint-callable function to handle context menu actions */
-	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	void HandleContextMenuAction(FName ActionID);
+	virtual void HandleContextMenuAction_Implementation(FName ActionID) override;
 
 	/** Blueprint event to show item info UI */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")

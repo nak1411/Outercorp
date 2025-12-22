@@ -8,9 +8,11 @@
 #include "Components/Border.h"
 #include "Components/SizeBox.h"
 #include "InventoryItemData.h"
+#include "InventorySlotWidget.h"
 #include "Engine/Texture2D.h"
 #include "Input/Reply.h"
 #include "GameFramework/PlayerController.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
 
 // Initialize static members
 TSet<UInventoryListRowWidget*> UInventoryListRowWidget::SelectedRows;
@@ -72,23 +74,22 @@ void UInventoryListRowWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
 		return;
 	}
 
+	// Set row index from slot index for alternating colors
+	RowIndex = ItemData->SlotIndex;
+
 	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: ItemData set successfully, calling RefreshDisplay"));
 	RefreshDisplay();
+
+	// Update background color based on alternating rows setting
+	UpdateSelectionVisual();
 }
 
 void UInventoryListRowWidget::NativeOnItemSelectionChanged(bool bIsItemSelected)
 {
 	bIsSelected = bIsItemSelected;
 
-	// Update background color based on selection
-	if (BackgroundBorder)
-	{
-		FLinearColor BackgroundColor = bIsItemSelected
-			? FLinearColor(0.2f, 0.4f, 0.8f, 0.5f)  // Blue highlight when selected
-			: FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);  // Transparent when not selected
-
-		BackgroundBorder->SetBrushColor(BackgroundColor);
-	}
+	// Update selection visual
+	UpdateSelectionVisual();
 }
 
 void UInventoryListRowWidget::RefreshDisplay()
@@ -215,6 +216,14 @@ const FInventoryItem& UInventoryListRowWidget::GetItem() const
 	return ItemData ? ItemData->Item : EmptyItem;
 }
 
+void UInventoryListRowWidget::SetRowIndex(int32 Index)
+{
+	RowIndex = Index;
+
+	// Update visual in case alternating colors are enabled
+	UpdateSelectionVisual();
+}
+
 FReply UInventoryListRowWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	// Handle right-click for context menu (both empty and occupied rows)
@@ -251,23 +260,47 @@ FReply UInventoryListRowWidget::NativeOnMouseButtonDown(const FGeometry& InGeome
 		return FReply::Handled();
 	}
 
-	// For other mouse buttons, only handle if row has an item
-	if (!ItemData || !ItemData->Item.IsValid())
-	{
-		return FReply::Unhandled();
-	}
-
+	// Handle left-click
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		// Check if Shift or Ctrl is held for multi-selection
-		bool bAddToSelection = InMouseEvent.IsControlDown() || InMouseEvent.IsShiftDown();
+		UE_LOG(LogTemp, Log, TEXT("Left mouse down on list row - ItemData=%s, Item.IsValid=%s"),
+			ItemData ? TEXT("YES") : TEXT("NO"),
+			(ItemData && ItemData->Item.IsValid()) ? TEXT("YES") : TEXT("NO"));
 
-		ToggleSelection(bAddToSelection);
+		// Only start drag if row has an item
+		if (ItemData && ItemData->Item.IsValid())
+		{
+			// Reset drag flag
+			bDragStarted = false;
 
-		return FReply::Handled();
+			UE_LOG(LogTemp, Log, TEXT("Starting drag detection for row slot %d"), ItemData->SlotIndex);
+
+			// Start drag detection
+			return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
+		}
 	}
 
 	return FReply::Unhandled();
+}
+
+FReply UInventoryListRowWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// If left mouse button released and we didn't start a drag
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && !bDragStarted)
+	{
+		// Only handle if row has an item
+		if (ItemData && ItemData->Item.IsValid())
+		{
+			// Check if Shift or Ctrl is held for multi-selection
+			bool bAddToSelection = InMouseEvent.IsControlDown() || InMouseEvent.IsShiftDown();
+
+			ToggleSelection(bAddToSelection);
+
+			return FReply::Handled();
+		}
+	}
+
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
 void UInventoryListRowWidget::OnRowButtonClicked()
@@ -358,14 +391,47 @@ void UInventoryListRowWidget::ClearAllRowSelections()
 
 void UInventoryListRowWidget::UpdateSelectionVisual()
 {
-	if (BackgroundBorder)
+	if (!BackgroundBorder)
 	{
-		FLinearColor BackgroundColor = bIsSelected
-			? FLinearColor(0.2f, 0.4f, 0.8f, 0.5f)  // Blue highlight when selected
-			: FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);  // Transparent when not selected
-
-		BackgroundBorder->SetBrushColor(BackgroundColor);
+		return;
 	}
+
+	FLinearColor BackgroundColor;
+
+	if (bIsSelected)
+	{
+		// Show selection color when selected (priority: selection state)
+		BackgroundColor = SelectedColor;
+	}
+	else if (bIsHovered)
+	{
+		// Show hover color when mouse is over the row (priority: hover state)
+		// Blend with base color for subtle effect
+		FLinearColor BaseColor;
+		if (bUseAlternatingRowColors)
+		{
+			BaseColor = (RowIndex % 2 == 0) ? EvenRowColor : OddRowColor;
+		}
+		else
+		{
+			BaseColor = UnselectedColor;
+		}
+
+		// Blend hover color with base color
+		BackgroundColor = BaseColor + HoverColor;
+	}
+	else if (bUseAlternatingRowColors)
+	{
+		// Use alternating row colors when not selected or hovered
+		BackgroundColor = (RowIndex % 2 == 0) ? EvenRowColor : OddRowColor;
+	}
+	else
+	{
+		// Use standard unselected color
+		BackgroundColor = UnselectedColor;
+	}
+
+	BackgroundBorder->SetBrushColor(BackgroundColor);
 }
 
 void UInventoryListRowWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
@@ -374,7 +440,8 @@ void UInventoryListRowWidget::NativeOnMouseEnter(const FGeometry& InGeometry, co
 
 	bIsHovered = true;
 
-	// TODO: Add hover visual feedback if desired
+	// Update visual to show hover effect
+	UpdateSelectionVisual();
 }
 
 void UInventoryListRowWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
@@ -383,32 +450,134 @@ void UInventoryListRowWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEve
 
 	bIsHovered = false;
 
-	// TODO: Remove hover visual feedback if desired
+	// Update visual to remove hover effect
+	UpdateSelectionVisual();
 }
 
 void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
 {
 	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
 
-	// TODO: Implement drag and drop
-	// This will be similar to the inventory slot drag and drop system
-	// For now, this is a placeholder for future implementation
+	// Mark that we started dragging (so mouse up doesn't trigger selection)
+	bDragStarted = true;
 
-	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Drag detected on row with slot %d"),
-		ItemData ? ItemData->SlotIndex : -1);
+	if (!ItemData || !ItemData->Item.IsValid() || !ItemData->InventoryComponent)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Drag detected on row with slot %d"), ItemData->SlotIndex);
+
+	// Create drag-drop operation
+	UInventoryDragDropOperation* DragDropOp = NewObject<UInventoryDragDropOperation>();
+	DragDropOp->SourceSlotIndex = ItemData->SlotIndex;
+	DragDropOp->DraggedItem = ItemData->Item;
+	DragDropOp->InventoryComponent = ItemData->InventoryComponent;
+
+	// Check if shift is held for split operation
+	DragDropOp->bIsSplitOperation = InMouseEvent.IsShiftDown() && ItemData->Item.Quantity > 1;
+
+	// Create visual widget for dragging
+	// Use the DragVisualClass if set in Blueprint, otherwise try to find the BP widget
+	TSubclassOf<UInventorySlotWidget> WidgetClass = DragVisualClass;
+
+	if (!WidgetClass)
+	{
+		// Try to load the default WBP_InventorySlot class
+		UE_LOG(LogTemp, Warning, TEXT("DragVisualClass not set - please set it in WBP_InventoryListRow to WBP_InventorySlot"));
+		// We could try to load it here, but it's better to have it set in Blueprint
+	}
+
+	if (WidgetClass)
+	{
+		UInventorySlotWidget* DragVisual = CreateWidget<UInventorySlotWidget>(GetOwningPlayer(), WidgetClass);
+		if (DragVisual)
+		{
+			DragVisual->SetInventoryComponent(ItemData->InventoryComponent);
+			DragVisual->SetSlotIndex(ItemData->SlotIndex);
+			DragVisual->SetItem(ItemData->Item);
+			DragDropOp->DefaultDragVisual = DragVisual;
+			DragDropOp->DraggedVisual = DragVisual;
+			DragDropOp->Pivot = EDragPivot::CenterCenter;
+			DragDropOp->Offset = FVector2D(0, 0); // Snap instantly to cursor, no lerping
+
+			UE_LOG(LogTemp, Log, TEXT("Created drag visual for item: %s"),
+				ItemData->Item.ItemData ? *ItemData->Item.ItemData->ItemName.ToString() : TEXT("NULL"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("Failed to create drag visual widget from class!"));
+		}
+	}
+
+	OutOperation = DragDropOp;
 }
 
 bool UInventoryListRowWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
 {
-	// TODO: Implement drag and drop handling
-	// This will handle dropping items onto this row
+	Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
 
+	UInventoryDragDropOperation* DragDropOp = Cast<UInventoryDragDropOperation>(InOperation);
+	if (!DragDropOp || !ItemData || !ItemData->InventoryComponent)
+	{
+		// Reset drag flag even if drop fails
+		bDragStarted = false;
+		UpdateDragVisual(false);
+		return false;
+	}
+
+	// Reset background color
 	UpdateDragVisual(false);
 
-	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Drop on row with slot %d"),
-		ItemData ? ItemData->SlotIndex : -1);
+	// Don't drop on same slot
+	if (DragDropOp->SourceSlotIndex == ItemData->SlotIndex)
+	{
+		bDragStarted = false;
+		return false;
+	}
 
-	return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
+	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Drop from slot %d to slot %d"),
+		DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
+
+	// Handle split operation
+	if (DragDropOp->bIsSplitOperation)
+	{
+		int32 SplitAmount = DragDropOp->DraggedItem.Quantity / 2;
+		if (SplitAmount > 0)
+		{
+			ItemData->InventoryComponent->SplitStack(DragDropOp->SourceSlotIndex, ItemData->SlotIndex, SplitAmount);
+			UE_LOG(LogTemp, Log, TEXT("Split %d items from slot %d to slot %d"),
+				SplitAmount, DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
+		}
+		bDragStarted = false;
+		return true;
+	}
+
+	// Get the dragged item and target item
+	FInventoryItem DraggedItem = DragDropOp->DraggedItem;
+	FInventoryItem TargetItem = ItemData->Item;
+
+	// Check if items are the same type (merge) or different (swap)
+	if (TargetItem.IsValid() &&
+		DraggedItem.ItemData &&
+		TargetItem.ItemData &&
+		DraggedItem.ItemData->ItemID == TargetItem.ItemData->ItemID)
+	{
+		// Same item type - merge stacks
+		UE_LOG(LogTemp, Log, TEXT("Merging stacks: slot %d to slot %d"),
+			DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
+		ItemData->InventoryComponent->MergeStacks(DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
+	}
+	else
+	{
+		// Different items or target is empty - swap
+		UE_LOG(LogTemp, Log, TEXT("Swapping items: slot %d with slot %d"),
+			DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
+		ItemData->InventoryComponent->MoveItem(DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
+	}
+
+	bDragStarted = false;
+	return true;
 }
 
 void UInventoryListRowWidget::NativeOnDragEnter(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
@@ -429,27 +598,29 @@ void UInventoryListRowWidget::NativeOnDragLeave(const FDragDropEvent& InDragDrop
 	// Remove visual feedback
 	UpdateDragVisual(false);
 
+	// Reset drag flag when drag leaves
+	bDragStarted = false;
+
 	UE_LOG(LogTemp, Verbose, TEXT("InventoryListRowWidget: Drag leave on row with slot %d"),
 		ItemData ? ItemData->SlotIndex : -1);
 }
 
 void UInventoryListRowWidget::UpdateDragVisual(bool bIsDragTarget)
 {
-	// TODO: Add visual feedback for drag and drop
-	// For now, we can use a different border color or opacity
-
-	if (BackgroundBorder && !bIsSelected)
+	if (!BackgroundBorder)
 	{
-		if (bIsDragTarget)
-		{
-			// Show a different color when being dragged over
-			BackgroundBorder->SetBrushColor(FLinearColor(0.5f, 0.5f, 0.0f, 0.3f)); // Yellow tint
-		}
-		else
-		{
-			// Clear the drag visual (but keep selection visual if selected)
-			UpdateSelectionVisual();
-		}
+		return;
+	}
+
+	if (bIsDragTarget)
+	{
+		// Show the drag drop highlight color when being dragged over
+		BackgroundBorder->SetBrushColor(DragDropHighlightColor);
+	}
+	else
+	{
+		// Clear the drag visual - restore normal visual state
+		UpdateSelectionVisual();
 	}
 }
 
@@ -598,7 +769,7 @@ void UInventoryListRowWidget::OnColumnWidthsChanged()
 	UpdateColumnWidths();
 }
 
-void UInventoryListRowWidget::HandleContextMenuAction(FName ActionID)
+void UInventoryListRowWidget::HandleContextMenuAction_Implementation(FName ActionID)
 {
 	UE_LOG(LogTemp, Warning, TEXT("===== LIST ROW HandleContextMenuAction ====="));
 	UE_LOG(LogTemp, Warning, TEXT("ActionID: %s"), *ActionID.ToString());
@@ -757,8 +928,92 @@ void UInventoryListRowWidget::HandleStackAll()
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Stack All triggered for slot %d"), ItemData->SlotIndex);
-	UE_LOG(LogTemp, Warning, TEXT("Stack All functionality - to be implemented"));
+	// Get the current item fresh from the inventory component
+	FInventoryItem ItemToStack = ItemData->InventoryComponent->GetItemAtSlot(ItemData->SlotIndex);
+
+	// If slot is empty, stack ALL items in the inventory (same as Stack All Empty)
+	if (!ItemToStack.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HandleStackAll called on empty slot - stacking ALL items"));
+		HandleStackAllEmpty();
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Stack All triggered for slot %d - stacking items of type '%s'"),
+		ItemData->SlotIndex, *ItemToStack.ItemData->ItemName.ToString());
+
+	// Get the item ID we want to stack
+	FName TargetItemID = ItemToStack.ItemData->ItemID;
+
+	// Get all items and find matching items
+	TArray<FInventoryItem> AllItems = ItemData->InventoryComponent->GetAllItems();
+	TArray<int32> MatchingSlots;
+
+	// Find all slots containing the same item type
+	for (int32 i = 0; i < AllItems.Num(); i++)
+	{
+		if (AllItems[i].IsValid() &&
+			AllItems[i].ItemData &&
+			AllItems[i].ItemData->ItemID == TargetItemID &&
+			AllItems[i].ItemData->MaxStackSize > 1)
+		{
+			MatchingSlots.Add(i);
+		}
+	}
+
+	if (MatchingSlots.Num() <= 1)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Stack All: Only one stack found, nothing to merge"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Stack All: Found %d stacks of '%s'"),
+		MatchingSlots.Num(), *ItemToStack.ItemData->ItemName.ToString());
+
+	// Sort slots so we process them in order
+	MatchingSlots.Sort();
+
+	// Merge all stacks together
+	// Process from the end backwards to avoid index issues when items are removed
+	for (int32 i = MatchingSlots.Num() - 1; i > 0; i--)
+	{
+		int32 SourceSlot = MatchingSlots[i];
+
+		// Try to find a target slot that has space (search from beginning)
+		for (int32 j = 0; j < i; j++)
+		{
+			int32 TargetSlot = MatchingSlots[j];
+
+			// Re-fetch items each time to get current state
+			FInventoryItem SourceItem = ItemData->InventoryComponent->GetItemAtSlot(SourceSlot);
+			FInventoryItem TargetItem = ItemData->InventoryComponent->GetItemAtSlot(TargetSlot);
+
+			// Skip if source is already empty (already merged)
+			if (!SourceItem.IsValid())
+			{
+				break;
+			}
+
+			// Check if target has space
+			if (TargetItem.IsValid() && TargetItem.Quantity < TargetItem.ItemData->MaxStackSize)
+			{
+				UE_LOG(LogTemp, Log, TEXT("  Merging slot %d (qty=%d) into slot %d (qty=%d)"),
+					SourceSlot, SourceItem.Quantity, TargetSlot, TargetItem.Quantity);
+
+				ItemData->InventoryComponent->MergeStacks(SourceSlot, TargetSlot);
+
+				// Check if source is now empty, if so we're done with this source
+				SourceItem = ItemData->InventoryComponent->GetItemAtSlot(SourceSlot);
+				if (!SourceItem.IsValid())
+				{
+					break;
+				}
+				// If source still has items, continue trying other targets
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Stack All completed for '%s'"), *ItemToStack.ItemData->ItemName.ToString());
 }
 
 void UInventoryListRowWidget::HandleStackAllEmpty()
