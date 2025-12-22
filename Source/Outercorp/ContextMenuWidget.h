@@ -41,9 +41,9 @@ public:
 	/** Internal function called by input processor when clicking outside */
 	void RequestClose();
 
-	/** Reference to the inventory slot that opened this context menu */
+	/** Reference to the widget that opened this context menu (can be InventorySlotWidget or InventoryListRowWidget) */
 	UPROPERTY(BlueprintReadWrite, Category = "Context Menu")
-	TObjectPtr<class UInventorySlotWidget> OwningSlot;
+	TObjectPtr<UUserWidget> OwningSlot;
 
 private:
 	/** Whether click capture is currently active */

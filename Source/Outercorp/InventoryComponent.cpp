@@ -427,6 +427,32 @@ void UInventoryComponent::SortInventory(bool bByName)
 	}
 }
 
+void UInventoryComponent::SortInventoryCustom(TFunction<bool(const FInventoryItem&, const FInventoryItem&)> Predicate)
+{
+	// Extract valid items
+	TArray<FInventoryItem> ValidItems;
+	for (const FInventoryItem& Item : Items)
+	{
+		if (Item.IsValid())
+		{
+			ValidItems.Add(Item);
+		}
+	}
+
+	// Sort items using custom predicate
+	ValidItems.Sort(Predicate);
+
+	// Clear inventory
+	Items.Init(FInventoryItem(), Items.Num());
+
+	// Place sorted items back
+	for (int32 i = 0; i < ValidItems.Num(); ++i)
+	{
+		Items[i] = ValidItems[i];
+		OnInventoryUpdated.Broadcast(i, Items[i]);
+	}
+}
+
 bool UInventoryComponent::TryStackItem(UInventoryItemData* ItemData, int32& Quantity, int32& OutSlotIndex)
 {
 	bool bStackedAny = false;

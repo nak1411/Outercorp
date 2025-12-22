@@ -13,6 +13,7 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/PanelWidget.h"
 #include "Components/Button.h"
+#include "Components/TextBlock.h"
 #include "InventoryComponent.h"
 #include "InventoryWidget.h"
 #include "CharacterWidget.h"
@@ -765,6 +766,18 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* ModularWindo
 
 	UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Successfully added character widget to modular window"));
 
+	// Set the window title on the modular window
+	UTextBlock* WindowTitleText = Cast<UTextBlock>(ModularWindow->GetWidgetFromName(FName("TitleText")));
+	if (WindowTitleText)
+	{
+		WindowTitleText->SetText(FText::FromString(TEXT("Character")));
+		UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Set window title to 'Character'"));
+	}
+	else
+	{
+		UE_LOG(LogOutercorp, Warning, TEXT("SetupCharacterWidgetInWindow: Could not find TitleText in modular window"));
+	}
+
 	// Bind events
 	BindCharacterEvents();
 
@@ -843,6 +856,18 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* ModularWindo
 	}
 
 	UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Successfully added inventory widget to modular window"));
+
+	// Set the window title on the modular window
+	UTextBlock* WindowTitleText = Cast<UTextBlock>(ModularWindow->GetWidgetFromName(FName("TitleText")));
+	if (WindowTitleText)
+	{
+		WindowTitleText->SetText(FText::FromString(TEXT("Inventory")));
+		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Set window title to 'Inventory'"));
+	}
+	else
+	{
+		UE_LOG(LogOutercorp, Warning, TEXT("SetupInventoryWidgetInWindow: Could not find TitleText in modular window"));
+	}
 
 	// Bind events
 	BindInventoryEvents();
@@ -1035,15 +1060,29 @@ void AOutercorpCharacter::SaveUILayout()
 		return;
 	}
 
+	// Minimum valid window size to prevent saving collapsed/invalid states
+	const float MinWindowSize = 100.0f;
+	bool bHasValidData = false;
+
 	// Save inventory window layout
 	if (InventoryWindow)
 	{
 		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
 		if (Slot)
 		{
-			SaveGameInstance->InventoryWindowLayout = FWindowLayoutData(Slot->GetPosition(), Slot->GetSize());
-			UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved inventory layout - Pos: %s, Size: %s"),
-				*Slot->GetPosition().ToString(), *Slot->GetSize().ToString());
+			FVector2D WindowSize = Slot->GetSize();
+			// Only save if the window has a valid size
+			if (WindowSize.X >= MinWindowSize && WindowSize.Y >= MinWindowSize)
+			{
+				SaveGameInstance->InventoryWindowLayout = FWindowLayoutData(Slot->GetPosition(), WindowSize);
+				bHasValidData = true;
+				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved inventory layout - Pos: %s, Size: %s"),
+					*Slot->GetPosition().ToString(), *WindowSize.ToString());
+			}
+			else
+			{
+				UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Skipping inventory window - invalid size: %s"), *WindowSize.ToString());
+			}
 		}
 	}
 
@@ -1053,9 +1092,19 @@ void AOutercorpCharacter::SaveUILayout()
 		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
 		if (Slot)
 		{
-			SaveGameInstance->CharacterWindowLayout = FWindowLayoutData(Slot->GetPosition(), Slot->GetSize());
-			UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved character layout - Pos: %s, Size: %s"),
-				*Slot->GetPosition().ToString(), *Slot->GetSize().ToString());
+			FVector2D WindowSize = Slot->GetSize();
+			// Only save if the window has a valid size
+			if (WindowSize.X >= MinWindowSize && WindowSize.Y >= MinWindowSize)
+			{
+				SaveGameInstance->CharacterWindowLayout = FWindowLayoutData(Slot->GetPosition(), WindowSize);
+				bHasValidData = true;
+				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved character layout - Pos: %s, Size: %s"),
+					*Slot->GetPosition().ToString(), *WindowSize.ToString());
+			}
+			else
+			{
+				UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Skipping character window - invalid size: %s"), *WindowSize.ToString());
+			}
 		}
 	}
 
@@ -1065,10 +1114,27 @@ void AOutercorpCharacter::SaveUILayout()
 		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
 		if (Slot)
 		{
-			SaveGameInstance->ItemInfoWindowLayout = FWindowLayoutData(Slot->GetPosition(), Slot->GetSize());
-			UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved item info layout - Pos: %s, Size: %s"),
-				*Slot->GetPosition().ToString(), *Slot->GetSize().ToString());
+			FVector2D WindowSize = Slot->GetSize();
+			// Only save if the window has a valid size
+			if (WindowSize.X >= MinWindowSize && WindowSize.Y >= MinWindowSize)
+			{
+				SaveGameInstance->ItemInfoWindowLayout = FWindowLayoutData(Slot->GetPosition(), WindowSize);
+				bHasValidData = true;
+				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved item info layout - Pos: %s, Size: %s"),
+					*Slot->GetPosition().ToString(), *WindowSize.ToString());
+			}
+			else
+			{
+				UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Skipping item info window - invalid size: %s"), *WindowSize.ToString());
+			}
 		}
+	}
+
+	// Only save to disk if we have at least one valid window size
+	if (!bHasValidData)
+	{
+		UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: No valid window data to save, skipping save"));
+		return;
 	}
 
 	// Save to disk
@@ -1099,16 +1165,28 @@ void AOutercorpCharacter::LoadUILayout()
 
 	UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Successfully loaded UI layout from disk"));
 
+	// Minimum valid window size to prevent loading collapsed/invalid states
+	const float MinWindowSize = 100.0f;
+
 	// Restore inventory window layout
 	if (InventoryWindow)
 	{
 		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
 		if (Slot)
 		{
-			Slot->SetPosition(LoadedGame->InventoryWindowLayout.Position);
-			Slot->SetSize(LoadedGame->InventoryWindowLayout.Size);
-			UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored inventory layout - Pos: %s, Size: %s"),
-				*LoadedGame->InventoryWindowLayout.Position.ToString(), *LoadedGame->InventoryWindowLayout.Size.ToString());
+			FVector2D LoadedSize = LoadedGame->InventoryWindowLayout.Size;
+			// Only restore if the saved size is valid
+			if (LoadedSize.X >= MinWindowSize && LoadedSize.Y >= MinWindowSize)
+			{
+				Slot->SetPosition(LoadedGame->InventoryWindowLayout.Position);
+				Slot->SetSize(LoadedSize);
+				UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored inventory layout - Pos: %s, Size: %s"),
+					*LoadedGame->InventoryWindowLayout.Position.ToString(), *LoadedSize.ToString());
+			}
+			else
+			{
+				UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: Skipping inventory window - saved size is invalid: %s"), *LoadedSize.ToString());
+			}
 		}
 	}
 
@@ -1118,10 +1196,19 @@ void AOutercorpCharacter::LoadUILayout()
 		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
 		if (Slot)
 		{
-			Slot->SetPosition(LoadedGame->CharacterWindowLayout.Position);
-			Slot->SetSize(LoadedGame->CharacterWindowLayout.Size);
-			UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored character layout - Pos: %s, Size: %s"),
-				*LoadedGame->CharacterWindowLayout.Position.ToString(), *LoadedGame->CharacterWindowLayout.Size.ToString());
+			FVector2D LoadedSize = LoadedGame->CharacterWindowLayout.Size;
+			// Only restore if the saved size is valid
+			if (LoadedSize.X >= MinWindowSize && LoadedSize.Y >= MinWindowSize)
+			{
+				Slot->SetPosition(LoadedGame->CharacterWindowLayout.Position);
+				Slot->SetSize(LoadedSize);
+				UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored character layout - Pos: %s, Size: %s"),
+					*LoadedGame->CharacterWindowLayout.Position.ToString(), *LoadedSize.ToString());
+			}
+			else
+			{
+				UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: Skipping character window - saved size is invalid: %s"), *LoadedSize.ToString());
+			}
 		}
 	}
 
@@ -1131,10 +1218,19 @@ void AOutercorpCharacter::LoadUILayout()
 		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
 		if (Slot)
 		{
-			Slot->SetPosition(LoadedGame->ItemInfoWindowLayout.Position);
-			Slot->SetSize(LoadedGame->ItemInfoWindowLayout.Size);
-			UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored item info layout - Pos: %s, Size: %s"),
-				*LoadedGame->ItemInfoWindowLayout.Position.ToString(), *LoadedGame->ItemInfoWindowLayout.Size.ToString());
+			FVector2D LoadedSize = LoadedGame->ItemInfoWindowLayout.Size;
+			// Only restore if the saved size is valid
+			if (LoadedSize.X >= MinWindowSize && LoadedSize.Y >= MinWindowSize)
+			{
+				Slot->SetPosition(LoadedGame->ItemInfoWindowLayout.Position);
+				Slot->SetSize(LoadedSize);
+				UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored item info layout - Pos: %s, Size: %s"),
+					*LoadedGame->ItemInfoWindowLayout.Position.ToString(), *LoadedSize.ToString());
+			}
+			else
+			{
+				UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: Skipping item info window - saved size is invalid: %s"), *LoadedSize.ToString());
+			}
 		}
 	}
 }

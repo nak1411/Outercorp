@@ -125,6 +125,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void SortInventory(bool bByName = true);
 
+	/** Sort inventory by custom predicate */
+	void SortInventoryCustom(TFunction<bool(const FInventoryItem&, const FInventoryItem&)> Predicate);
+
 protected:
 	/** Try to stack item with existing items */
 	bool TryStackItem(UInventoryItemData* ItemData, int32& Quantity, int32& OutSlotIndex);

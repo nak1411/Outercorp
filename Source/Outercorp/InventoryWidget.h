@@ -8,6 +8,9 @@
 #include "InventoryWidget.generated.h"
 
 class UInventorySlotWidget;
+class UInventoryListRowWidget;
+class UInventoryListHeaderWidget;
+class UInventoryColumnSettings;
 class UUniformGridPanel;
 class UScrollBox;
 class USizeBox;
@@ -15,6 +18,7 @@ class UTextBlock;
 class UProgressBar;
 class UButton;
 class UEditableText;
+class UListView;
 
 /**
  * Main inventory window widget (Eve Online style)
@@ -84,9 +88,45 @@ protected:
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	TObjectPtr<UEditableText> SearchText;
 
+	/** Grid view button */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> GridViewButton;
+
+	/** List view button */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UButton> ListViewButton;
+
+	/** ListView widget for list view mode (legacy) */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UListView> ItemListView;
+
+	/** ScrollBox for table-style list view (recommended) */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UScrollBox> ListViewScrollBox;
+
+	/** Vertical box container inside ScrollBox for rows */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<class UVerticalBox> ListViewRowContainer;
+
+	/** Header widget for list view columns */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UInventoryListHeaderWidget> ListViewHeader;
+
+	/** Widget switcher for toggling between grid and list view (optional, more reliable than show/hide) */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<class UWidgetSwitcher> ViewModeSwitcher;
+
 	/** Class for inventory slot widgets */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
 	TSubclassOf<UInventorySlotWidget> SlotWidgetClass;
+
+	/** Class for inventory list row widgets */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
+	TSubclassOf<UInventoryListRowWidget> ListRowWidgetClass;
+
+	/** Class for inventory list header widget */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory")
+	TSubclassOf<UInventoryListHeaderWidget> ListHeaderWidgetClass;
 
 	/** Number of columns in grid */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
@@ -152,6 +192,18 @@ protected:
 	/** Pending column count for debounced reflow */
 	int32 PendingColumnCount;
 
+	/** Current view mode (true = list view, false = grid view) */
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
+	bool bIsListView = false;
+
+	/** Shared column settings for list view */
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
+	TObjectPtr<UInventoryColumnSettings> ColumnSettings;
+
+	/** Cached row widgets for table view */
+	UPROPERTY()
+	TArray<TObjectPtr<UInventoryListRowWidget>> TableViewRows;
+
 	/** Setup click capture for deselecting on outside clicks */
 	void SetupClickCapture();
 
@@ -207,6 +259,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void ReflowItemsToGrid();
 
+	/** Toggle between grid view and list view */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void ToggleViewMode();
+
+	/** Switch to a specific view mode */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void SetViewMode(bool bListView);
+
+	/** Populate the list view with items (legacy ListView) */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void PopulateListView();
+
+	/** Populate the table-style list view with items (ScrollBox version) */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void PopulateTableView();
+
 	/** Delegate called when inventory is closed */
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryClosed);
 
@@ -237,6 +305,18 @@ protected:
 	/** Search text changed */
 	UFUNCTION()
 	void OnSearchTextChanged(const FText& Text);
+
+	/** Grid view button clicked */
+	UFUNCTION()
+	void OnGridViewButtonClicked();
+
+	/** List view button clicked */
+	UFUNCTION()
+	void OnListViewButtonClicked();
+
+	/** Column header clicked */
+	UFUNCTION()
+	void OnColumnHeaderClicked(FName ColumnName);
 
 	/** Create slot widgets */
 	void CreateSlotWidgets();

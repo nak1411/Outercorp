@@ -2,8 +2,13 @@
 
 #include "InventoryWidget.h"
 #include "InventorySlotWidget.h"
+#include "InventoryListRowWidget.h"
+#include "InventoryListHeaderWidget.h"
+#include "InventoryColumnSettings.h"
 #include "Components/UniformGridPanel.h"
 #include "Components/ScrollBox.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/SizeBox.h"
 #include "Components/SizeBoxSlot.h"
 #include "Components/TextBlock.h"
@@ -11,6 +16,8 @@
 #include "Components/Button.h"
 #include "Components/EditableText.h"
 #include "Components/PanelSlot.h"
+#include "Components/ListView.h"
+#include "Components/WidgetSwitcher.h"
 #include "Input/Reply.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Framework/Application/SlateApplication.h"
@@ -75,10 +82,14 @@ public:
 				// If clicked outside inventory, deselect all items
 				if (!bClickedInsideInventory)
 				{
+					// Clear grid selections
 					if (InventoryWidget->SlotWidgets.Num() > 0 && InventoryWidget->SlotWidgets[0])
 					{
 						InventoryWidget->SlotWidgets[0]->ClearAllSelections();
 					}
+
+					// Clear list row selections
+					UInventoryListRowWidget::ClearAllRowSelections();
 				}
 			}
 		}
@@ -142,6 +153,42 @@ void UInventoryWidget::NativeConstruct()
 	{
 		SearchText->OnTextChanged.AddDynamic(this, &UInventoryWidget::OnSearchTextChanged);
 	}
+
+	if (GridViewButton)
+	{
+		GridViewButton->OnClicked.AddDynamic(this, &UInventoryWidget::OnGridViewButtonClicked);
+	}
+
+	if (ListViewButton)
+	{
+		ListViewButton->OnClicked.AddDynamic(this, &UInventoryWidget::OnListViewButtonClicked);
+	}
+
+	// Set up the ListView entry widget class
+	if (ItemListView && ListRowWidgetClass)
+	{
+		// Note: The entry widget class should also be set in the Blueprint,
+		// but we set it here as well to ensure it's configured
+		UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::NativeConstruct: Setting ListView entry widget class"));
+	}
+	else if (ItemListView && !ListRowWidgetClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UInventoryWidget::NativeConstruct: ListView exists but ListRowWidgetClass is not set!"));
+	}
+
+	// Create shared column settings
+	ColumnSettings = NewObject<UInventoryColumnSettings>(this);
+
+	// Bind header column click events and set column settings
+	if (ListViewHeader)
+	{
+		ListViewHeader->OnColumnHeaderClicked.AddDynamic(this, &UInventoryWidget::OnColumnHeaderClicked);
+		ListViewHeader->SetColumnSettings(ColumnSettings);
+		UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::NativeConstruct: Bound to ListViewHeader column click events"));
+	}
+
+	// Initialize to grid view by default
+	SetViewMode(false);
 }
 
 void UInventoryWidget::NativeDestruct()
@@ -250,15 +297,18 @@ FReply UInventoryWidget::NativeOnKeyDown(const FGeometry &InGeometry, const FKey
 
 FReply UInventoryWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	// If clicking in the inventory widget (but not on a slot), deselect all items
-	// The slots will handle their own clicks and prevent this from being called
+	// If clicking in the inventory widget (but not on a slot/row), deselect all items
+	// The slots and rows will handle their own clicks and prevent this from being called
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && InventoryComponent)
 	{
-		// Clear all selections
+		// Clear grid slot selections
 		if (SlotWidgets.Num() > 0 && SlotWidgets[0])
 		{
 			SlotWidgets[0]->ClearAllSelections();
 		}
+
+		// Clear list row selections
+		UInventoryListRowWidget::ClearAllRowSelections();
 	}
 
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
@@ -321,6 +371,19 @@ void UInventoryWidget::RefreshInventory()
 
 	// Update scrollbar visibility based on items
 	UpdateScrollbarVisibility();
+
+	// Also refresh list view if we're in list view mode
+	if (bIsListView)
+	{
+		if (ListViewRowContainer)
+		{
+			PopulateTableView();
+		}
+		else if (ItemListView)
+		{
+			PopulateListView();
+		}
+	}
 }
 
 void UInventoryWidget::RefreshSlot(int32 SlotIndex)
@@ -425,6 +488,20 @@ void UInventoryWidget::OnInventoryUpdated(int32 SlotIndex, const FInventoryItem 
 	else
 	{
 		PreviouslyOccupiedSlots.Remove(SlotIndex);
+	}
+
+	// Also refresh list view if we're in list view mode
+	if (bIsListView)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("OnInventoryUpdated: Refreshing list view because we're in list mode"));
+		if (ListViewRowContainer)
+		{
+			PopulateTableView();
+		}
+		else if (ItemListView)
+		{
+			PopulateListView();
+		}
 	}
 
 	// Don't auto-scroll - it causes issues with view jumping around
@@ -1051,4 +1128,420 @@ void UInventoryWidget::ExecuteDebouncedReflow()
 
 	// Then compress items to move any out-of-bounds items back into view
 	CompressItems();
+}
+
+void UInventoryWidget::OnGridViewButtonClicked()
+{
+	SetViewMode(false); // false = grid view
+}
+
+void UInventoryWidget::OnListViewButtonClicked()
+{
+	SetViewMode(true); // true = list view
+}
+
+void UInventoryWidget::OnColumnHeaderClicked(FName ColumnName)
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("OnColumnHeaderClicked: Column '%s' clicked"), *ColumnName.ToString());
+
+	// Determine sort direction based on current header state
+	bool bAscending = true;
+	if (ListViewHeader)
+	{
+		// If clicking the same column, toggle the direction
+		if (ListViewHeader->CurrentSortColumn == ColumnName)
+		{
+			bAscending = !ListViewHeader->bSortAscending;
+			UE_LOG(LogTemp, Log, TEXT("OnColumnHeaderClicked: Same column, toggling from %s to %s"),
+				ListViewHeader->bSortAscending ? TEXT("Ascending") : TEXT("Descending"),
+				bAscending ? TEXT("Ascending") : TEXT("Descending"));
+		}
+		else
+		{
+			// New column, start with ascending
+			bAscending = true;
+			UE_LOG(LogTemp, Log, TEXT("OnColumnHeaderClicked: New column, setting to Ascending"));
+		}
+
+		// Update the header to show the new sort state
+		ListViewHeader->SetSortColumn(ColumnName, bAscending);
+	}
+
+	// Create a lambda predicate based on the selected column
+	auto SortPredicate = [ColumnName, bAscending](const FInventoryItem& A, const FInventoryItem& B) -> bool
+	{
+		if (ColumnName == TEXT("Name"))
+		{
+			int32 Compare = A.ItemData->ItemName.ToString().Compare(B.ItemData->ItemName.ToString());
+			return bAscending ? (Compare < 0) : (Compare > 0);
+		}
+		else if (ColumnName == TEXT("Quantity"))
+		{
+			return bAscending ? (A.Quantity < B.Quantity) : (A.Quantity > B.Quantity);
+		}
+		else if (ColumnName == TEXT("Weight"))
+		{
+			float WeightA = A.GetTotalWeight();
+			float WeightB = B.GetTotalWeight();
+			return bAscending ? (WeightA < WeightB) : (WeightA > WeightB);
+		}
+		else if (ColumnName == TEXT("Value"))
+		{
+			int32 ValueA = A.GetTotalValue();
+			int32 ValueB = B.GetTotalValue();
+			return bAscending ? (ValueA < ValueB) : (ValueA > ValueB);
+		}
+		else if (ColumnName == TEXT("Rarity"))
+		{
+			return bAscending ? (A.ItemData->Rarity < B.ItemData->Rarity) : (A.ItemData->Rarity > B.ItemData->Rarity);
+		}
+		else if (ColumnName == TEXT("Category"))
+		{
+			return bAscending ? (A.ItemData->Category < B.ItemData->Category) : (A.ItemData->Category > B.ItemData->Category);
+		}
+
+		return false;
+	};
+
+	// Use the InventoryComponent's custom sort method
+	InventoryComponent->SortInventoryCustom(SortPredicate);
+
+	// Refresh both grid and list views
+	RefreshInventory();
+}
+
+void UInventoryWidget::ToggleViewMode()
+{
+	SetViewMode(!bIsListView);
+}
+
+void UInventoryWidget::SetViewMode(bool bListView)
+{
+	UE_LOG(LogTemp, Warning, TEXT("========== SetViewMode Called =========="));
+	UE_LOG(LogTemp, Warning, TEXT("Switching to: %s"), bListView ? TEXT("LIST VIEW") : TEXT("GRID VIEW"));
+
+	bIsListView = bListView;
+
+	// If using WidgetSwitcher (preferred method)
+	if (ViewModeSwitcher)
+	{
+		int32 TargetIndex = bIsListView ? 1 : 0;
+		ViewModeSwitcher->SetActiveWidgetIndex(TargetIndex);
+		UE_LOG(LogTemp, Log, TEXT("ViewModeSwitcher: Set to index %d"), TargetIndex);
+
+		// Populate list view when switching to it
+		if (bIsListView)
+		{
+			// Use table view if available, otherwise fall back to list view
+			if (ListViewRowContainer)
+			{
+				PopulateTableView();
+			}
+			else if (ItemListView)
+			{
+				// Wait for multiple frames to ensure geometry is calculated
+				if (UWorld* World = GetWorld())
+				{
+					// First frame delay - let switcher update
+					FTimerHandle FirstDelayHandle;
+					World->GetTimerManager().SetTimer(FirstDelayHandle, [this, World]()
+					{
+						if (ItemListView)
+						{
+							// Populate the list
+							PopulateListView();
+
+							// Second frame delay - force regenerate after list is populated
+							FTimerHandle SecondDelayHandle;
+							World->GetTimerManager().SetTimer(SecondDelayHandle, [this]()
+							{
+								if (ItemListView)
+								{
+									// Force the list to regenerate/refresh its visible entries
+									ItemListView->RequestRefresh();
+									ItemListView->RegenerateAllEntries();
+
+									UE_LOG(LogTemp, Warning, TEXT("ListView regenerated. Final size: %.2f x %.2f"),
+										ItemListView->GetCachedGeometry().GetLocalSize().X,
+										ItemListView->GetCachedGeometry().GetLocalSize().Y);
+								}
+							}, 0.1f, false);
+						}
+					}, 0.05f, false);
+				}
+				else
+				{
+					PopulateListView();
+				}
+			}
+		}
+	}
+	else
+	{
+		// Fallback to show/hide method
+		UE_LOG(LogTemp, Warning, TEXT("ViewModeSwitcher not found, using visibility toggle method"));
+
+		// Show/hide the appropriate view
+		if (ItemGrid)
+		{
+			ItemGrid->SetVisibility(bIsListView ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+			UE_LOG(LogTemp, Log, TEXT("ItemGrid visibility: %s"), bIsListView ? TEXT("Collapsed") : TEXT("Visible"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ItemGrid is NULL!"));
+		}
+
+		if (ItemScrollBox)
+		{
+			ItemScrollBox->SetVisibility(bIsListView ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+			UE_LOG(LogTemp, Log, TEXT("ItemScrollBox visibility: %s"), bIsListView ? TEXT("Collapsed") : TEXT("Visible"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ItemScrollBox is NULL!"));
+		}
+
+		if (ItemListView)
+		{
+			UE_LOG(LogTemp, Log, TEXT("ItemListView found! Setting visibility..."));
+			ItemListView->SetVisibility(bIsListView ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+			// Log ListView details
+			UE_LOG(LogTemp, Log, TEXT("ItemListView Visibility: %s"), bIsListView ? TEXT("Visible") : TEXT("Collapsed"));
+			UE_LOG(LogTemp, Log, TEXT("ItemListView Current Item Count: %d"), ItemListView->GetNumItems());
+			UE_LOG(LogTemp, Log, TEXT("ItemListView IsVisible: %s"), ItemListView->GetVisibility() == ESlateVisibility::Visible ? TEXT("YES") : TEXT("NO"));
+
+			// Populate list view when switching to it
+			if (bIsListView)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("About to populate list view..."));
+
+				// Use table view if available, otherwise fall back to list view
+				if (ListViewRowContainer)
+				{
+					// Delay population slightly to allow geometry to update
+					if (UWorld* World = GetWorld())
+					{
+						FTimerHandle TempHandle;
+						World->GetTimerManager().SetTimer(TempHandle, [this]()
+						{
+							PopulateTableView();
+						}, 0.1f, false);
+					}
+					else
+					{
+						PopulateTableView();
+					}
+				}
+				else if (ItemListView)
+				{
+					// Delay population slightly to allow geometry to update
+					if (UWorld* World = GetWorld())
+					{
+						FTimerHandle TempHandle;
+						World->GetTimerManager().SetTimer(TempHandle, [this]()
+						{
+							if (ItemListView)
+							{
+								PopulateListView();
+							}
+						}, 0.1f, false);
+					}
+					else
+					{
+						PopulateListView();
+					}
+				}
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("ItemListView is NULL! Did you add a ListView widget named 'ItemListView' to WBP_Inventory?"));
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("========== SetViewMode Complete =========="));
+}
+
+void UInventoryWidget::PopulateListView()
+{
+	if (!ItemListView)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PopulateListView: ItemListView is NULL!"));
+		return;
+	}
+
+	if (!InventoryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PopulateListView: InventoryComponent is NULL!"));
+		return;
+	}
+
+	// Check if Entry Widget Class is set
+	UE_LOG(LogTemp, Warning, TEXT("PopulateListView: Checking ListView configuration..."));
+
+	// Try to get the entry widget class from the ListView
+	// Note: We can't directly access it, but we can check after adding items
+
+	// Clear existing items
+	ItemListView->ClearListItems();
+
+	TArray<FInventoryItem> Items = InventoryComponent->GetAllItems();
+	UE_LOG(LogTemp, Log, TEXT("PopulateListView: Total items in inventory: %d"), Items.Num());
+
+	int32 ValidItemCount = 0;
+	int32 FilteredOutCount = 0;
+
+	// Add items to list view
+	for (int32 i = 0; i < Items.Num(); ++i)
+	{
+		const FInventoryItem& Item = Items[i];
+
+		// Only add valid items (skip empty slots)
+		if (Item.IsValid())
+		{
+			ValidItemCount++;
+
+			// Check filter
+			if (!PassesFilter(Item))
+			{
+				FilteredOutCount++;
+				UE_LOG(LogTemp, Verbose, TEXT("PopulateListView: Item at slot %d filtered out"), i);
+				continue;
+			}
+
+			// Create data object for this item
+			UInventoryListItemData* ItemData = NewObject<UInventoryListItemData>(this);
+			ItemData->Item = Item;
+			ItemData->SlotIndex = i;
+			ItemData->InventoryComponent = InventoryComponent;
+
+			// Add to list view
+			ItemListView->AddItem(ItemData);
+
+			UE_LOG(LogTemp, Log, TEXT("PopulateListView: Added item '%s' at slot %d to list view"),
+				*Item.ItemData->ItemName.ToString(), i);
+		}
+	}
+
+	// Set column settings on all visible row widgets
+	if (ColumnSettings)
+	{
+		TArray<UUserWidget*> DisplayedEntries = ItemListView->GetDisplayedEntryWidgets();
+		for (UUserWidget* EntryWidget : DisplayedEntries)
+		{
+			if (UInventoryListRowWidget* RowWidget = Cast<UInventoryListRowWidget>(EntryWidget))
+			{
+				RowWidget->SetColumnSettings(ColumnSettings);
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("PopulateListView: Valid items: %d, Filtered out: %d, Added to list: %d"),
+		ValidItemCount, FilteredOutCount, ItemListView->GetNumItems());
+
+	// Check ListView configuration
+	FVector2D ListViewSize = ItemListView->GetCachedGeometry().GetLocalSize();
+	UE_LOG(LogTemp, Warning, TEXT("========================================"));
+	UE_LOG(LogTemp, Warning, TEXT("ListView Diagnostics:"));
+	UE_LOG(LogTemp, Warning, TEXT("  Size: %.2f x %.2f"), ListViewSize.X, ListViewSize.Y);
+	UE_LOG(LogTemp, Warning, TEXT("  Items in list: %d"), ItemListView->GetNumItems());
+	UE_LOG(LogTemp, Warning, TEXT("  Visibility: %d"), (int32)ItemListView->GetVisibility());
+
+	if (ListViewSize.X <= 0 || ListViewSize.Y <= 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT(""));
+		UE_LOG(LogTemp, Error, TEXT("PROBLEM: ListView has ZERO SIZE!"));
+		UE_LOG(LogTemp, Error, TEXT("Fix in Blueprint:"));
+		UE_LOG(LogTemp, Error, TEXT("  1. Open WBP_Inventory"));
+		UE_LOG(LogTemp, Error, TEXT("  2. Select ItemListView widget"));
+		UE_LOG(LogTemp, Error, TEXT("  3. Set Size to 'Fill' or give it explicit dimensions"));
+		UE_LOG(LogTemp, Error, TEXT("  4. Make sure it's not inside a collapsed container"));
+		UE_LOG(LogTemp, Error, TEXT(""));
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("========================================"));
+
+	// Force refresh the list view
+	ItemListView->RequestRefresh();
+}
+
+void UInventoryWidget::PopulateTableView()
+{
+	if (!ListViewRowContainer || !ListRowWidgetClass || !InventoryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PopulateTableView: Missing required components!"));
+		UE_LOG(LogTemp, Warning, TEXT("  ListViewRowContainer: %s"), ListViewRowContainer ? TEXT("OK") : TEXT("NULL"));
+		UE_LOG(LogTemp, Warning, TEXT("  ListRowWidgetClass: %s"), ListRowWidgetClass ? TEXT("OK") : TEXT("NULL"));
+		UE_LOG(LogTemp, Warning, TEXT("  InventoryComponent: %s"), InventoryComponent ? TEXT("OK") : TEXT("NULL"));
+		return;
+	}
+
+	// Clear existing rows
+	ListViewRowContainer->ClearChildren();
+	TableViewRows.Empty();
+
+	TArray<FInventoryItem> Items = InventoryComponent->GetAllItems();
+	UE_LOG(LogTemp, Log, TEXT("PopulateTableView: Total items in inventory: %d"), Items.Num());
+
+	int32 ValidItemCount = 0;
+	int32 FilteredOutCount = 0;
+
+	// Create row widgets for each valid item
+	for (int32 i = 0; i < Items.Num(); ++i)
+	{
+		const FInventoryItem& Item = Items[i];
+
+		// Only add valid items (skip empty slots)
+		if (Item.IsValid())
+		{
+			ValidItemCount++;
+
+			// Check filter
+			if (!PassesFilter(Item))
+			{
+				FilteredOutCount++;
+				continue;
+			}
+
+			// Create row widget
+			UInventoryListRowWidget* RowWidget = CreateWidget<UInventoryListRowWidget>(this, ListRowWidgetClass);
+			if (RowWidget)
+			{
+				// Create data object for this item
+				UInventoryListItemData* ItemData = NewObject<UInventoryListItemData>(this);
+				ItemData->Item = Item;
+				ItemData->SlotIndex = i;
+				ItemData->InventoryComponent = InventoryComponent;
+
+				// Set data on row widget
+				RowWidget->ItemData = ItemData;
+				RowWidget->SetColumnSettings(ColumnSettings);
+				RowWidget->RefreshDisplay();
+
+				// Add to vertical box
+				UVerticalBoxSlot* RowSlot = ListViewRowContainer->AddChildToVerticalBox(RowWidget);
+				if (RowSlot)
+				{
+					RowSlot->SetPadding(FMargin(0.0f));
+					RowSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				}
+
+				// Cache the row widget
+				TableViewRows.Add(RowWidget);
+
+				UE_LOG(LogTemp, Log, TEXT("PopulateTableView: Added item '%s' at slot %d"),
+					*Item.ItemData->ItemName.ToString(), i);
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("PopulateTableView: Valid items: %d, Filtered out: %d, Rows created: %d"),
+		ValidItemCount, FilteredOutCount, TableViewRows.Num());
 }
