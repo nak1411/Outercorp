@@ -16,6 +16,7 @@ class UUserWidget;
 class UInventoryComponent;
 class UInventoryWidget;
 class UCharacterWidget;
+class UOutercorpSaveGame;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -241,6 +242,18 @@ protected:
 	/** Check if any UI widget is currently open */
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	bool IsAnyUIWidgetOpen() const;
+
+	/** Save UI layout to disk */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void SaveUILayout();
+
+	/** Load UI layout from disk */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void LoadUILayout();
+
+	/** Called when a window is moved or resized */
+	UFUNCTION()
+	void OnWindowLayoutChanged();
 
 protected:
 	/** Set up input action bindings */

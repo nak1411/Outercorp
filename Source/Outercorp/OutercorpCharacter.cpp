@@ -18,6 +18,8 @@
 #include "CharacterWidget.h"
 #include "Outercorp.h"
 #include "Window.h"
+#include "OutercorpSaveGame.h"
+#include "Kismet/GameplayStatics.h"
 
 AOutercorpCharacter::AOutercorpCharacter()
 {
@@ -94,6 +96,10 @@ void AOutercorpCharacter::BeginPlay()
 						{
 							bool bInitSuccess = Window->Init();
 							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Inventory window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
+
+							// Bind to position and size end events for auto-save
+							Window->ED_PositionEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
+							Window->ED_SizeEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
 						}
 
 						InventoryWindow->SetVisibility(ESlateVisibility::Hidden);
@@ -120,6 +126,10 @@ void AOutercorpCharacter::BeginPlay()
 						{
 							bool bInitSuccess = Window->Init();
 							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Character window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
+
+							// Bind to position and size end events for auto-save
+							Window->ED_PositionEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
+							Window->ED_SizeEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
 						}
 
 						CharacterWindow->SetVisibility(ESlateVisibility::Hidden);
@@ -146,11 +156,18 @@ void AOutercorpCharacter::BeginPlay()
 						{
 							bool bInitSuccess = Window->Init();
 							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Item info window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
+
+							// Bind to position and size end events for auto-save
+							Window->ED_PositionEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
+							Window->ED_SizeEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
 						}
 
 						ItemInfoWindow->SetVisibility(ESlateVisibility::Hidden);
 						UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Created and hid ItemInfoWindow"));
 					}
+
+					// Load saved UI layout after all windows are created
+					LoadUILayout();
 				}
 				else
 				{
@@ -1007,4 +1024,123 @@ void AOutercorpCharacter::OnItemInfoWidgetClosed()
 			UE_LOG(LogOutercorp, Log, TEXT("OnItemInfoWidgetClosed: Restored game-only input mode"));
 		}
 	}
+}
+
+void AOutercorpCharacter::SaveUILayout()
+{
+	UOutercorpSaveGame* SaveGameInstance = Cast<UOutercorpSaveGame>(UGameplayStatics::CreateSaveGameObject(UOutercorpSaveGame::StaticClass()));
+	if (!SaveGameInstance)
+	{
+		UE_LOG(LogOutercorp, Error, TEXT("SaveUILayout: Failed to create save game object"));
+		return;
+	}
+
+	// Save inventory window layout
+	if (InventoryWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
+		if (Slot)
+		{
+			SaveGameInstance->InventoryWindowLayout = FWindowLayoutData(Slot->GetPosition(), Slot->GetSize());
+			UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved inventory layout - Pos: %s, Size: %s"),
+				*Slot->GetPosition().ToString(), *Slot->GetSize().ToString());
+		}
+	}
+
+	// Save character window layout
+	if (CharacterWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
+		if (Slot)
+		{
+			SaveGameInstance->CharacterWindowLayout = FWindowLayoutData(Slot->GetPosition(), Slot->GetSize());
+			UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved character layout - Pos: %s, Size: %s"),
+				*Slot->GetPosition().ToString(), *Slot->GetSize().ToString());
+		}
+	}
+
+	// Save item info window layout
+	if (ItemInfoWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
+		if (Slot)
+		{
+			SaveGameInstance->ItemInfoWindowLayout = FWindowLayoutData(Slot->GetPosition(), Slot->GetSize());
+			UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved item info layout - Pos: %s, Size: %s"),
+				*Slot->GetPosition().ToString(), *Slot->GetSize().ToString());
+		}
+	}
+
+	// Save to disk
+	if (UGameplayStatics::SaveGameToSlot(SaveGameInstance, UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex))
+	{
+		UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Successfully saved UI layout to slot '%s'"), *UOutercorpSaveGame::SaveSlotName);
+	}
+	else
+	{
+		UE_LOG(LogOutercorp, Error, TEXT("SaveUILayout: Failed to save game to slot '%s'"), *UOutercorpSaveGame::SaveSlotName);
+	}
+}
+
+void AOutercorpCharacter::LoadUILayout()
+{
+	if (!UGameplayStatics::DoesSaveGameExist(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex))
+	{
+		UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: No save file exists, using default layout"));
+		return;
+	}
+
+	UOutercorpSaveGame* LoadedGame = Cast<UOutercorpSaveGame>(UGameplayStatics::LoadGameFromSlot(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex));
+	if (!LoadedGame)
+	{
+		UE_LOG(LogOutercorp, Error, TEXT("LoadUILayout: Failed to load save game"));
+		return;
+	}
+
+	UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Successfully loaded UI layout from disk"));
+
+	// Restore inventory window layout
+	if (InventoryWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
+		if (Slot)
+		{
+			Slot->SetPosition(LoadedGame->InventoryWindowLayout.Position);
+			Slot->SetSize(LoadedGame->InventoryWindowLayout.Size);
+			UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored inventory layout - Pos: %s, Size: %s"),
+				*LoadedGame->InventoryWindowLayout.Position.ToString(), *LoadedGame->InventoryWindowLayout.Size.ToString());
+		}
+	}
+
+	// Restore character window layout
+	if (CharacterWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
+		if (Slot)
+		{
+			Slot->SetPosition(LoadedGame->CharacterWindowLayout.Position);
+			Slot->SetSize(LoadedGame->CharacterWindowLayout.Size);
+			UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored character layout - Pos: %s, Size: %s"),
+				*LoadedGame->CharacterWindowLayout.Position.ToString(), *LoadedGame->CharacterWindowLayout.Size.ToString());
+		}
+	}
+
+	// Restore item info window layout
+	if (ItemInfoWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
+		if (Slot)
+		{
+			Slot->SetPosition(LoadedGame->ItemInfoWindowLayout.Position);
+			Slot->SetSize(LoadedGame->ItemInfoWindowLayout.Size);
+			UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored item info layout - Pos: %s, Size: %s"),
+				*LoadedGame->ItemInfoWindowLayout.Position.ToString(), *LoadedGame->ItemInfoWindowLayout.Size.ToString());
+		}
+	}
+}
+
+void AOutercorpCharacter::OnWindowLayoutChanged()
+{
+	// Auto-save whenever a window is moved or resized
+	SaveUILayout();
 }
