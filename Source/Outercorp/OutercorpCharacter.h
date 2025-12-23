@@ -102,6 +102,30 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> ModularWindowClass;
 
+	/** Inventory window capabilities */
+	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
+	bool bInventoryCanMove = true;
+	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
+	bool bInventoryCanResize = true;
+	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
+	bool bInventoryCanFullscreen = true;
+
+	/** Character window capabilities */
+	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
+	bool bCharacterCanMove = true;
+	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
+	bool bCharacterCanResize = true;
+	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
+	bool bCharacterCanFullscreen = true;
+
+	/** Item info window capabilities */
+	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
+	bool bItemInfoCanMove = true;
+	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
+	bool bItemInfoCanResize = false;
+	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
+	bool bItemInfoCanFullscreen = false;
+
 	/** Jump Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction *JumpAction;
@@ -250,6 +274,10 @@ protected:
 	/** Load UI layout from disk */
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void LoadUILayout();
+
+	/** Reset UI layout to defaults and delete save file */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void ResetUILayout();
 
 	/** Called when a window is moved or resized */
 	UFUNCTION()

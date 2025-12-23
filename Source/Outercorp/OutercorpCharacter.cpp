@@ -98,6 +98,9 @@ void AOutercorpCharacter::BeginPlay()
 							bool bInitSuccess = Window->Init();
 							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Inventory window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
 
+							// Set window capabilities from Blueprint-configurable properties
+							Window->SetWindowCapabilities(bInventoryCanMove, bInventoryCanResize, bInventoryCanFullscreen);
+
 							// Bind to position and size end events for auto-save
 							Window->ED_PositionEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
 							Window->ED_SizeEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
@@ -128,6 +131,9 @@ void AOutercorpCharacter::BeginPlay()
 							bool bInitSuccess = Window->Init();
 							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Character window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
 
+							// Set window capabilities from Blueprint-configurable properties
+							Window->SetWindowCapabilities(bCharacterCanMove, bCharacterCanResize, bCharacterCanFullscreen);
+
 							// Bind to position and size end events for auto-save
 							Window->ED_PositionEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
 							Window->ED_SizeEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
@@ -157,6 +163,9 @@ void AOutercorpCharacter::BeginPlay()
 						{
 							bool bInitSuccess = Window->Init();
 							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Item info window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
+
+							// Set window capabilities from Blueprint-configurable properties
+							Window->SetWindowCapabilities(bItemInfoCanMove, bItemInfoCanResize, bItemInfoCanFullscreen);
 
 							// Bind to position and size end events for auto-save
 							Window->ED_PositionEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
@@ -1233,6 +1242,81 @@ void AOutercorpCharacter::LoadUILayout()
 			}
 		}
 	}
+}
+
+void AOutercorpCharacter::ResetUILayout()
+{
+	// Delete the save file
+	if (UGameplayStatics::DoesSaveGameExist(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex))
+	{
+		if (UGameplayStatics::DeleteGameInSlot(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex))
+		{
+			UE_LOG(LogOutercorp, Log, TEXT("ResetUILayout: Deleted save file '%s'"), *UOutercorpSaveGame::SaveSlotName);
+		}
+		else
+		{
+			UE_LOG(LogOutercorp, Error, TEXT("ResetUILayout: Failed to delete save file '%s'"), *UOutercorpSaveGame::SaveSlotName);
+		}
+	}
+
+	// Reset all windows to default positions and sizes
+	const float MinWindowSize = 100.0f;
+
+	if (InventoryWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
+		if (Slot)
+		{
+			Slot->SetPosition(FVector2D(100, 100));
+			Slot->SetSize(FVector2D(600, 400));
+			UE_LOG(LogOutercorp, Log, TEXT("ResetUILayout: Reset inventory window"));
+		}
+
+		// Exit fullscreen if needed
+		UWindow* Window = Cast<UWindow>(InventoryWindow);
+		if (Window)
+		{
+			Window->UpdateUIForCapabilities();
+		}
+	}
+
+	if (CharacterWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
+		if (Slot)
+		{
+			Slot->SetPosition(FVector2D(750, 100));
+			Slot->SetSize(FVector2D(400, 500));
+			UE_LOG(LogOutercorp, Log, TEXT("ResetUILayout: Reset character window"));
+		}
+
+		// Exit fullscreen if needed
+		UWindow* Window = Cast<UWindow>(CharacterWindow);
+		if (Window)
+		{
+			Window->UpdateUIForCapabilities();
+		}
+	}
+
+	if (ItemInfoWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
+		if (Slot)
+		{
+			Slot->SetPosition(FVector2D(400, 200));
+			Slot->SetSize(FVector2D(350, 450));
+			UE_LOG(LogOutercorp, Log, TEXT("ResetUILayout: Reset item info window"));
+		}
+
+		// Exit fullscreen if needed
+		UWindow* Window = Cast<UWindow>(ItemInfoWindow);
+		if (Window)
+		{
+			Window->UpdateUIForCapabilities();
+		}
+	}
+
+	UE_LOG(LogOutercorp, Log, TEXT("ResetUILayout: UI layout reset to defaults"));
 }
 
 void AOutercorpCharacter::OnWindowLayoutChanged()

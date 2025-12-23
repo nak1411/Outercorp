@@ -6,6 +6,7 @@
 
 #include "UObject/GeneratedCppIncludes.h"
 #include "Window.h"
+#include "WindowContentInterface.h"
 
 PRAGMA_DISABLE_DEPRECATION_WARNINGS
 static_assert(!UE_WITH_CONSTINIT_UOBJECT, "This generated code can only be compiled with !UE_WITH_CONSTINIT_OBJECT");
@@ -25,8 +26,10 @@ NX_MODULARWINDOW_API UFunction* Z_Construct_UDelegateFunction_UWindow_ED_Positio
 NX_MODULARWINDOW_API UFunction* Z_Construct_UDelegateFunction_UWindow_ED_SizeChanged__DelegateSignature();
 NX_MODULARWINDOW_API UFunction* Z_Construct_UDelegateFunction_UWindow_ED_SizeEnd__DelegateSignature();
 NX_MODULARWINDOW_API UFunction* Z_Construct_UDelegateFunction_UWindow_ED_SizeStart__DelegateSignature();
+NX_MODULARWINDOW_API UScriptStruct* Z_Construct_UScriptStruct_FWindowCapabilities();
 UMG_API UClass* Z_Construct_UClass_UCanvasPanelSlot_NoRegister();
 UMG_API UClass* Z_Construct_UClass_UUserWidget();
+UMG_API UClass* Z_Construct_UClass_UUserWidget_NoRegister();
 UPackage* Z_Construct_UPackage__Script_NX_ModularWindow();
 // ********** End Cross Module References **********************************************************
 
@@ -362,6 +365,284 @@ DEFINE_FUNCTION(UWindow::execAddModule)
 }
 // ********** End Class UWindow Function AddModule *************************************************
 
+// ********** Begin Class UWindow Function ApplyCapabilitiesFromContent ****************************
+struct Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics
+{
+	struct Window_eventApplyCapabilitiesFromContent_Parms
+	{
+		UUserWidget* ContentWidget;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_ContentWidget_MetaData[] = {
+		{ "EditInline", "true" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function ApplyCapabilitiesFromContent constinit property declarations **********
+	static const UECodeGen_Private::FObjectPropertyParams NewProp_ContentWidget;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function ApplyCapabilitiesFromContent constinit property declarations ************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function ApplyCapabilitiesFromContent Property Definitions *********************
+const UECodeGen_Private::FObjectPropertyParams Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::NewProp_ContentWidget = { "ContentWidget", nullptr, (EPropertyFlags)0x0010000000080080, UECodeGen_Private::EPropertyGenFlags::Object, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(Window_eventApplyCapabilitiesFromContent_Parms, ContentWidget), Z_Construct_UClass_UUserWidget_NoRegister, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_ContentWidget_MetaData), NewProp_ContentWidget_MetaData) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::NewProp_ContentWidget,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::PropPointers) < 2048);
+// ********** End Function ApplyCapabilitiesFromContent Property Definitions ***********************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "ApplyCapabilitiesFromContent", 	Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::Window_eventApplyCapabilitiesFromContent_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::Window_eventApplyCapabilitiesFromContent_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execApplyCapabilitiesFromContent)
+{
+	P_GET_OBJECT(UUserWidget,Z_Param_ContentWidget);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->ApplyCapabilitiesFromContent(Z_Param_ContentWidget);
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function ApplyCapabilitiesFromContent ******************************
+
+// ********** Begin Class UWindow Function ApplyCapabilitiesFromStruct *****************************
+struct Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics
+{
+	struct Window_eventApplyCapabilitiesFromStruct_Parms
+	{
+		FWindowCapabilities Capabilities;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_Capabilities_MetaData[] = {
+		{ "NativeConst", "" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function ApplyCapabilitiesFromStruct constinit property declarations ***********
+	static const UECodeGen_Private::FStructPropertyParams NewProp_Capabilities;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function ApplyCapabilitiesFromStruct constinit property declarations *************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function ApplyCapabilitiesFromStruct Property Definitions **********************
+const UECodeGen_Private::FStructPropertyParams Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::NewProp_Capabilities = { "Capabilities", nullptr, (EPropertyFlags)0x0010000008000182, UECodeGen_Private::EPropertyGenFlags::Struct, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(Window_eventApplyCapabilitiesFromStruct_Parms, Capabilities), Z_Construct_UScriptStruct_FWindowCapabilities, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_Capabilities_MetaData), NewProp_Capabilities_MetaData) }; // 235622890
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::NewProp_Capabilities,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::PropPointers) < 2048);
+// ********** End Function ApplyCapabilitiesFromStruct Property Definitions ************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "ApplyCapabilitiesFromStruct", 	Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::Window_eventApplyCapabilitiesFromStruct_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04420401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::Window_eventApplyCapabilitiesFromStruct_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execApplyCapabilitiesFromStruct)
+{
+	P_GET_STRUCT_REF(FWindowCapabilities,Z_Param_Out_Capabilities);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->ApplyCapabilitiesFromStruct(Z_Param_Out_Capabilities);
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function ApplyCapabilitiesFromStruct *******************************
+
+// ********** Begin Class UWindow Function CanFullscreen *******************************************
+struct Z_Construct_UFunction_UWindow_CanFullscreen_Statics
+{
+	struct Window_eventCanFullscreen_Parms
+	{
+		bool ReturnValue;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function CanFullscreen constinit property declarations *************************
+	static void NewProp_ReturnValue_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_ReturnValue;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function CanFullscreen constinit property declarations ***************************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function CanFullscreen Property Definitions ************************************
+void Z_Construct_UFunction_UWindow_CanFullscreen_Statics::NewProp_ReturnValue_SetBit(void* Obj)
+{
+	((Window_eventCanFullscreen_Parms*)Obj)->ReturnValue = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_CanFullscreen_Statics::NewProp_ReturnValue = { "ReturnValue", nullptr, (EPropertyFlags)0x0010000000000580, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventCanFullscreen_Parms), &Z_Construct_UFunction_UWindow_CanFullscreen_Statics::NewProp_ReturnValue_SetBit, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_CanFullscreen_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_CanFullscreen_Statics::NewProp_ReturnValue,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_CanFullscreen_Statics::PropPointers) < 2048);
+// ********** End Function CanFullscreen Property Definitions **************************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_CanFullscreen_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "CanFullscreen", 	Z_Construct_UFunction_UWindow_CanFullscreen_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_CanFullscreen_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_CanFullscreen_Statics::Window_eventCanFullscreen_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x54020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_CanFullscreen_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_CanFullscreen_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_CanFullscreen_Statics::Window_eventCanFullscreen_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_CanFullscreen()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_CanFullscreen_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execCanFullscreen)
+{
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	*(bool*)Z_Param__Result=P_THIS->CanFullscreen();
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function CanFullscreen *********************************************
+
+// ********** Begin Class UWindow Function CanMove *************************************************
+struct Z_Construct_UFunction_UWindow_CanMove_Statics
+{
+	struct Window_eventCanMove_Parms
+	{
+		bool ReturnValue;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function CanMove constinit property declarations *******************************
+	static void NewProp_ReturnValue_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_ReturnValue;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function CanMove constinit property declarations *********************************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function CanMove Property Definitions ******************************************
+void Z_Construct_UFunction_UWindow_CanMove_Statics::NewProp_ReturnValue_SetBit(void* Obj)
+{
+	((Window_eventCanMove_Parms*)Obj)->ReturnValue = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_CanMove_Statics::NewProp_ReturnValue = { "ReturnValue", nullptr, (EPropertyFlags)0x0010000000000580, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventCanMove_Parms), &Z_Construct_UFunction_UWindow_CanMove_Statics::NewProp_ReturnValue_SetBit, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_CanMove_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_CanMove_Statics::NewProp_ReturnValue,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_CanMove_Statics::PropPointers) < 2048);
+// ********** End Function CanMove Property Definitions ********************************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_CanMove_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "CanMove", 	Z_Construct_UFunction_UWindow_CanMove_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_CanMove_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_CanMove_Statics::Window_eventCanMove_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x54020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_CanMove_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_CanMove_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_CanMove_Statics::Window_eventCanMove_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_CanMove()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_CanMove_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execCanMove)
+{
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	*(bool*)Z_Param__Result=P_THIS->CanMove();
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function CanMove ***************************************************
+
+// ********** Begin Class UWindow Function CanResize ***********************************************
+struct Z_Construct_UFunction_UWindow_CanResize_Statics
+{
+	struct Window_eventCanResize_Parms
+	{
+		bool ReturnValue;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function CanResize constinit property declarations *****************************
+	static void NewProp_ReturnValue_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_ReturnValue;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function CanResize constinit property declarations *******************************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function CanResize Property Definitions ****************************************
+void Z_Construct_UFunction_UWindow_CanResize_Statics::NewProp_ReturnValue_SetBit(void* Obj)
+{
+	((Window_eventCanResize_Parms*)Obj)->ReturnValue = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_CanResize_Statics::NewProp_ReturnValue = { "ReturnValue", nullptr, (EPropertyFlags)0x0010000000000580, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventCanResize_Parms), &Z_Construct_UFunction_UWindow_CanResize_Statics::NewProp_ReturnValue_SetBit, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_CanResize_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_CanResize_Statics::NewProp_ReturnValue,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_CanResize_Statics::PropPointers) < 2048);
+// ********** End Function CanResize Property Definitions ******************************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_CanResize_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "CanResize", 	Z_Construct_UFunction_UWindow_CanResize_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_CanResize_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_CanResize_Statics::Window_eventCanResize_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x54020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_CanResize_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_CanResize_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_CanResize_Statics::Window_eventCanResize_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_CanResize()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_CanResize_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execCanResize)
+{
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	*(bool*)Z_Param__Result=P_THIS->CanResize();
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function CanResize *************************************************
+
 // ********** Begin Class UWindow Function GetCanvasSlot *******************************************
 struct Z_Construct_UFunction_UWindow_GetCanvasSlot_Statics
 {
@@ -653,6 +934,42 @@ DEFINE_FUNCTION(UWindow::execIsAnchorPoint)
 }
 // ********** End Class UWindow Function IsAnchorPoint *********************************************
 
+// ********** Begin Class UWindow Function OnCapabilitiesChanged ***********************************
+static FName NAME_UWindow_OnCapabilitiesChanged = FName(TEXT("OnCapabilitiesChanged"));
+void UWindow::OnCapabilitiesChanged()
+{
+	UFunction* Func = FindFunctionChecked(NAME_UWindow_OnCapabilitiesChanged);
+	ProcessEvent(Func,NULL);
+}
+struct Z_Construct_UFunction_UWindow_OnCapabilitiesChanged_Statics
+{
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "DisplayName", "On Capabilities Changed" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function OnCapabilitiesChanged constinit property declarations *****************
+// ********** End Function OnCapabilitiesChanged constinit property declarations *******************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_OnCapabilitiesChanged_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "OnCapabilitiesChanged", 	nullptr, 
+	0, 
+0,
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x08020800, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_OnCapabilitiesChanged_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_OnCapabilitiesChanged_Statics::Function_MetaDataParams)},  };
+UFunction* Z_Construct_UFunction_UWindow_OnCapabilitiesChanged()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_OnCapabilitiesChanged_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+// ********** End Class UWindow Function OnCapabilitiesChanged *************************************
+
 // ********** Begin Class UWindow Function RemoveModule ********************************************
 struct Z_Construct_UFunction_UWindow_RemoveModule_Statics
 {
@@ -899,6 +1216,177 @@ DEFINE_FUNCTION(UWindow::execSetByParameterSize)
 	P_NATIVE_END;
 }
 // ********** End Class UWindow Function SetByParameterSize ****************************************
+
+// ********** Begin Class UWindow Function SetCanFullscreen ****************************************
+struct Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics
+{
+	struct Window_eventSetCanFullscreen_Parms
+	{
+		bool bNewCanFullscreen;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function SetCanFullscreen constinit property declarations **********************
+	static void NewProp_bNewCanFullscreen_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bNewCanFullscreen;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function SetCanFullscreen constinit property declarations ************************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function SetCanFullscreen Property Definitions *********************************
+void Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::NewProp_bNewCanFullscreen_SetBit(void* Obj)
+{
+	((Window_eventSetCanFullscreen_Parms*)Obj)->bNewCanFullscreen = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::NewProp_bNewCanFullscreen = { "bNewCanFullscreen", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventSetCanFullscreen_Parms), &Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::NewProp_bNewCanFullscreen_SetBit, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::NewProp_bNewCanFullscreen,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::PropPointers) < 2048);
+// ********** End Function SetCanFullscreen Property Definitions ***********************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "SetCanFullscreen", 	Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::Window_eventSetCanFullscreen_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::Window_eventSetCanFullscreen_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_SetCanFullscreen()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_SetCanFullscreen_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execSetCanFullscreen)
+{
+	P_GET_UBOOL(Z_Param_bNewCanFullscreen);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->SetCanFullscreen(Z_Param_bNewCanFullscreen);
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function SetCanFullscreen ******************************************
+
+// ********** Begin Class UWindow Function SetCanMove **********************************************
+struct Z_Construct_UFunction_UWindow_SetCanMove_Statics
+{
+	struct Window_eventSetCanMove_Parms
+	{
+		bool bNewCanMove;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function SetCanMove constinit property declarations ****************************
+	static void NewProp_bNewCanMove_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bNewCanMove;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function SetCanMove constinit property declarations ******************************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function SetCanMove Property Definitions ***************************************
+void Z_Construct_UFunction_UWindow_SetCanMove_Statics::NewProp_bNewCanMove_SetBit(void* Obj)
+{
+	((Window_eventSetCanMove_Parms*)Obj)->bNewCanMove = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_SetCanMove_Statics::NewProp_bNewCanMove = { "bNewCanMove", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventSetCanMove_Parms), &Z_Construct_UFunction_UWindow_SetCanMove_Statics::NewProp_bNewCanMove_SetBit, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_SetCanMove_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_SetCanMove_Statics::NewProp_bNewCanMove,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetCanMove_Statics::PropPointers) < 2048);
+// ********** End Function SetCanMove Property Definitions *****************************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_SetCanMove_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "SetCanMove", 	Z_Construct_UFunction_UWindow_SetCanMove_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetCanMove_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_SetCanMove_Statics::Window_eventSetCanMove_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetCanMove_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_SetCanMove_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_SetCanMove_Statics::Window_eventSetCanMove_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_SetCanMove()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_SetCanMove_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execSetCanMove)
+{
+	P_GET_UBOOL(Z_Param_bNewCanMove);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->SetCanMove(Z_Param_bNewCanMove);
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function SetCanMove ************************************************
+
+// ********** Begin Class UWindow Function SetCanResize ********************************************
+struct Z_Construct_UFunction_UWindow_SetCanResize_Statics
+{
+	struct Window_eventSetCanResize_Parms
+	{
+		bool bNewCanResize;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function SetCanResize constinit property declarations **************************
+	static void NewProp_bNewCanResize_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bNewCanResize;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function SetCanResize constinit property declarations ****************************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function SetCanResize Property Definitions *************************************
+void Z_Construct_UFunction_UWindow_SetCanResize_Statics::NewProp_bNewCanResize_SetBit(void* Obj)
+{
+	((Window_eventSetCanResize_Parms*)Obj)->bNewCanResize = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_SetCanResize_Statics::NewProp_bNewCanResize = { "bNewCanResize", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventSetCanResize_Parms), &Z_Construct_UFunction_UWindow_SetCanResize_Statics::NewProp_bNewCanResize_SetBit, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_SetCanResize_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_SetCanResize_Statics::NewProp_bNewCanResize,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetCanResize_Statics::PropPointers) < 2048);
+// ********** End Function SetCanResize Property Definitions ***************************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_SetCanResize_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "SetCanResize", 	Z_Construct_UFunction_UWindow_SetCanResize_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetCanResize_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_SetCanResize_Statics::Window_eventSetCanResize_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetCanResize_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_SetCanResize_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_SetCanResize_Statics::Window_eventSetCanResize_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_SetCanResize()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_SetCanResize_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execSetCanResize)
+{
+	P_GET_UBOOL(Z_Param_bNewCanResize);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->SetCanResize(Z_Param_bNewCanResize);
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function SetCanResize **********************************************
 
 // ********** Begin Class UWindow Function SetPosition *********************************************
 struct Z_Construct_UFunction_UWindow_SetPosition_Statics
@@ -1224,6 +1712,83 @@ DEFINE_FUNCTION(UWindow::execSetSizeY)
 }
 // ********** End Class UWindow Function SetSizeY **************************************************
 
+// ********** Begin Class UWindow Function SetWindowCapabilities ***********************************
+struct Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics
+{
+	struct Window_eventSetWindowCapabilities_Parms
+	{
+		bool bMove;
+		bool bResize;
+		bool bFullscreen;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function SetWindowCapabilities constinit property declarations *****************
+	static void NewProp_bMove_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bMove;
+	static void NewProp_bResize_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bResize;
+	static void NewProp_bFullscreen_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bFullscreen;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function SetWindowCapabilities constinit property declarations *******************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function SetWindowCapabilities Property Definitions ****************************
+void Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bMove_SetBit(void* Obj)
+{
+	((Window_eventSetWindowCapabilities_Parms*)Obj)->bMove = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bMove = { "bMove", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventSetWindowCapabilities_Parms), &Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bMove_SetBit, METADATA_PARAMS(0, nullptr) };
+void Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bResize_SetBit(void* Obj)
+{
+	((Window_eventSetWindowCapabilities_Parms*)Obj)->bResize = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bResize = { "bResize", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventSetWindowCapabilities_Parms), &Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bResize_SetBit, METADATA_PARAMS(0, nullptr) };
+void Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bFullscreen_SetBit(void* Obj)
+{
+	((Window_eventSetWindowCapabilities_Parms*)Obj)->bFullscreen = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bFullscreen = { "bFullscreen", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventSetWindowCapabilities_Parms), &Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bFullscreen_SetBit, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bMove,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bResize,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::NewProp_bFullscreen,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::PropPointers) < 2048);
+// ********** End Function SetWindowCapabilities Property Definitions ******************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "SetWindowCapabilities", 	Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::Window_eventSetWindowCapabilities_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::Window_eventSetWindowCapabilities_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_SetWindowCapabilities()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_SetWindowCapabilities_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execSetWindowCapabilities)
+{
+	P_GET_UBOOL(Z_Param_bMove);
+	P_GET_UBOOL(Z_Param_bResize);
+	P_GET_UBOOL(Z_Param_bFullscreen);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->SetWindowCapabilities(Z_Param_bMove,Z_Param_bResize,Z_Param_bFullscreen);
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function SetWindowCapabilities *************************************
+
 // ********** Begin Class UWindow Function Uninit **************************************************
 struct Z_Construct_UFunction_UWindow_Uninit_Statics
 {
@@ -1259,6 +1824,42 @@ DEFINE_FUNCTION(UWindow::execUninit)
 	P_NATIVE_END;
 }
 // ********** End Class UWindow Function Uninit ****************************************************
+
+// ********** Begin Class UWindow Function UpdateUIForCapabilities *********************************
+struct Z_Construct_UFunction_UWindow_UpdateUIForCapabilities_Statics
+{
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function UpdateUIForCapabilities constinit property declarations ***************
+// ********** End Function UpdateUIForCapabilities constinit property declarations *****************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_UpdateUIForCapabilities_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "UpdateUIForCapabilities", 	nullptr, 
+	0, 
+0,
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_UpdateUIForCapabilities_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_UpdateUIForCapabilities_Statics::Function_MetaDataParams)},  };
+UFunction* Z_Construct_UFunction_UWindow_UpdateUIForCapabilities()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_UpdateUIForCapabilities_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execUpdateUIForCapabilities)
+{
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->UpdateUIForCapabilities();
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function UpdateUIForCapabilities ***********************************
 
 // ********** Begin Class UWindow ******************************************************************
 FClassRegistrationInfo Z_Registration_Info_UClass_UWindow;
@@ -1301,6 +1902,21 @@ struct Z_Construct_UClass_UWindow_Statics
 	};
 	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_Modules_MetaData[] = {
 		{ "Category", "Window" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_bCanMove_MetaData[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "DisplayName", "Can Move Window" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_bCanResize_MetaData[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "DisplayName", "Can Resize Window" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_bCanFullscreen_MetaData[] = {
+		{ "Category", "Window|Capabilities" },
+		{ "DisplayName", "Can Fullscreen Window" },
 		{ "ModuleRelativePath", "Public/Window.h" },
 	};
 	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_Window_Timer_Event_MetaData[] = {
@@ -1347,6 +1963,12 @@ struct Z_Construct_UClass_UWindow_Statics
 // ********** Begin Class UWindow constinit property declarations **********************************
 	static const UECodeGen_Private::FObjectPropertyParams NewProp_Modules_Inner;
 	static const UECodeGen_Private::FArrayPropertyParams NewProp_Modules;
+	static void NewProp_bCanMove_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bCanMove;
+	static void NewProp_bCanResize_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bCanResize;
+	static void NewProp_bCanFullscreen_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bCanFullscreen;
 	static const UECodeGen_Private::FObjectPropertyParams NewProp_Window_Timer_Event;
 	static const UECodeGen_Private::FObjectPropertyParams NewProp_CanvasSlot;
 	static const UECodeGen_Private::FMulticastDelegatePropertyParams NewProp_ED_InteractStart;
@@ -1361,6 +1983,11 @@ struct Z_Construct_UClass_UWindow_Statics
 // ********** End Class UWindow constinit property declarations ************************************
 	static constexpr UE::CodeGen::FClassNativeFunction Funcs[] = {
 		{ .NameUTF8 = UTF8TEXT("AddModule"), .Pointer = &UWindow::execAddModule },
+		{ .NameUTF8 = UTF8TEXT("ApplyCapabilitiesFromContent"), .Pointer = &UWindow::execApplyCapabilitiesFromContent },
+		{ .NameUTF8 = UTF8TEXT("ApplyCapabilitiesFromStruct"), .Pointer = &UWindow::execApplyCapabilitiesFromStruct },
+		{ .NameUTF8 = UTF8TEXT("CanFullscreen"), .Pointer = &UWindow::execCanFullscreen },
+		{ .NameUTF8 = UTF8TEXT("CanMove"), .Pointer = &UWindow::execCanMove },
+		{ .NameUTF8 = UTF8TEXT("CanResize"), .Pointer = &UWindow::execCanResize },
 		{ .NameUTF8 = UTF8TEXT("GetCanvasSlot"), .Pointer = &UWindow::execGetCanvasSlot },
 		{ .NameUTF8 = UTF8TEXT("GetPosition"), .Pointer = &UWindow::execGetPosition },
 		{ .NameUTF8 = UTF8TEXT("GetSize"), .Pointer = &UWindow::execGetSize },
@@ -1370,17 +1997,27 @@ struct Z_Construct_UClass_UWindow_Statics
 		{ .NameUTF8 = UTF8TEXT("SetByParameter"), .Pointer = &UWindow::execSetByParameter },
 		{ .NameUTF8 = UTF8TEXT("SetByParameterPosition"), .Pointer = &UWindow::execSetByParameterPosition },
 		{ .NameUTF8 = UTF8TEXT("SetByParameterSize"), .Pointer = &UWindow::execSetByParameterSize },
+		{ .NameUTF8 = UTF8TEXT("SetCanFullscreen"), .Pointer = &UWindow::execSetCanFullscreen },
+		{ .NameUTF8 = UTF8TEXT("SetCanMove"), .Pointer = &UWindow::execSetCanMove },
+		{ .NameUTF8 = UTF8TEXT("SetCanResize"), .Pointer = &UWindow::execSetCanResize },
 		{ .NameUTF8 = UTF8TEXT("SetPosition"), .Pointer = &UWindow::execSetPosition },
 		{ .NameUTF8 = UTF8TEXT("SetPositionX"), .Pointer = &UWindow::execSetPositionX },
 		{ .NameUTF8 = UTF8TEXT("SetPositionY"), .Pointer = &UWindow::execSetPositionY },
 		{ .NameUTF8 = UTF8TEXT("SetSize"), .Pointer = &UWindow::execSetSize },
 		{ .NameUTF8 = UTF8TEXT("SetSizeX"), .Pointer = &UWindow::execSetSizeX },
 		{ .NameUTF8 = UTF8TEXT("SetSizeY"), .Pointer = &UWindow::execSetSizeY },
+		{ .NameUTF8 = UTF8TEXT("SetWindowCapabilities"), .Pointer = &UWindow::execSetWindowCapabilities },
 		{ .NameUTF8 = UTF8TEXT("Uninit"), .Pointer = &UWindow::execUninit },
+		{ .NameUTF8 = UTF8TEXT("UpdateUIForCapabilities"), .Pointer = &UWindow::execUpdateUIForCapabilities },
 	};
 	static UObject* (*const DependentSingletons[])();
 	static constexpr FClassFunctionLinkInfo FuncInfo[] = {
 		{ &Z_Construct_UFunction_UWindow_AddModule, "AddModule" }, // 3584439650
+		{ &Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromContent, "ApplyCapabilitiesFromContent" }, // 2875520653
+		{ &Z_Construct_UFunction_UWindow_ApplyCapabilitiesFromStruct, "ApplyCapabilitiesFromStruct" }, // 2066120473
+		{ &Z_Construct_UFunction_UWindow_CanFullscreen, "CanFullscreen" }, // 1065799606
+		{ &Z_Construct_UFunction_UWindow_CanMove, "CanMove" }, // 773663886
+		{ &Z_Construct_UFunction_UWindow_CanResize, "CanResize" }, // 2443550901
 		{ &Z_Construct_UDelegateFunction_UWindow_ED_InteractEnd__DelegateSignature, "ED_InteractEnd__DelegateSignature" }, // 2052133379
 		{ &Z_Construct_UDelegateFunction_UWindow_ED_InteractStart__DelegateSignature, "ED_InteractStart__DelegateSignature" }, // 2130607333
 		{ &Z_Construct_UDelegateFunction_UWindow_ED_PositionChanged__DelegateSignature, "ED_PositionChanged__DelegateSignature" }, // 845455829
@@ -1394,17 +2031,23 @@ struct Z_Construct_UClass_UWindow_Statics
 		{ &Z_Construct_UFunction_UWindow_GetSize, "GetSize" }, // 3026954935
 		{ &Z_Construct_UFunction_UWindow_Init, "Init" }, // 799753732
 		{ &Z_Construct_UFunction_UWindow_IsAnchorPoint, "IsAnchorPoint" }, // 4101381259
+		{ &Z_Construct_UFunction_UWindow_OnCapabilitiesChanged, "OnCapabilitiesChanged" }, // 3870925771
 		{ &Z_Construct_UFunction_UWindow_RemoveModule, "RemoveModule" }, // 507808343
 		{ &Z_Construct_UFunction_UWindow_SetByParameter, "SetByParameter" }, // 1278062167
 		{ &Z_Construct_UFunction_UWindow_SetByParameterPosition, "SetByParameterPosition" }, // 769237354
 		{ &Z_Construct_UFunction_UWindow_SetByParameterSize, "SetByParameterSize" }, // 2118073525
+		{ &Z_Construct_UFunction_UWindow_SetCanFullscreen, "SetCanFullscreen" }, // 4232169470
+		{ &Z_Construct_UFunction_UWindow_SetCanMove, "SetCanMove" }, // 1817983582
+		{ &Z_Construct_UFunction_UWindow_SetCanResize, "SetCanResize" }, // 706102308
 		{ &Z_Construct_UFunction_UWindow_SetPosition, "SetPosition" }, // 864881297
 		{ &Z_Construct_UFunction_UWindow_SetPositionX, "SetPositionX" }, // 616258176
 		{ &Z_Construct_UFunction_UWindow_SetPositionY, "SetPositionY" }, // 1548024486
 		{ &Z_Construct_UFunction_UWindow_SetSize, "SetSize" }, // 3939956260
 		{ &Z_Construct_UFunction_UWindow_SetSizeX, "SetSizeX" }, // 1354722972
 		{ &Z_Construct_UFunction_UWindow_SetSizeY, "SetSizeY" }, // 2188207627
+		{ &Z_Construct_UFunction_UWindow_SetWindowCapabilities, "SetWindowCapabilities" }, // 2959328962
 		{ &Z_Construct_UFunction_UWindow_Uninit, "Uninit" }, // 252755484
+		{ &Z_Construct_UFunction_UWindow_UpdateUIForCapabilities, "UpdateUIForCapabilities" }, // 3463361832
 	};
 	static_assert(UE_ARRAY_COUNT(FuncInfo) < 2048);
 	static constexpr FCppClassTypeInfoStatic StaticCppClassTypeInfo = {
@@ -1416,6 +2059,21 @@ struct Z_Construct_UClass_UWindow_Statics
 // ********** Begin Class UWindow Property Definitions *********************************************
 const UECodeGen_Private::FObjectPropertyParams Z_Construct_UClass_UWindow_Statics::NewProp_Modules_Inner = { "Modules", nullptr, (EPropertyFlags)0x0000000000000000, UECodeGen_Private::EPropertyGenFlags::Object, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, 0, Z_Construct_UClass_UWindow_Module_NoRegister, METADATA_PARAMS(0, nullptr) };
 const UECodeGen_Private::FArrayPropertyParams Z_Construct_UClass_UWindow_Statics::NewProp_Modules = { "Modules", nullptr, (EPropertyFlags)0x0010000000000004, UECodeGen_Private::EPropertyGenFlags::Array, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(UWindow, Modules), EArrayPropertyFlags::None, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_Modules_MetaData), NewProp_Modules_MetaData) };
+void Z_Construct_UClass_UWindow_Statics::NewProp_bCanMove_SetBit(void* Obj)
+{
+	((UWindow*)Obj)->bCanMove = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UClass_UWindow_Statics::NewProp_bCanMove = { "bCanMove", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(UWindow), &Z_Construct_UClass_UWindow_Statics::NewProp_bCanMove_SetBit, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_bCanMove_MetaData), NewProp_bCanMove_MetaData) };
+void Z_Construct_UClass_UWindow_Statics::NewProp_bCanResize_SetBit(void* Obj)
+{
+	((UWindow*)Obj)->bCanResize = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UClass_UWindow_Statics::NewProp_bCanResize = { "bCanResize", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(UWindow), &Z_Construct_UClass_UWindow_Statics::NewProp_bCanResize_SetBit, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_bCanResize_MetaData), NewProp_bCanResize_MetaData) };
+void Z_Construct_UClass_UWindow_Statics::NewProp_bCanFullscreen_SetBit(void* Obj)
+{
+	((UWindow*)Obj)->bCanFullscreen = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UClass_UWindow_Statics::NewProp_bCanFullscreen = { "bCanFullscreen", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(UWindow), &Z_Construct_UClass_UWindow_Statics::NewProp_bCanFullscreen_SetBit, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_bCanFullscreen_MetaData), NewProp_bCanFullscreen_MetaData) };
 const UECodeGen_Private::FObjectPropertyParams Z_Construct_UClass_UWindow_Statics::NewProp_Window_Timer_Event = { "Window_Timer_Event", nullptr, (EPropertyFlags)0x0020080000000000, UECodeGen_Private::EPropertyGenFlags::Object, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(UWindow, Window_Timer_Event), Z_Construct_UClass_UWindow_Timer_Event_NoRegister, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_Window_Timer_Event_MetaData), NewProp_Window_Timer_Event_MetaData) };
 const UECodeGen_Private::FObjectPropertyParams Z_Construct_UClass_UWindow_Statics::NewProp_CanvasSlot = { "CanvasSlot", nullptr, (EPropertyFlags)0x0020080000080008, UECodeGen_Private::EPropertyGenFlags::Object, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(UWindow, CanvasSlot), Z_Construct_UClass_UCanvasPanelSlot_NoRegister, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_CanvasSlot_MetaData), NewProp_CanvasSlot_MetaData) };
 const UECodeGen_Private::FMulticastDelegatePropertyParams Z_Construct_UClass_UWindow_Statics::NewProp_ED_InteractStart = { "ED_InteractStart", nullptr, (EPropertyFlags)0x0010000010080000, UECodeGen_Private::EPropertyGenFlags::InlineMulticastDelegate, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(UWindow, ED_InteractStart), Z_Construct_UDelegateFunction_UWindow_ED_InteractStart__DelegateSignature, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_ED_InteractStart_MetaData), NewProp_ED_InteractStart_MetaData) }; // 2130607333
@@ -1429,6 +2087,9 @@ const UECodeGen_Private::FMulticastDelegatePropertyParams Z_Construct_UClass_UWi
 const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UClass_UWindow_Statics::PropPointers[] = {
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_UWindow_Statics::NewProp_Modules_Inner,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_UWindow_Statics::NewProp_Modules,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_UWindow_Statics::NewProp_bCanMove,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_UWindow_Statics::NewProp_bCanResize,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_UWindow_Statics::NewProp_bCanFullscreen,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_UWindow_Statics::NewProp_Window_Timer_Event,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_UWindow_Statics::NewProp_CanvasSlot,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_UWindow_Statics::NewProp_ED_InteractStart,
@@ -1484,10 +2145,10 @@ UWindow::~UWindow() {}
 struct Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_Statics
 {
 	static constexpr FClassRegisterCompiledInInfo ClassInfo[] = {
-		{ Z_Construct_UClass_UWindow, UWindow::StaticClass, TEXT("UWindow"), &Z_Registration_Info_UClass_UWindow, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(UWindow), 1350679410U) },
+		{ Z_Construct_UClass_UWindow, UWindow::StaticClass, TEXT("UWindow"), &Z_Registration_Info_UClass_UWindow, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(UWindow), 4099488623U) },
 	};
 }; // Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_Statics 
-static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_3416353195{
+static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_4254879575{
 	TEXT("/Script/NX_ModularWindow"),
 	Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_Statics::ClassInfo, UE_ARRAY_COUNT(Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_Statics::ClassInfo),
 	nullptr, 0,

@@ -6,6 +6,12 @@
 
 void UModule_Move_None::Action()
 {
+	// Check if window allows moving
+	if (Window && !Window->CanMove())
+	{
+		return; // Don't allow move action
+	}
+
     Super::Action();
     Prepare(Window);
 	Window->GetWorld()->GetTimerManager().

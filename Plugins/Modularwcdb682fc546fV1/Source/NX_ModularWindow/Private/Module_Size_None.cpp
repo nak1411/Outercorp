@@ -5,6 +5,12 @@
 #include "TimerManager.h"
 
 void UModule_Size_None::Action() {
+	// Check if window allows resizing
+	if (Window && !Window->CanResize())
+	{
+		return; // Don't allow resize action
+	}
+
 	Super::Action();
 	Prepare(Window);
 	Window->GetWorld()->GetTimerManager().

@@ -2,9 +2,17 @@
 
 
 #include "Module_Fullscreen_None.h"
+#include "Window.h"
 
 void UModule_Fullscreen_None::Action()
 {
+	// Check if window allows fullscreen
+	UWindow* WindowPtr = Cast<UWindow>(Window);
+	if (WindowPtr && !WindowPtr->CanFullscreen())
+	{
+		return; // Don't allow fullscreen action
+	}
+
 	Super::Action();
 	if (IsFullscreen(Window)) Unscreen(Window);
 	else Fullscreen(Window);

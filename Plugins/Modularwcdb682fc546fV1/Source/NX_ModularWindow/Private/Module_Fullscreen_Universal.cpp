@@ -18,6 +18,12 @@ void UModule_Fullscreen_Universal::SetWindow(UWindow* InWindow)
 
 void UModule_Fullscreen_Universal::Action()
 {
+	// Check if window allows fullscreen
+	if (Window && !Window->CanFullscreen())
+	{
+		return; // Don't allow fullscreen action
+	}
+
 	if (Window->IsAnchorPoint(true)) {
 		if (Point->IsFullscreen(Window)) Point->Unscreen(Window);
 		else Point->Fullscreen(Window);

@@ -38,6 +38,12 @@
 /NOEXP
 "D:/NakDev/Outercorp/Intermediate/Build/Win64/x64/OutercorpEditor/Development/UnrealEd/SharedPCH.UnrealEd.Project.ValApi.ValExpApi.Cpp20.h.obj"
 "D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Module.NX_ModularWindow.cpp.obj"
+"D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Module_Fullscreen_None.cpp.obj"
+"D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Module_Fullscreen_Universal.cpp.obj"
+"D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Module_Move_None.cpp.obj"
+"D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Module_Size_All_Universal.cpp.obj"
+"D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Module_Size_None.cpp.obj"
+"D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Window.cpp.obj"
 "D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Default.rc2.res"
 "../Intermediate/Build/Win64/x64/UnrealEditor/Development/CoreUObject/UnrealEditor-CoreUObject.lib"
 "../Intermediate/Build/Win64/x64/UnrealEditor/Development/Engine/UnrealEditor-Engine.lib"

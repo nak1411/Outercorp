@@ -21,6 +21,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Window")
 	virtual void SetWindow(UWindow* InWidget);
 
+	UFUNCTION(BlueprintCallable, Category="Window")
+	void SetEnabled(bool bEnabled);
+
 //Data//
 public:
 	UPROPERTY(BlueprintReadWrite, Category="Window", EditAnywhere, meta = (ExposeOnSpawn = "true"), Instanced)

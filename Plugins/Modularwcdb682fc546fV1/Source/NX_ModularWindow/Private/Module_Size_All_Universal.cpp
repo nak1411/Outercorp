@@ -154,3 +154,17 @@ void UModule_Size_All_Universal::SetWindow(UWindow* InWidget)
 
 }
 
+void UModule_Size_All_Universal::SetEnabled(bool bEnabled)
+{
+	ESlateVisibility NewVisibility = bEnabled ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+
+	if (Left) Left->SetVisibility(NewVisibility);
+	if (Up) Up->SetVisibility(NewVisibility);
+	if (Right) Right->SetVisibility(NewVisibility);
+	if (Down) Down->SetVisibility(NewVisibility);
+	if (LeftUp) LeftUp->SetVisibility(NewVisibility);
+	if (UpRight) UpRight->SetVisibility(NewVisibility);
+	if (RightDown) RightDown->SetVisibility(NewVisibility);
+	if (DownLeft) DownLeft->SetVisibility(NewVisibility);
+}
+

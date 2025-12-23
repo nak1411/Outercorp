@@ -8,6 +8,9 @@
 #include "Module_Limit_None.h"
 #include "Module_Limit_Position_Universal.h"
 #include "Module_Limit_Size_Universal.h"
+#include "Module_Fullscreen_None.h"
+#include "Module_Size_All_Universal.h"
+#include "Blueprint/WidgetTree.h"
 
 
 #include "Window_Timer_Event.h"
@@ -23,6 +26,19 @@ void UWindow::NativeOnInitialized()
 	Super::NativeOnInitialized();
 
 	Init();
+}
+
+void UWindow::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// Apply capabilities on the first tick after construction
+	// This ensures all child widgets (like Module_Size_All_Universal) are fully constructed
+	if (!bCapabilitiesApplied)
+	{
+		UpdateUIForCapabilities();
+		bCapabilitiesApplied = true;
+	}
 }
 
 
@@ -253,6 +269,111 @@ FVector2D UWindow::GetPositionStart() const
 FVector2D UWindow::GetSizeStart() const
 {
 	return SizeStart;
+}
+
+void UWindow::ApplyCapabilitiesFromContent(UUserWidget* ContentWidget)
+{
+	if (!IsValid(ContentWidget))
+	{
+		return;
+	}
+
+	// Check if the content widget implements the interface
+	if (ContentWidget->GetClass()->ImplementsInterface(UWindowContentInterface::StaticClass()))
+	{
+		FWindowCapabilities Capabilities = IWindowContentInterface::Execute_GetWindowCapabilities(ContentWidget);
+		ApplyCapabilitiesFromStruct(Capabilities);
+	}
+}
+
+void UWindow::UpdateUIForCapabilities()
+{
+	UE_LOG(LogTemp, Warning, TEXT("UpdateUIForCapabilities called - CanResize: %s, CanFullscreen: %s"),
+		bCanResize ? TEXT("true") : TEXT("false"),
+		bCanFullscreen ? TEXT("true") : TEXT("false"));
+
+	// Hide/show resize handles based on CanResize
+	// Search through widget tree to find Module_Size_All_Universal by type
+	UModule_Size_All_Universal* SizeModule = nullptr;
+
+	if (WidgetTree)
+	{
+		TArray<UWidget*> ChildWidgets;
+		WidgetTree->GetAllWidgets(ChildWidgets);
+
+		for (UWidget* Widget : ChildWidgets)
+		{
+			if (UModule_Size_All_Universal* FoundModule = Cast<UModule_Size_All_Universal>(Widget))
+			{
+				SizeModule = FoundModule;
+				UE_LOG(LogTemp, Warning, TEXT("Found Module_Size_All_Universal: %s"), *Widget->GetName());
+				break;
+			}
+		}
+	}
+
+	if (SizeModule)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Calling SetEnabled(%s) on Module_Size_All_Universal"), bCanResize ? TEXT("true") : TEXT("false"));
+		SizeModule->SetEnabled(bCanResize);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No Module_Size_All_Universal found in widget tree!"));
+	}
+
+	// Hide/show fullscreen button based on CanFullscreen
+	// Search through widget tree to find button by name
+	UWidget* FullscreenBtn = nullptr;
+
+	if (WidgetTree)
+	{
+		TArray<UWidget*> AllWidgets;
+		WidgetTree->GetAllWidgets(AllWidgets);
+
+		for (UWidget* Widget : AllWidgets)
+		{
+			FString WidgetName = Widget->GetName().ToLower();
+			// Check if widget name contains "fullscreen", "maximize", or "max"
+			if (WidgetName.Contains(TEXT("fullscreen")) ||
+			    WidgetName.Contains(TEXT("maximize")) ||
+			    WidgetName.Contains(TEXT("max")))
+			{
+				FullscreenBtn = Widget;
+				UE_LOG(LogTemp, Warning, TEXT("Found fullscreen button: %s"), *Widget->GetName());
+				break;
+			}
+		}
+	}
+
+	if (FullscreenBtn)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Setting fullscreen button visibility to: %s"), bCanFullscreen ? TEXT("Visible") : TEXT("Collapsed"));
+		FullscreenBtn->SetVisibility(bCanFullscreen ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No fullscreen button found in widget tree!"));
+	}
+
+	// If fullscreen is disabled and we're currently fullscreened, exit fullscreen
+	if (!bCanFullscreen)
+	{
+		// Try to find and call unscreen on fullscreen modules
+		for (UWindow_Module* Module : Modules)
+		{
+			if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+			{
+				if (FullscreenModule->IsFullscreen(this))
+				{
+					FullscreenModule->Unscreen(this);
+				}
+			}
+		}
+	}
+
+	// Call Blueprint event to allow custom UI updates
+	OnCapabilitiesChanged();
 }
 
 

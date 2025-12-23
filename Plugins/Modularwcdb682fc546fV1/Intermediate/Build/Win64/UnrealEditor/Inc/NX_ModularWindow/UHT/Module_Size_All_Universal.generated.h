@@ -19,6 +19,7 @@ class UWindow;
 
 // ********** Begin Class UModule_Size_All_Universal ***********************************************
 #define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Module_Size_All_Universal_h_15_RPC_WRAPPERS_NO_PURE_DECLS \
+	DECLARE_FUNCTION(execSetEnabled); \
 	DECLARE_FUNCTION(execSetWindow);
 
 

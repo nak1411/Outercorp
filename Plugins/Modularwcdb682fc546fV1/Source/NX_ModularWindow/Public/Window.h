@@ -7,6 +7,7 @@
 #include "NX_Delegate.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/CanvasPanelSlot.h"
+#include "WindowContentInterface.h"
 #include "Window.generated.h"
 
 class UWindow_Module;
@@ -24,6 +25,15 @@ class NX_MODULARWINDOW_API UWindow : public UUserWidget
 public:
 	UPROPERTY(BlueprintReadWrite, Category="Window")
 	TArray<UWindow_Module*> Modules;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Window|Capabilities", meta=(DisplayName="Can Move Window"))
+	bool bCanMove = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Window|Capabilities", meta=(DisplayName="Can Resize Window"))
+	bool bCanResize = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Window|Capabilities", meta=(DisplayName="Can Fullscreen Window"))
+	bool bCanFullscreen = true;
 	
 	NX_Delegate_MW<
 		UModule_Limit_None,
@@ -46,9 +56,11 @@ protected:
 
 	UPROPERTY()
 	UWindow_Timer_Event* Window_Timer_Event;
-	
+
 	UPROPERTY()
 	UCanvasPanelSlot* CanvasSlot;
+
+	bool bCapabilitiesApplied = false;
 
 	
 
@@ -57,6 +69,7 @@ protected:
 //Logic//
 protected:
 	virtual void NativeOnInitialized() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 public:
 	UFUNCTION(BlueprintCallable, Category = "Window")
 	bool Init();
@@ -133,6 +146,51 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Window")
 	bool IsAnchorPoint(bool bIsX = true);
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Window|Capabilities")
+	bool CanMove() const { return bCanMove; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Window|Capabilities")
+	bool CanResize() const { return bCanResize; }
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Window|Capabilities")
+	bool CanFullscreen() const { return bCanFullscreen; }
+
+	UFUNCTION(BlueprintCallable, Category = "Window|Capabilities")
+	void SetCanMove(bool bNewCanMove) { bCanMove = bNewCanMove; }
+
+	UFUNCTION(BlueprintCallable, Category = "Window|Capabilities")
+	void SetCanResize(bool bNewCanResize) { bCanResize = bNewCanResize; }
+
+	UFUNCTION(BlueprintCallable, Category = "Window|Capabilities")
+	void SetCanFullscreen(bool bNewCanFullscreen) { bCanFullscreen = bNewCanFullscreen; }
+
+	UFUNCTION(BlueprintCallable, Category = "Window|Capabilities")
+	void SetWindowCapabilities(bool bMove, bool bResize, bool bFullscreen)
+	{
+		bCanMove = bMove;
+		bCanResize = bResize;
+		bCanFullscreen = bFullscreen;
+		UpdateUIForCapabilities();
+	}
+
+	UFUNCTION(BlueprintCallable, Category = "Window|Capabilities")
+	void ApplyCapabilitiesFromContent(UUserWidget* ContentWidget);
+
+	UFUNCTION(BlueprintCallable, Category = "Window|Capabilities")
+	void ApplyCapabilitiesFromStruct(const FWindowCapabilities& Capabilities)
+	{
+		bCanMove = Capabilities.bCanMove;
+		bCanResize = Capabilities.bCanResize;
+		bCanFullscreen = Capabilities.bCanFullscreen;
+		UpdateUIForCapabilities();
+	}
+
+	UFUNCTION(BlueprintCallable, Category = "Window|Capabilities")
+	void UpdateUIForCapabilities();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Window|Capabilities", meta=(DisplayName="On Capabilities Changed"))
+	void OnCapabilitiesChanged();
 
 
 

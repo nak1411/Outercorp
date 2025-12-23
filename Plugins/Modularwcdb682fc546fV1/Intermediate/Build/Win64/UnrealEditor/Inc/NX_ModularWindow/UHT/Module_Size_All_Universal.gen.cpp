@@ -21,6 +21,63 @@ UMG_API UClass* Z_Construct_UClass_UOverlay();
 UPackage* Z_Construct_UPackage__Script_NX_ModularWindow();
 // ********** End Cross Module References **********************************************************
 
+// ********** Begin Class UModule_Size_All_Universal Function SetEnabled ***************************
+struct Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics
+{
+	struct Module_Size_All_Universal_eventSetEnabled_Parms
+	{
+		bool bEnabled;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window" },
+		{ "ModuleRelativePath", "Public/Module_Size_All_Universal.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function SetEnabled constinit property declarations ****************************
+	static void NewProp_bEnabled_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bEnabled;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function SetEnabled constinit property declarations ******************************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function SetEnabled Property Definitions ***************************************
+void Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::NewProp_bEnabled_SetBit(void* Obj)
+{
+	((Module_Size_All_Universal_eventSetEnabled_Parms*)Obj)->bEnabled = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::NewProp_bEnabled = { "bEnabled", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Module_Size_All_Universal_eventSetEnabled_Parms), &Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::NewProp_bEnabled_SetBit, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::NewProp_bEnabled,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::PropPointers) < 2048);
+// ********** End Function SetEnabled Property Definitions *****************************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UModule_Size_All_Universal, nullptr, "SetEnabled", 	Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::Module_Size_All_Universal_eventSetEnabled_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::Function_MetaDataParams), Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::Module_Size_All_Universal_eventSetEnabled_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UModule_Size_All_Universal::execSetEnabled)
+{
+	P_GET_UBOOL(Z_Param_bEnabled);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->SetEnabled(Z_Param_bEnabled);
+	P_NATIVE_END;
+}
+// ********** End Class UModule_Size_All_Universal Function SetEnabled *****************************
+
 // ********** Begin Class UModule_Size_All_Universal Function SetWindow ****************************
 struct Z_Construct_UFunction_UModule_Size_All_Universal_SetWindow_Statics
 {
@@ -196,10 +253,12 @@ struct Z_Construct_UClass_UModule_Size_All_Universal_Statics
 	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
 // ********** End Class UModule_Size_All_Universal constinit property declarations *****************
 	static constexpr UE::CodeGen::FClassNativeFunction Funcs[] = {
+		{ .NameUTF8 = UTF8TEXT("SetEnabled"), .Pointer = &UModule_Size_All_Universal::execSetEnabled },
 		{ .NameUTF8 = UTF8TEXT("SetWindow"), .Pointer = &UModule_Size_All_Universal::execSetWindow },
 	};
 	static UObject* (*const DependentSingletons[])();
 	static constexpr FClassFunctionLinkInfo FuncInfo[] = {
+		{ &Z_Construct_UFunction_UModule_Size_All_Universal_SetEnabled, "SetEnabled" }, // 3193938455
 		{ &Z_Construct_UFunction_UModule_Size_All_Universal_SetWindow, "SetWindow" }, // 4203103007
 	};
 	static_assert(UE_ARRAY_COUNT(FuncInfo) < 2048);
@@ -282,10 +341,10 @@ UModule_Size_All_Universal::~UModule_Size_All_Universal() {}
 struct Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Module_Size_All_Universal_h__Script_NX_ModularWindow_Statics
 {
 	static constexpr FClassRegisterCompiledInInfo ClassInfo[] = {
-		{ Z_Construct_UClass_UModule_Size_All_Universal, UModule_Size_All_Universal::StaticClass, TEXT("UModule_Size_All_Universal"), &Z_Registration_Info_UClass_UModule_Size_All_Universal, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(UModule_Size_All_Universal), 1471455664U) },
+		{ Z_Construct_UClass_UModule_Size_All_Universal, UModule_Size_All_Universal::StaticClass, TEXT("UModule_Size_All_Universal"), &Z_Registration_Info_UClass_UModule_Size_All_Universal, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(UModule_Size_All_Universal), 1430509110U) },
 	};
 }; // Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Module_Size_All_Universal_h__Script_NX_ModularWindow_Statics 
-static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Module_Size_All_Universal_h__Script_NX_ModularWindow_2582454038{
+static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Module_Size_All_Universal_h__Script_NX_ModularWindow_2254130710{
 	TEXT("/Script/NX_ModularWindow"),
 	Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Module_Size_All_Universal_h__Script_NX_ModularWindow_Statics::ClassInfo, UE_ARRAY_COUNT(Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Module_Size_All_Universal_h__Script_NX_ModularWindow_Statics::ClassInfo),
 	nullptr, 0,
