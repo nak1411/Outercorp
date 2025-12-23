@@ -1243,6 +1243,9 @@ void UInventoryWidget::SetViewMode(bool bListView)
 
 	bIsListView = bListView;
 
+	// Compress items before switching views to ensure proper layout
+	CompressItems();
+
 	// If using WidgetSwitcher (preferred method)
 	if (ViewModeSwitcher)
 	{
@@ -1295,6 +1298,11 @@ void UInventoryWidget::SetViewMode(bool bListView)
 					PopulateListView();
 				}
 			}
+		}
+		else
+		{
+			// Refresh grid view when switching to it
+			RefreshInventory();
 		}
 	}
 	else

@@ -17,6 +17,7 @@ class UInventoryComponent;
 class UInventoryWidget;
 class UCharacterWidget;
 class UOutercorpSaveGame;
+class UWindow;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -156,6 +157,9 @@ public:
 	/** Called when the game starts or when spawned */
 	virtual void BeginPlay() override;
 
+	/** Called when the actor is being destroyed */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 protected:
 	/** Called from Input Actions for movement input */
 	void MoveInput(const FInputActionValue &Value);
@@ -282,6 +286,12 @@ protected:
 	/** Called when a window is moved or resized */
 	UFUNCTION()
 	void OnWindowLayoutChanged();
+
+	/** Check if a window is currently maximized/fullscreened */
+	bool IsWindowMaximized(UUserWidget* Window) const;
+
+	/** Un-maximize a window if it's currently maximized */
+	void UnMaximizeWindow(UUserWidget* Window);
 
 protected:
 	/** Set up input action bindings */

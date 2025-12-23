@@ -63,7 +63,6 @@
 			"Module_Move_X_Point.cpp.obj",
 			"Module_Move_Y_Line.cpp.obj",
 			"Module_Move_Y_Point.cpp.obj",
-			"Module_Size_All_Universal.cpp.obj",
 			"Module_Size_AnyAxis_Universal.cpp.obj",
 			"Module_Size_Down_Line.cpp.obj",
 			"Module_Size_Down_Point.cpp.obj",
@@ -80,6 +79,7 @@
 			"Module_Fullscreen_None.cpp.obj",
 			"Module_Fullscreen_Universal.cpp.obj",
 			"Module_Move_None.cpp.obj",
+			"Module_Size_All_Universal.cpp.obj",
 			"Module_Size_None.cpp.obj",
 			"Window.cpp.obj"
 		]

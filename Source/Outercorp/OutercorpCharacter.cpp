@@ -21,6 +21,10 @@
 #include "Window.h"
 #include "OutercorpSaveGame.h"
 #include "Kismet/GameplayStatics.h"
+#include "Module_Fullscreen_None.h"
+#include "Module_Fullscreen_Point.h"
+#include "Module_Fullscreen_Line.h"
+#include "Window_Module.h"
 
 AOutercorpCharacter::AOutercorpCharacter()
 {
@@ -203,6 +207,65 @@ void AOutercorpCharacter::BeginPlay()
 			}
 		}
 	}
+}
+
+void AOutercorpCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+
+	UE_LOG(LogOutercorp, Warning, TEXT("EndPlay: Forcing all windows to default size before save"));
+
+	// FORCE windows back to default sizes before saving
+	// This prevents saving maximized state
+	if (InventoryWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
+		if (Slot)
+		{
+			FVector2D CurrentSize = Slot->GetSize();
+			// If window is larger than reasonable threshold, reset to default
+			if (CurrentSize.X > 1500.0f || CurrentSize.Y > 1500.0f)
+			{
+				Slot->SetSize(FVector2D(600, 400));
+				Slot->SetPosition(FVector2D(100, 100));
+				UE_LOG(LogOutercorp, Warning, TEXT("EndPlay: Reset InventoryWindow from %s to default size"), *CurrentSize.ToString());
+			}
+		}
+	}
+
+	if (CharacterWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
+		if (Slot)
+		{
+			FVector2D CurrentSize = Slot->GetSize();
+			if (CurrentSize.X > 1500.0f || CurrentSize.Y > 1500.0f)
+			{
+				Slot->SetSize(FVector2D(400, 500));
+				Slot->SetPosition(FVector2D(750, 100));
+				UE_LOG(LogOutercorp, Warning, TEXT("EndPlay: Reset CharacterWindow from %s to default size"), *CurrentSize.ToString());
+			}
+		}
+	}
+
+	if (ItemInfoWindow)
+	{
+		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
+		if (Slot)
+		{
+			FVector2D CurrentSize = Slot->GetSize();
+			if (CurrentSize.X > 1500.0f || CurrentSize.Y > 1500.0f)
+			{
+				Slot->SetSize(FVector2D(350, 450));
+				Slot->SetPosition(FVector2D(400, 200));
+				UE_LOG(LogOutercorp, Warning, TEXT("EndPlay: Reset ItemInfoWindow from %s to default size"), *CurrentSize.ToString());
+			}
+		}
+	}
+
+	// Save the layout with all windows at normal/default sizes
+	SaveUILayout();
+	UE_LOG(LogOutercorp, Warning, TEXT("EndPlay: Final UI layout saved"));
 }
 
 void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInputComponent)
@@ -1060,6 +1123,65 @@ void AOutercorpCharacter::OnItemInfoWidgetClosed()
 	}
 }
 
+bool AOutercorpCharacter::IsWindowMaximized(UUserWidget* WindowWidget) const
+{
+	if (!IsValid(WindowWidget))
+	{
+		return false;
+	}
+
+	// Cast to UWindow to access modules
+	UWindow* Window = Cast<UWindow>(WindowWidget);
+	if (!Window)
+	{
+		return false;
+	}
+
+	// Check all modules on the window for fullscreen modules
+	for (UWindow_Module* Module : Window->Modules)
+	{
+		if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+		{
+			// Check if this window is currently fullscreened
+			if (FullscreenModule->IsFullscreen(Window))
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+void AOutercorpCharacter::UnMaximizeWindow(UUserWidget* WindowWidget)
+{
+	if (!IsValid(WindowWidget))
+	{
+		return;
+	}
+
+	// Cast to UWindow to access modules
+	UWindow* Window = Cast<UWindow>(WindowWidget);
+	if (!Window)
+	{
+		return;
+	}
+
+	// Find and call Unscreen on any active fullscreen module
+	for (UWindow_Module* Module : Window->Modules)
+	{
+		if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+		{
+			if (FullscreenModule->IsFullscreen(Window))
+			{
+				UE_LOG(LogOutercorp, Log, TEXT("UnMaximizeWindow: Restoring window from maximized state"));
+				FullscreenModule->Unscreen(Window);
+				return;
+			}
+		}
+	}
+}
+
 void AOutercorpCharacter::SaveUILayout()
 {
 	UOutercorpSaveGame* SaveGameInstance = Cast<UOutercorpSaveGame>(UGameplayStatics::CreateSaveGameObject(UOutercorpSaveGame::StaticClass()));
@@ -1079,14 +1201,57 @@ void AOutercorpCharacter::SaveUILayout()
 		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
 		if (Slot)
 		{
+			FVector2D WindowPosition = Slot->GetPosition();
 			FVector2D WindowSize = Slot->GetSize();
+
+			// Check if window appears to be maximized by checking if size is unusually large
+			// We use a simple size check instead of relying on IsFullscreen() which may fail during EndPlay
+			const float MaximizedThreshold = 1500.0f; // If either dimension > 1500, likely maximized
+			bool bLooksMaximized = (WindowSize.X > MaximizedThreshold || WindowSize.Y > MaximizedThreshold);
+
+			if (bLooksMaximized)
+			{
+				UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: InventoryWindow appears maximized (size: %s), looking for saved values"),
+					*WindowSize.ToString());
+
+				// Try to get the pre-maximized size from the fullscreen module
+				UWindow* Window = Cast<UWindow>(InventoryWindow);
+				if (Window)
+				{
+					for (UWindow_Module* Module : Window->Modules)
+					{
+						if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+						{
+							// Check if the fullscreen module has valid saved values
+							if (FullscreenModule->SizeSaved.X >= MinWindowSize && FullscreenModule->SizeSaved.Y >= MinWindowSize)
+							{
+								WindowPosition = FullscreenModule->PositionSaved;
+								WindowSize = FullscreenModule->SizeSaved;
+								UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Using fullscreen module saved values - Pos: %s, Size: %s"),
+									*WindowPosition.ToString(), *WindowSize.ToString());
+								break;
+							}
+							else
+							{
+								UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Fullscreen module has invalid saved values: %s"),
+									*FullscreenModule->SizeSaved.ToString());
+							}
+						}
+					}
+				}
+			}
+			else
+			{
+				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: InventoryWindow normal size, saving as-is"));
+			}
+
 			// Only save if the window has a valid size
 			if (WindowSize.X >= MinWindowSize && WindowSize.Y >= MinWindowSize)
 			{
-				SaveGameInstance->InventoryWindowLayout = FWindowLayoutData(Slot->GetPosition(), WindowSize);
+				SaveGameInstance->InventoryWindowLayout = FWindowLayoutData(WindowPosition, WindowSize);
 				bHasValidData = true;
 				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved inventory layout - Pos: %s, Size: %s"),
-					*Slot->GetPosition().ToString(), *WindowSize.ToString());
+					*WindowPosition.ToString(), *WindowSize.ToString());
 			}
 			else
 			{
@@ -1101,14 +1266,38 @@ void AOutercorpCharacter::SaveUILayout()
 		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
 		if (Slot)
 		{
+			FVector2D WindowPosition = Slot->GetPosition();
 			FVector2D WindowSize = Slot->GetSize();
+
+			// Check if window is maximized - if so, use the saved pre-maximized position/size
+			if (IsWindowMaximized(CharacterWindow))
+			{
+				UWindow* Window = Cast<UWindow>(CharacterWindow);
+				if (Window)
+				{
+					for (UWindow_Module* Module : Window->Modules)
+					{
+						if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+						{
+							if (FullscreenModule->IsFullscreen(Window))
+							{
+								WindowPosition = FullscreenModule->PositionSaved;
+								WindowSize = FullscreenModule->SizeSaved;
+								UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: CharacterWindow is maximized, using saved position/size"));
+								break;
+							}
+						}
+					}
+				}
+			}
+
 			// Only save if the window has a valid size
 			if (WindowSize.X >= MinWindowSize && WindowSize.Y >= MinWindowSize)
 			{
-				SaveGameInstance->CharacterWindowLayout = FWindowLayoutData(Slot->GetPosition(), WindowSize);
+				SaveGameInstance->CharacterWindowLayout = FWindowLayoutData(WindowPosition, WindowSize);
 				bHasValidData = true;
 				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved character layout - Pos: %s, Size: %s"),
-					*Slot->GetPosition().ToString(), *WindowSize.ToString());
+					*WindowPosition.ToString(), *WindowSize.ToString());
 			}
 			else
 			{
@@ -1123,14 +1312,38 @@ void AOutercorpCharacter::SaveUILayout()
 		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
 		if (Slot)
 		{
+			FVector2D WindowPosition = Slot->GetPosition();
 			FVector2D WindowSize = Slot->GetSize();
+
+			// Check if window is maximized - if so, use the saved pre-maximized position/size
+			if (IsWindowMaximized(ItemInfoWindow))
+			{
+				UWindow* Window = Cast<UWindow>(ItemInfoWindow);
+				if (Window)
+				{
+					for (UWindow_Module* Module : Window->Modules)
+					{
+						if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+						{
+							if (FullscreenModule->IsFullscreen(Window))
+							{
+								WindowPosition = FullscreenModule->PositionSaved;
+								WindowSize = FullscreenModule->SizeSaved;
+								UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: ItemInfoWindow is maximized, using saved position/size"));
+								break;
+							}
+						}
+					}
+				}
+			}
+
 			// Only save if the window has a valid size
 			if (WindowSize.X >= MinWindowSize && WindowSize.Y >= MinWindowSize)
 			{
-				SaveGameInstance->ItemInfoWindowLayout = FWindowLayoutData(Slot->GetPosition(), WindowSize);
+				SaveGameInstance->ItemInfoWindowLayout = FWindowLayoutData(WindowPosition, WindowSize);
 				bHasValidData = true;
 				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved item info layout - Pos: %s, Size: %s"),
-					*Slot->GetPosition().ToString(), *WindowSize.ToString());
+					*WindowPosition.ToString(), *WindowSize.ToString());
 			}
 			else
 			{
@@ -1242,6 +1455,75 @@ void AOutercorpCharacter::LoadUILayout()
 			}
 		}
 	}
+
+	// CRITICAL FIX: If windows loaded at maximized size, we need to populate the fullscreen module's
+	// saved position/size so that clicking the maximize button again will properly un-maximize
+	// Otherwise the saved values are (0,0) and the window vanishes when you try to un-maximize
+
+	// Check inventory window
+	if (IsWindowMaximized(InventoryWindow))
+	{
+		UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: InventoryWindow loaded maximized, setting up fullscreen module saved values"));
+		UWindow* Window = Cast<UWindow>(InventoryWindow);
+		if (Window)
+		{
+			// Find the fullscreen module and populate its saved position/size with the LOADED values
+			for (UWindow_Module* Module : Window->Modules)
+			{
+				if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+				{
+					// Use the loaded (non-maximized) position/size from the save file
+					FullscreenModule->PositionSaved = LoadedGame->InventoryWindowLayout.Position;
+					FullscreenModule->SizeSaved = LoadedGame->InventoryWindowLayout.Size;
+					UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Set InventoryWindow fullscreen saved values to Pos: %s, Size: %s"),
+						*FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
+					break;
+				}
+			}
+		}
+	}
+
+	// Check character window
+	if (IsWindowMaximized(CharacterWindow))
+	{
+		UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: CharacterWindow loaded maximized, setting up fullscreen module saved values"));
+		UWindow* Window = Cast<UWindow>(CharacterWindow);
+		if (Window)
+		{
+			for (UWindow_Module* Module : Window->Modules)
+			{
+				if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+				{
+					FullscreenModule->PositionSaved = LoadedGame->CharacterWindowLayout.Position;
+					FullscreenModule->SizeSaved = LoadedGame->CharacterWindowLayout.Size;
+					UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Set CharacterWindow fullscreen saved values to Pos: %s, Size: %s"),
+						*FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
+					break;
+				}
+			}
+		}
+	}
+
+	// Check item info window
+	if (IsWindowMaximized(ItemInfoWindow))
+	{
+		UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: ItemInfoWindow loaded maximized, setting up fullscreen module saved values"));
+		UWindow* Window = Cast<UWindow>(ItemInfoWindow);
+		if (Window)
+		{
+			for (UWindow_Module* Module : Window->Modules)
+			{
+				if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+				{
+					FullscreenModule->PositionSaved = LoadedGame->ItemInfoWindowLayout.Position;
+					FullscreenModule->SizeSaved = LoadedGame->ItemInfoWindowLayout.Size;
+					UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Set ItemInfoWindow fullscreen saved values to Pos: %s, Size: %s"),
+						*FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
+					break;
+				}
+			}
+		}
+	}
 }
 
 void AOutercorpCharacter::ResetUILayout()
@@ -1321,6 +1603,14 @@ void AOutercorpCharacter::ResetUILayout()
 
 void AOutercorpCharacter::OnWindowLayoutChanged()
 {
-	// Auto-save whenever a window is moved or resized
+	// Don't auto-save if any window is currently maximized
+	// This prevents saving the maximized state when the maximize action triggers the size change event
+	if (IsWindowMaximized(InventoryWindow) || IsWindowMaximized(CharacterWindow) || IsWindowMaximized(ItemInfoWindow))
+	{
+		UE_LOG(LogOutercorp, Log, TEXT("OnWindowLayoutChanged: Skipping auto-save because a window is maximized"));
+		return;
+	}
+
+	// Auto-save whenever a window is moved or resized (when not maximized)
 	SaveUILayout();
 }
