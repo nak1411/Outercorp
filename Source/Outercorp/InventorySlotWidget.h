@@ -143,6 +143,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
 	FLinearColor SelectionBorderColor = FLinearColor(1.0f, 0.843f, 0.0f, 1.0f); // Gold color
 
+	/** Whether to show hover overlay on empty slots (default: false) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
+	bool bShowHoverOnEmptySlots = false;
+
 public:
 	/** Set the item for this slot */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")

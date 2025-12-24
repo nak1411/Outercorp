@@ -673,7 +673,13 @@ void UInventorySlotWidget::UpdateAppearance()
 	// Control hover overlay visibility and color
 	if (HoverOverlay)
 	{
-		if (bIsHovered && !bIsSelected)
+		// Only show hover overlay if:
+		// 1. Mouse is hovering
+		// 2. Slot is not selected (selection takes priority)
+		// 3. Either the slot has an item, OR bShowHoverOnEmptySlots is true
+		bool bShouldShowHover = bIsHovered && !bIsSelected && (CurrentItem.IsValid() || bShowHoverOnEmptySlots);
+
+		if (bShouldShowHover)
 		{
 			// Show hover overlay with specified color
 			HoverOverlay->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
