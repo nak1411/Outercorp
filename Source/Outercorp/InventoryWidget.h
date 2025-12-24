@@ -276,6 +276,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void PopulateTableView();
 
+	/** Synchronize selections from grid view to list view */
+	void SyncSelectionsGridToList();
+
+	/** Synchronize selections from list view to grid view */
+	void SyncSelectionsListToGrid();
+
 	/** Blueprint-callable function to handle context menu actions from empty area */
 	virtual void HandleContextMenuAction_Implementation(FName ActionID) override;
 

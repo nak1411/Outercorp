@@ -203,6 +203,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	static void ClearAllRowSelections();
 
+	/** Get all selected rows */
+	static const TSet<UInventoryListRowWidget*>& GetSelectedRows() { return SelectedRows; }
+
 	/** Check if this row is selected */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	bool IsRowSelected() const { return bIsSelected; }

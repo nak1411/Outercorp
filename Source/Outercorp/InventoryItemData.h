@@ -12,11 +12,11 @@
 UENUM(BlueprintType)
 enum class EItemRarity : uint8
 {
-	Common		UMETA(DisplayName = "Common"),
-	Uncommon	UMETA(DisplayName = "Uncommon"),
-	Rare		UMETA(DisplayName = "Rare"),
-	Epic		UMETA(DisplayName = "Epic"),
-	Legendary	UMETA(DisplayName = "Legendary")
+	Common UMETA(DisplayName = "Common"),
+	Uncommon UMETA(DisplayName = "Uncommon"),
+	Rare UMETA(DisplayName = "Rare"),
+	Epic UMETA(DisplayName = "Epic"),
+	Legendary UMETA(DisplayName = "Legendary")
 };
 
 /**
@@ -25,13 +25,14 @@ enum class EItemRarity : uint8
 UENUM(BlueprintType)
 enum class EItemCategory : uint8
 {
-	Weapon		UMETA(DisplayName = "Weapon"),
-	Armor		UMETA(DisplayName = "Armor"),
-	Consumable	UMETA(DisplayName = "Consumable"),
-	Resource	UMETA(DisplayName = "Resource"),
-	Module		UMETA(DisplayName = "Module"),
-	Ammunition	UMETA(DisplayName = "Ammunition"),
-	Misc		UMETA(DisplayName = "Miscellaneous")
+	Weapon UMETA(DisplayName = "Weapon"),
+	Armor UMETA(DisplayName = "Armor"),
+	Consumable UMETA(DisplayName = "Consumable"),
+	Resource UMETA(DisplayName = "Resource"),
+	Blueprint UMETA(DisplayName = "Blueprint"),
+	Module UMETA(DisplayName = "Module"),
+	Ammunition UMETA(DisplayName = "Ammunition"),
+	Misc UMETA(DisplayName = "Miscellaneous")
 };
 
 /**
@@ -129,16 +130,12 @@ struct FInventoryItem
 	TMap<FName, FString> InstanceMetadata;
 
 	FInventoryItem()
-		: ItemData(nullptr)
-		, Quantity(1)
-		, InstanceID(FGuid::NewGuid())
+		: ItemData(nullptr), Quantity(1), InstanceID(FGuid::NewGuid())
 	{
 	}
 
-	FInventoryItem(UInventoryItemData* InItemData, int32 InQuantity = 1)
-		: ItemData(InItemData)
-		, Quantity(InQuantity)
-		, InstanceID(FGuid::NewGuid())
+	FInventoryItem(UInventoryItemData *InItemData, int32 InQuantity = 1)
+		: ItemData(InItemData), Quantity(InQuantity), InstanceID(FGuid::NewGuid())
 	{
 	}
 
@@ -161,7 +158,7 @@ struct FInventoryItem
 	}
 
 	/** Equality operator based on instance ID */
-	bool operator==(const FInventoryItem& Other) const
+	bool operator==(const FInventoryItem &Other) const
 	{
 		return InstanceID == Other.InstanceID;
 	}

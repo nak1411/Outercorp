@@ -56,6 +56,7 @@ class OUTERCORP_API UInventorySlotWidget : public UUserWidget, public IInventory
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
@@ -68,8 +69,12 @@ protected:
 	/** Track if we started a drag operation */
 	bool bDragStarted = false;
 
+public:
 	/** Track if mouse is currently hovering over this slot */
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
 	bool bIsHovered = false;
+
+protected:
 
 	/** Item icon image */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
@@ -90,6 +95,18 @@ protected:
 	/** Background border */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BackgroundBorder;
+
+	/** Selection border - controlled by Blueprint for hover/selection states */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UBorder> SelectionBorder;
+
+	/** Selection highlight image - alternative to SelectionBorder for reliable rendering */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UImage> SelectionHighlight;
+
+	/** Hover overlay - covers the entire slot to provide hover tint effect */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UBorder> HoverOverlay;
 
 	/** Slot button */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
@@ -126,6 +143,22 @@ protected:
 	/** Normal background color */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
 	FLinearColor NormalColor = FLinearColor(0.05f, 0.05f, 0.05f, 0.9f);
+
+	/** Hover overlay color - shown when slot is hovered (use semi-transparent white to lighten) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
+	FLinearColor HoverOverlayColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.2f);
+
+	/** Padding/inset for item icon to leave room for selection and drag highlight borders */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
+	FMargin IconPadding = FMargin(4.0f);
+
+	/** Border thickness for selection and drag highlight */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
+	float BorderThickness = 2.0f;
+
+	/** Color for selection border when item is selected */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
+	FLinearColor SelectionBorderColor = FLinearColor(1.0f, 0.843f, 0.0f, 1.0f); // Gold color
 
 public:
 	/** Set the item for this slot */
@@ -217,6 +250,10 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
 	void OnSelectionChanged(const TArray<int32>& SelectedSlots);
 
+	/** Blueprint event for notifying hover state changes */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
+	void OnHoverStateChanged(bool bHovered);
+
 	/** Broadcast selection change to all slots in the inventory */
 	void BroadcastSelectionChanged();
 
@@ -240,6 +277,9 @@ public:
 	/** Clear all selections in the inventory */
 	UFUNCTION(BlueprintCallable, Category = "Inventory|Selection")
 	void ClearAllSelections();
+
+	/** Clear all selections for a specific inventory component (static method) */
+	static void ClearAllSelectionsForInventory(UInventoryComponent* InInventoryComponent);
 
 	/** Check if any slots are currently selected */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory|Selection")

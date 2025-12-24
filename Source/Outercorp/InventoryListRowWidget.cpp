@@ -7,6 +7,8 @@
 #include "Components/Button.h"
 #include "Components/Border.h"
 #include "Components/SizeBox.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "InventoryItemData.h"
 #include "InventorySlotWidget.h"
 #include "Engine/Texture2D.h"
@@ -468,6 +470,16 @@ void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, 
 
 	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Drag detected on row with slot %d"), ItemData->SlotIndex);
 
+	// Clear all selections when starting a drag operation (both list and grid)
+	if (SelectedRows.Num() > 0)
+	{
+		ClearAllRowSelections();
+		UE_LOG(LogTemp, Log, TEXT("Cleared all list row selections on drag start"));
+	}
+
+	// Also clear grid view selections to keep both views in sync
+	UInventorySlotWidget::ClearAllSelectionsForInventory(ItemData->InventoryComponent);
+
 	// Create drag-drop operation
 	UInventoryDragDropOperation* DragDropOp = NewObject<UInventoryDragDropOperation>();
 	DragDropOp->SourceSlotIndex = ItemData->SlotIndex;
@@ -499,7 +511,7 @@ void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, 
 			DragDropOp->DefaultDragVisual = DragVisual;
 			DragDropOp->DraggedVisual = DragVisual;
 			DragDropOp->Pivot = EDragPivot::CenterCenter;
-			DragDropOp->Offset = FVector2D(0, 0); // Snap instantly to cursor, no lerping
+			DragDropOp->Offset = FVector2D(0, 0);
 
 			UE_LOG(LogTemp, Log, TEXT("Created drag visual for item: %s"),
 				ItemData->Item.ItemData ? *ItemData->Item.ItemData->ItemName.ToString() : TEXT("NULL"));

@@ -1260,6 +1260,8 @@ void UInventoryWidget::SetViewMode(bool bListView)
 			if (ListViewRowContainer)
 			{
 				PopulateTableView();
+				// Sync selections from grid to list after populating
+				SyncSelectionsGridToList();
 			}
 			else if (ItemListView)
 			{
@@ -1303,6 +1305,8 @@ void UInventoryWidget::SetViewMode(bool bListView)
 		{
 			// Refresh grid view when switching to it
 			RefreshInventory();
+			// Sync selections from list to grid after refreshing
+			SyncSelectionsListToGrid();
 		}
 	}
 	else
@@ -1356,11 +1360,15 @@ void UInventoryWidget::SetViewMode(bool bListView)
 						World->GetTimerManager().SetTimer(TempHandle, [this]()
 						{
 							PopulateTableView();
+							// Sync selections from grid to list after populating
+							SyncSelectionsGridToList();
 						}, 0.1f, false);
 					}
 					else
 					{
 						PopulateTableView();
+						// Sync selections from grid to list after populating
+						SyncSelectionsGridToList();
 					}
 				}
 				else if (ItemListView)
@@ -1382,6 +1390,11 @@ void UInventoryWidget::SetViewMode(bool bListView)
 						PopulateListView();
 					}
 				}
+			}
+			else
+			{
+				// Switching to grid view - sync selections from list to grid
+				SyncSelectionsListToGrid();
 			}
 		}
 		else
@@ -1572,6 +1585,93 @@ void UInventoryWidget::PopulateTableView()
 
 	UE_LOG(LogTemp, Warning, TEXT("PopulateTableView: Valid items: %d, Filtered out: %d, Rows created: %d"),
 		ValidItemCount, FilteredOutCount, TableViewRows.Num());
+}
+
+void UInventoryWidget::SyncSelectionsGridToList()
+{
+	if (!InventoryComponent || SlotWidgets.IsEmpty())
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("SyncSelectionsGridToList: Syncing selections from grid to list view"));
+
+	// Get selected slots from grid view
+	TArray<int32> SelectedSlotIndices = SlotWidgets[0]->GetSelectedSlots();
+
+	if (SelectedSlotIndices.IsEmpty())
+	{
+		// No selections in grid, clear all list selections
+		UInventoryListRowWidget::ClearAllRowSelections();
+		UE_LOG(LogTemp, Log, TEXT("SyncSelectionsGridToList: No grid selections, cleared list selections"));
+		return;
+	}
+
+	// Clear existing list selections first
+	UInventoryListRowWidget::ClearAllRowSelections();
+
+	// Convert slot indices to a set for fast lookup
+	TSet<int32> SelectedSlotSet(SelectedSlotIndices);
+
+	// Select corresponding rows in list view
+	int32 SelectionCount = 0;
+	for (UInventoryListRowWidget* RowWidget : TableViewRows)
+	{
+		if (RowWidget && RowWidget->ItemData && SelectedSlotSet.Contains(RowWidget->ItemData->SlotIndex))
+		{
+			RowWidget->SelectRow(true); // Add to selection
+			SelectionCount++;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("SyncSelectionsGridToList: Synchronized %d selections to list view"), SelectionCount);
+}
+
+void UInventoryWidget::SyncSelectionsListToGrid()
+{
+	if (!InventoryComponent || SlotWidgets.IsEmpty())
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("SyncSelectionsListToGrid: Syncing selections from list to grid view"));
+
+	// Get selected rows from list view
+	const TSet<UInventoryListRowWidget*>& SelectedRows = UInventoryListRowWidget::GetSelectedRows();
+
+	if (SelectedRows.IsEmpty())
+	{
+		// No selections in list, clear all grid selections
+		UInventorySlotWidget::ClearAllSelectionsForInventory(InventoryComponent);
+		UE_LOG(LogTemp, Log, TEXT("SyncSelectionsListToGrid: No list selections, cleared grid selections"));
+		return;
+	}
+
+	// Clear existing grid selections first
+	UInventorySlotWidget::ClearAllSelectionsForInventory(InventoryComponent);
+
+	// Collect slot indices to select
+	TArray<int32> SlotIndicesToSelect;
+	for (UInventoryListRowWidget* RowWidget : SelectedRows)
+	{
+		if (RowWidget && RowWidget->ItemData)
+		{
+			SlotIndicesToSelect.Add(RowWidget->ItemData->SlotIndex);
+		}
+	}
+
+	// Select corresponding slots in grid view
+	int32 SelectionCount = 0;
+	for (int32 SlotIndex : SlotIndicesToSelect)
+	{
+		if (SlotWidgets.IsValidIndex(SlotIndex) && SlotWidgets[SlotIndex])
+		{
+			SlotWidgets[SlotIndex]->SetSelected(true);
+			SelectionCount++;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("SyncSelectionsListToGrid: Synchronized %d selections to grid view"), SelectionCount);
 }
 
 void UInventoryWidget::HandleContextMenuAction_Implementation(FName ActionID)
