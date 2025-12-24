@@ -83,6 +83,10 @@ protected:
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> QuantityText;
 
+	/** Item name text */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ItemText;
+
 	/** Rarity border */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> RarityBorder;
@@ -213,11 +217,11 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
 	void ShowItemInfoUI(const FInventoryItem &Item);
 
-	/** Handle stack all action */
+	/** Handle stack all action - stacks all items of the same type as the clicked slot */
 	void HandleStackAll();
 
-	/** Handle stack all (empty slot version) - stacks all items of any type */
-	void HandleStackAllEmpty();
+	/** Handle stack all items action - stacks all stackable items in the entire inventory */
+	void HandleStackAllItems();
 
 	/** Handle select all action - selects all items in inventory */
 	void HandleSelectAll();

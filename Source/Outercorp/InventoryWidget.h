@@ -137,9 +137,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
 	FMargin SlotPadding = FMargin(2.0f);
 
-	/** Size for each slot */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory", meta = (ClampMin = "32.0"))
-	float SlotSize = 64.0f;
+	/** Size for each slot (X = Width, Y = Height) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	FVector2D SlotSize = FVector2D(64.0f, 64.0f);
 
 public:
 	/** Array of slot widgets */
@@ -193,6 +193,12 @@ protected:
 	/** Pending column count for debounced reflow */
 	int32 PendingColumnCount;
 
+	/** Timer handle for debounced list view refresh */
+	FTimerHandle ListViewRefreshTimerHandle;
+
+	/** Whether we have a pending list view refresh */
+	bool bListViewRefreshPending = false;
+
 	/** Current view mode (true = list view, false = grid view) */
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
 	bool bIsListView = false;
@@ -210,6 +216,9 @@ protected:
 
 	/** Execute the debounced reflow */
 	void ExecuteDebouncedReflow();
+
+	/** Execute the debounced list view refresh */
+	void ExecuteDebouncedListViewRefresh();
 
 public:
 	/** Initialize widget with inventory component */
@@ -347,8 +356,8 @@ protected:
 	/** Check if item passes filter */
 	bool PassesFilter(const FInventoryItem& Item) const;
 
-	/** Handle stack all (from empty area) action */
-	void HandleStackAllEmpty();
+	/** Handle stack all items action - stacks all stackable items in the entire inventory */
+	void HandleStackAllItems();
 
 	/** Handle select all action */
 	void HandleSelectAll();

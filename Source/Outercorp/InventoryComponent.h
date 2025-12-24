@@ -128,10 +128,24 @@ public:
 	/** Sort inventory by custom predicate */
 	void SortInventoryCustom(TFunction<bool(const FInventoryItem&, const FInventoryItem&)> Predicate);
 
+	/** Begin batch update - suppresses broadcasts until EndBatchUpdate */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void BeginBatchUpdate();
+
+	/** End batch update - broadcasts all pending updates */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void EndBatchUpdate();
+
 protected:
 	/** Try to stack item with existing items */
 	bool TryStackItem(UInventoryItemData* ItemData, int32& Quantity, int32& OutSlotIndex);
 
 	/** Check if two items can stack */
 	bool CanStack(const FInventoryItem& ItemA, const FInventoryItem& ItemB) const;
+
+	/** Whether we're currently in batch update mode */
+	bool bIsBatchUpdating = false;
+
+	/** Slots that were updated during batch mode */
+	TSet<int32> PendingUpdateSlots;
 };

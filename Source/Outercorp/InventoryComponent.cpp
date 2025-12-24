@@ -132,8 +132,17 @@ bool UInventoryComponent::MoveItem(int32 FromSlot, int32 ToSlot, int32 Quantity)
 			return SplitStack(FromSlot, ToSlot, QuantityToMove);
 		}
 
-		OnInventoryUpdated.Broadcast(FromSlot, Items[FromSlot]);
-		OnInventoryUpdated.Broadcast(ToSlot, Items[ToSlot]);
+		// If in batch mode, queue updates; otherwise broadcast immediately
+		if (bIsBatchUpdating)
+		{
+			PendingUpdateSlots.Add(FromSlot);
+			PendingUpdateSlots.Add(ToSlot);
+		}
+		else
+		{
+			OnInventoryUpdated.Broadcast(FromSlot, Items[FromSlot]);
+			OnInventoryUpdated.Broadcast(ToSlot, Items[ToSlot]);
+		}
 		return true;
 	}
 
@@ -149,8 +158,17 @@ bool UInventoryComponent::MoveItem(int32 FromSlot, int32 ToSlot, int32 Quantity)
 		Items[FromSlot] = Items[ToSlot];
 		Items[ToSlot] = Temp;
 
-		OnInventoryUpdated.Broadcast(FromSlot, Items[FromSlot]);
-		OnInventoryUpdated.Broadcast(ToSlot, Items[ToSlot]);
+		// If in batch mode, queue updates; otherwise broadcast immediately
+		if (bIsBatchUpdating)
+		{
+			PendingUpdateSlots.Add(FromSlot);
+			PendingUpdateSlots.Add(ToSlot);
+		}
+		else
+		{
+			OnInventoryUpdated.Broadcast(FromSlot, Items[FromSlot]);
+			OnInventoryUpdated.Broadcast(ToSlot, Items[ToSlot]);
+		}
 		return true;
 	}
 }
@@ -179,8 +197,17 @@ bool UInventoryComponent::SplitStack(int32 SourceSlot, int32 TargetSlot, int32 Q
 	Items[TargetSlot] = NewStack;
 	Items[SourceSlot].Quantity -= Quantity;
 
-	OnInventoryUpdated.Broadcast(SourceSlot, Items[SourceSlot]);
-	OnInventoryUpdated.Broadcast(TargetSlot, Items[TargetSlot]);
+	// If in batch mode, queue updates; otherwise broadcast immediately
+	if (bIsBatchUpdating)
+	{
+		PendingUpdateSlots.Add(SourceSlot);
+		PendingUpdateSlots.Add(TargetSlot);
+	}
+	else
+	{
+		OnInventoryUpdated.Broadcast(SourceSlot, Items[SourceSlot]);
+		OnInventoryUpdated.Broadcast(TargetSlot, Items[TargetSlot]);
+	}
 
 	return true;
 }
@@ -496,4 +523,31 @@ bool UInventoryComponent::CanStack(const FInventoryItem& ItemA, const FInventory
 	}
 
 	return true;
+}
+
+void UInventoryComponent::BeginBatchUpdate()
+{
+	bIsBatchUpdating = true;
+	PendingUpdateSlots.Empty();
+}
+
+void UInventoryComponent::EndBatchUpdate()
+{
+	if (!bIsBatchUpdating)
+	{
+		return;
+	}
+
+	bIsBatchUpdating = false;
+
+	// Broadcast all pending updates
+	for (int32 SlotIndex : PendingUpdateSlots)
+	{
+		if (Items.IsValidIndex(SlotIndex))
+		{
+			OnInventoryUpdated.Broadcast(SlotIndex, Items[SlotIndex]);
+		}
+	}
+
+	PendingUpdateSlots.Empty();
 }

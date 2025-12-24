@@ -178,6 +178,7 @@ void UInventoryWidget::NativeDestruct()
 	{
 		World->GetTimerManager().ClearTimer(SetupTimerHandle);
 		World->GetTimerManager().ClearTimer(ReflowDebounceTimerHandle);
+		World->GetTimerManager().ClearTimer(ListViewRefreshTimerHandle);
 	}
 
 	// Remove input processor
@@ -483,16 +484,21 @@ void UInventoryWidget::OnInventoryUpdated(int32 SlotIndex, const FInventoryItem 
 		PreviouslyOccupiedSlots.Remove(SlotIndex);
 	}
 
-	// Also refresh list view if we're in list view mode
-	if (bIsListView)
+	// Schedule a debounced list view refresh if we're in list view mode
+	// This prevents multiple rapid updates from causing performance issues
+	if (bIsListView && !bListViewRefreshPending)
 	{
-		if (ListViewRowContainer)
+		bListViewRefreshPending = true;
+
+		if (UWorld* World = GetWorld())
 		{
-			PopulateTableView();
-		}
-		else if (ItemListView)
-		{
-			PopulateListView();
+			World->GetTimerManager().SetTimer(
+				ListViewRefreshTimerHandle,
+				this,
+				&UInventoryWidget::ExecuteDebouncedListViewRefresh,
+				0.05f,  // 50ms delay to batch multiple updates
+				false
+			);
 		}
 	}
 
@@ -566,13 +572,13 @@ void UInventoryWidget::ApplyClippingSettings()
 	{
 		// Set slot padding and force minimum sizes
 		ItemGrid->SetSlotPadding(SlotPadding);
-		ItemGrid->SetMinDesiredSlotWidth(SlotSize);
-		ItemGrid->SetMinDesiredSlotHeight(SlotSize);
+		ItemGrid->SetMinDesiredSlotWidth(SlotSize.X);
+		ItemGrid->SetMinDesiredSlotHeight(SlotSize.Y);
 
 		// Calculate the fixed width needed for the grid based on actual columns used
 		// Use CurrentVisibleColumns if set, otherwise fall back to GridColumns
 		int32 ColumnsForWidth = (CurrentVisibleColumns > 0) ? CurrentVisibleColumns : GridColumns;
-		float GridWidth = (ColumnsForWidth * SlotSize) + ((ColumnsForWidth + 1) * SlotPadding.Left);
+		float GridWidth = (ColumnsForWidth * SlotSize.X) + ((ColumnsForWidth + 1) * SlotPadding.Left);
 
 		// Check if ItemGrid is already wrapped in a SizeBox at Blueprint level
 		UPanelSlot* GridSlot = ItemGrid->Slot;
@@ -668,12 +674,12 @@ void UInventoryWidget::CreateSlotWidgets()
 
 			// Wrap in a SizeBox to enforce the exact slot size and prevent compression
 			USizeBox* SizeBox = NewObject<USizeBox>(this);
-			SizeBox->SetWidthOverride(SlotSize);
-			SizeBox->SetHeightOverride(SlotSize);
-			SizeBox->SetMinDesiredWidth(SlotSize);
-			SizeBox->SetMinDesiredHeight(SlotSize);
-			SizeBox->SetMaxDesiredWidth(SlotSize);
-			SizeBox->SetMaxDesiredHeight(SlotSize);
+			SizeBox->SetWidthOverride(SlotSize.X);
+			SizeBox->SetHeightOverride(SlotSize.Y);
+			SizeBox->SetMinDesiredWidth(SlotSize.X);
+			SizeBox->SetMinDesiredHeight(SlotSize.Y);
+			SizeBox->SetMaxDesiredWidth(SlotSize.X);
+			SizeBox->SetMaxDesiredHeight(SlotSize.Y);
 			SizeBox->AddChild(SlotWidget);
 
 			// Add to grid
@@ -812,7 +818,7 @@ void UInventoryWidget::UpdateScrollbarVisibility()
 
 	// Get the available height of the scroll box
 	float AvailableHeight = ItemScrollBox->GetCachedGeometry().GetLocalSize().Y;
-	float RowHeight = SlotSize + (SlotPadding.Top + SlotPadding.Bottom);
+	float RowHeight = SlotSize.Y + (SlotPadding.Top + SlotPadding.Bottom);
 
 	// If geometry is not valid yet, force scrollbar to be visible if there are items beyond first few rows
 	if (AvailableHeight <= 0.0f)
@@ -887,11 +893,14 @@ void UInventoryWidget::CompressItems()
 	// If we have valid geometry, calculate how many slots fit in visible area
 	if (AvailableHeight > 0.0f)
 	{
-		float RowHeight = SlotSize + (SlotPadding.Top + SlotPadding.Bottom);
+		float RowHeight = SlotSize.Y + (SlotPadding.Top + SlotPadding.Bottom);
 		int32 VisibleRows = FMath::FloorToInt(AvailableHeight / RowHeight);
 		MaxVisibleSlots = ColumnsToUse * VisibleRows;
 		MaxVisibleSlots = FMath::Min(MaxVisibleSlots, InventoryComponent->MaxSlots);
 	}
+
+	// Begin batch update to avoid multiple UI refreshes during compression
+	InventoryComponent->BeginBatchUpdate();
 
 	// Move each item to the earliest available slot within visible area
 	// Process from the beginning to ensure we fill slots in order
@@ -925,8 +934,8 @@ void UInventoryWidget::CompressItems()
 		}
 	}
 
-	// Refresh the entire inventory display
-	RefreshInventory();
+	// End batch update - this will trigger a single debounced UI refresh
+	InventoryComponent->EndBatchUpdate();
 
 	// Update scrollbar visibility after compression
 	UpdateScrollbarVisibility();
@@ -953,7 +962,7 @@ void UInventoryWidget::ScrollToSlot(int32 TargetSlotIndex)
 
 	// Get the available height of the scroll box
 	float AvailableHeight = ItemScrollBox->GetCachedGeometry().GetLocalSize().Y;
-	float RowHeight = SlotSize + (SlotPadding.Top + SlotPadding.Bottom);
+	float RowHeight = SlotSize.Y + (SlotPadding.Top + SlotPadding.Bottom);
 
 	if (AvailableHeight <= 0.0f || RowHeight <= 0.0f)
 	{
@@ -999,7 +1008,7 @@ int32 UInventoryWidget::CalculateColumnsFromWidth(float AvailableWidth) const
 	}
 
 	// Account for padding on both sides of each slot
-	float SlotTotalWidth = SlotSize + (SlotPadding.Left + SlotPadding.Right);
+	float SlotTotalWidth = SlotSize.X + (SlotPadding.Left + SlotPadding.Right);
 
 	// Calculate how many slots can fit
 	int32 ColumnsFit = FMath::FloorToInt(AvailableWidth / SlotTotalWidth);
@@ -1066,6 +1075,26 @@ void UInventoryWidget::ExecuteDebouncedReflow()
 
 	// Then compress items to move any out-of-bounds items back into view
 	CompressItems();
+}
+
+void UInventoryWidget::ExecuteDebouncedListViewRefresh()
+{
+	bListViewRefreshPending = false;
+
+	if (!bIsListView)
+	{
+		return;
+	}
+
+	// Refresh the appropriate list view
+	if (ListViewRowContainer)
+	{
+		PopulateTableView();
+	}
+	else if (ItemListView)
+	{
+		PopulateListView();
+	}
 }
 
 void UInventoryWidget::OnGridViewButtonClicked()
@@ -1533,9 +1562,9 @@ void UInventoryWidget::SyncSelectionsListToGrid()
 void UInventoryWidget::HandleContextMenuAction_Implementation(FName ActionID)
 {
 
-	if (ActionID == "StackAll" || ActionID == "StackAllEmpty")
+	if (ActionID == "StackAll" || ActionID == "StackAllEmpty" || ActionID == "StackAllItems")
 	{
-		HandleStackAllEmpty();
+		HandleStackAllItems();
 	}
 	else if (ActionID == "SelectAll")
 	{
@@ -1550,7 +1579,7 @@ void UInventoryWidget::HandleContextMenuAction_Implementation(FName ActionID)
 	}
 }
 
-void UInventoryWidget::HandleStackAllEmpty()
+void UInventoryWidget::HandleStackAllItems()
 {
 	if (!InventoryComponent)
 	{
@@ -1572,6 +1601,8 @@ void UInventoryWidget::HandleStackAllEmpty()
 		}
 	}
 
+	// Begin batch update to reduce UI refreshes
+	InventoryComponent->BeginBatchUpdate();
 
 	// For each group, try to stack them together
 	for (const auto& Group : ItemGroups)
@@ -1620,23 +1651,8 @@ void UInventoryWidget::HandleStackAllEmpty()
 		}
 	}
 
-
-	// Refresh the display after stacking
-	if (bIsListView)
-	{
-		if (ListViewRowContainer)
-		{
-			PopulateTableView();
-		}
-		else if (ItemListView)
-		{
-			PopulateListView();
-		}
-	}
-	else
-	{
-		RefreshInventory();
-	}
+	// End batch update - this will trigger debounced UI refresh automatically
+	InventoryComponent->EndBatchUpdate();
 }
 
 void UInventoryWidget::HandleSelectAll()

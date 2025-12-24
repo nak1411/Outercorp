@@ -399,9 +399,9 @@ void UInventorySlotWidget::HandleContextMenuAction_Implementation(FName ActionID
 	{
 		HandleStackAll();
 	}
-	else if (ActionID == "StackAllEmpty")
+	else if (ActionID == "StackAllEmpty" || ActionID == "StackAllItems")
 	{
-		HandleStackAllEmpty();
+		HandleStackAllItems();
 	}
 	else if (ActionID == "SelectAll")
 	{
@@ -425,9 +425,6 @@ void UInventorySlotWidget::HandleSplitItem()
 		return;
 	}
 
-	// Try to get parent inventory widget
-	UInventoryWidget *ParentInventoryWidget = Cast<UInventoryWidget>(GetTypedOuter<UInventoryWidget>());
-
 	// Find first empty slot
 	int32 EmptySlot = InventoryComponent->FindEmptySlot();
 	if (EmptySlot == -1)
@@ -439,15 +436,8 @@ void UInventorySlotWidget::HandleSplitItem()
 	int32 SplitAmount = CurrentItem.Quantity / 2;
 	InventoryComponent->SplitStack(SlotIndex, EmptySlot, SplitAmount);
 
-	// Reflow and compress to ensure the split item is within visible area
-	if (ParentInventoryWidget)
-	{
-		// First reflow the grid to respect current visible columns
-		ParentInventoryWidget->ReflowItemsToGrid();
-
-		// Then compress to move items to sequential slots
-		ParentInventoryWidget->CompressItems();
-	}
+	// No need to reflow/compress - the split operation already places the item in a valid slot
+	// The inventory update broadcast will handle UI refresh automatically
 }
 
 void UInventorySlotWidget::HandleDestroyItem()
@@ -499,10 +489,10 @@ void UInventorySlotWidget::HandleStackAll()
 	// Get the current item fresh from the inventory component
 	FInventoryItem ItemToStack = InventoryComponent->GetItemAtSlot(SlotIndex);
 
-	// If slot is empty, stack ALL items in the inventory (same as Stack All Empty)
+	// If slot is empty, stack ALL items in the inventory (same as Stack All Items)
 	if (!ItemToStack.IsValid())
 	{
-		HandleStackAllEmpty();
+		HandleStackAllItems();
 		return;
 	}
 
@@ -532,6 +522,9 @@ void UInventorySlotWidget::HandleStackAll()
 
 	// Sort slots so we process them in order
 	MatchingSlots.Sort();
+
+	// Begin batch update to reduce UI refreshes
+	InventoryComponent->BeginBatchUpdate();
 
 	// Merge all stacks together
 	// Process from the end backwards to avoid index issues when items are removed
@@ -569,9 +562,12 @@ void UInventorySlotWidget::HandleStackAll()
 			}
 		}
 	}
+
+	// End batch update - this will trigger a single UI refresh
+	InventoryComponent->EndBatchUpdate();
 }
 
-void UInventorySlotWidget::HandleStackAllEmpty()
+void UInventorySlotWidget::HandleStackAllItems()
 {
 	if (!InventoryComponent)
 	{
@@ -592,6 +588,9 @@ void UInventorySlotWidget::HandleStackAllEmpty()
 		}
 	}
 
+	// Begin batch update to reduce UI refreshes
+	InventoryComponent->BeginBatchUpdate();
+
 	// For each group, try to stack them together
 	for (const auto &Group : ItemGroups)
 	{
@@ -605,6 +604,9 @@ void UInventorySlotWidget::HandleStackAllEmpty()
 			}
 		}
 	}
+
+	// End batch update - this will trigger a single UI refresh
+	InventoryComponent->EndBatchUpdate();
 }
 
 void UInventorySlotWidget::HandleSelectAll()
@@ -718,6 +720,13 @@ void UInventorySlotWidget::UpdateAppearance()
 			}
 		}
 
+		// Set item name text
+		if (ItemText)
+		{
+			ItemText->SetText(CurrentItem.ItemData->ItemName);
+			ItemText->SetVisibility(ESlateVisibility::Visible);
+		}
+
 		// Set quantity border visibility
 		if (QuantityBorder)
 		{
@@ -750,6 +759,11 @@ void UInventorySlotWidget::UpdateAppearance()
 		if (QuantityText)
 		{
 			QuantityText->SetVisibility(ESlateVisibility::Hidden);
+		}
+
+		if (ItemText)
+		{
+			ItemText->SetVisibility(ESlateVisibility::Hidden);
 		}
 
 		if (QuantityBorder)
