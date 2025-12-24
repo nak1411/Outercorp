@@ -8,6 +8,7 @@
 
 class UInputMappingContext;
 class UUserWidget;
+class UExitMenuWidget;
 
 /**
  *  Simple first person Player Controller
@@ -46,6 +47,14 @@ protected:
 	UPROPERTY(EditAnywhere, Config, Category = "Input|Touch Controls")
 	bool bForceTouchControls = false;
 
+	/** Exit menu widget class to spawn when ESC is pressed */
+	UPROPERTY(EditAnywhere, Category = "UI|Exit Menu")
+	TSubclassOf<UExitMenuWidget> ExitMenuWidgetClass;
+
+	/** Pointer to the currently active exit menu widget */
+	UPROPERTY()
+	TObjectPtr<UExitMenuWidget> ExitMenuWidget;
+
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
 
@@ -54,4 +63,14 @@ protected:
 
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
+
+public:
+	/** Toggle the exit menu on/off */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void ToggleExitMenu();
+
+protected:
+	/** Called when exit menu is closed */
+	UFUNCTION()
+	void OnExitMenuClosed();
 };

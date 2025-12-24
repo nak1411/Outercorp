@@ -9,6 +9,8 @@
 #include "Blueprint/UserWidget.h"
 #include "Outercorp.h"
 #include "Widgets/Input/SVirtualJoystick.h"
+#include "ExitMenuWidget.h"
+#include "Components/InputComponent.h"
 
 AOutercorpPlayerController::AOutercorpPlayerController()
 {
@@ -65,12 +67,49 @@ void AOutercorpPlayerController::SetupInputComponent()
 				}
 			}
 		}
+
+		// Bind ESC key to toggle exit menu (bExecuteWhenPaused = true to work when game is paused)
+		InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AOutercorpPlayerController::ToggleExitMenu).bExecuteWhenPaused = true;
 	}
-	
+
 }
 
 bool AOutercorpPlayerController::ShouldUseTouchControls() const
 {
 	// are we on a mobile platform? Should we force touch?
 	return SVirtualJoystick::ShouldDisplayTouchInterface() || bForceTouchControls;
+}
+
+void AOutercorpPlayerController::ToggleExitMenu()
+{
+	// If exit menu is already open, close it
+	if (ExitMenuWidget && ExitMenuWidget->IsInViewport())
+	{
+		ExitMenuWidget->CloseExitMenu();
+		return;
+	}
+
+	// Create and open the exit menu
+	if (ExitMenuWidgetClass)
+	{
+		ExitMenuWidget = CreateWidget<UExitMenuWidget>(this, ExitMenuWidgetClass);
+		if (ExitMenuWidget)
+		{
+			// Bind to close event
+			ExitMenuWidget->OnExitMenuClosed.AddDynamic(this, &AOutercorpPlayerController::OnExitMenuClosed);
+
+			// Open the menu (this will pause the game and add to viewport)
+			ExitMenuWidget->OpenExitMenu();
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ExitMenuWidgetClass is not set in PlayerController!"));
+	}
+}
+
+void AOutercorpPlayerController::OnExitMenuClosed()
+{
+	// Clear the reference when the menu is closed
+	ExitMenuWidget = nullptr;
 }
