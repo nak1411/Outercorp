@@ -41,20 +41,10 @@ void UInventorySlotWidget::NativeConstruct()
 		SlotButton->OnClicked.AddDynamic(this, &UInventorySlotWidget::OnSlotClicked);
 	}
 
-	// Apply icon padding to leave room for selection/drag borders
-	if (ItemIcon)
-	{
-		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(ItemIcon->Slot))
-		{
-			CanvasSlot->SetOffsets(FMargin(IconPadding.Left, IconPadding.Top, IconPadding.Right, IconPadding.Bottom));
-			CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-		}
-	}
-
 	// Ensure SelectionBorder fills entire slot and is hit-test invisible
 	if (SelectionBorder)
 	{
-		if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(SelectionBorder->Slot))
+		if (UCanvasPanelSlot *CanvasSlot = Cast<UCanvasPanelSlot>(SelectionBorder->Slot))
 		{
 			CanvasSlot->SetOffsets(FMargin(0.0f, 0.0f, 0.0f, 0.0f));
 			CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
@@ -62,23 +52,12 @@ void UInventorySlotWidget::NativeConstruct()
 		}
 		SelectionBorder->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 
-		// Configure the border to show as a colored frame using padding
-		// Set the padding to create the "border thickness" effect - the border widget will show in the padding area
-		FMargin BorderPadding(BorderThickness);
-		SelectionBorder->SetPadding(BorderPadding);
-
 		// Make sure the border has no content (it's just a frame)
 		SelectionBorder->ClearChildren();
 
 		// Set initial color to transparent
 		SelectionBorder->SetBrushColor(FLinearColor::Transparent);
-
-		UE_LOG(LogTemp, Warning, TEXT("Slot %d: Configured SelectionBorder with padding %.2f"), SlotIndex, BorderThickness);
 	}
-
-	// Log widget binding status
-	UE_LOG(LogTemp, Warning, TEXT("Slot %d NativeConstruct: HoverOverlay=%s, SelectionBorder=%s"),
-		SlotIndex, HoverOverlay ? TEXT("FOUND") : TEXT("NULL"), SelectionBorder ? TEXT("FOUND") : TEXT("NULL"));
 
 	// Initialize appearance
 	UpdateAppearance();
@@ -108,11 +87,6 @@ FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry &InGeometry
 	// Handle right-click for context menu - call Blueprint event
 	if (InMouseEvent.IsMouseButtonDown(EKeys::RightMouseButton))
 	{
-		UE_LOG(LogTemp, Log, TEXT("Right-click detected on slot %d, IsSlotEmpty=%d, ItemData=%s, Quantity=%d"),
-			   SlotIndex, IsSlotEmpty(),
-			   CurrentItem.ItemData ? *CurrentItem.ItemData->ItemName.ToString() : TEXT("null"),
-			   CurrentItem.Quantity);
-
 		// IMPORTANT: Close any existing context menu FIRST
 		CloseCurrentContextMenu();
 
@@ -127,12 +101,10 @@ FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry &InGeometry
 			// Check if slot is empty and call appropriate event
 			if (IsSlotEmpty())
 			{
-				UE_LOG(LogTemp, Log, TEXT("Calling OnEmptySlotRightClicked for slot %d at position (%f, %f)"), SlotIndex, MousePosition.X, MousePosition.Y);
 				OnEmptySlotRightClicked(MousePosition);
 			}
 			else
 			{
-				UE_LOG(LogTemp, Log, TEXT("Calling OnRightClicked for slot %d at position (%f, %f)"), SlotIndex, MousePosition.X, MousePosition.Y);
 				OnRightClicked(MousePosition);
 			}
 		}
@@ -158,26 +130,16 @@ FReply UInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry &InGeometry
 
 FReply UInventorySlotWidget::NativeOnMouseButtonUp(const FGeometry &InGeometry, const FPointerEvent &InMouseEvent)
 {
-	UE_LOG(LogTemp, Log, TEXT("NativeOnMouseButtonUp: Slot %d, Button=%s, bDragStarted=%d"),
-		   SlotIndex,
-		   *InMouseEvent.GetEffectingButton().ToString(),
-		   bDragStarted);
-
 	// If left mouse button released and we didn't start a drag
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && !bDragStarted)
 	{
-		UE_LOG(LogTemp, Log, TEXT("  Left mouse up without drag on slot %d"), SlotIndex);
-
 		// Check if slot has an item
 		if (CurrentItem.IsValid())
 		{
-			UE_LOG(LogTemp, Log, TEXT("  Slot %d has valid item"), SlotIndex);
-
 			// Check if Ctrl is held
 			if (InMouseEvent.IsControlDown())
 			{
 				// Ctrl+Click: Toggle this item's selection
-				UE_LOG(LogTemp, Log, TEXT("  Ctrl+Click - toggling selection for slot %d"), SlotIndex);
 				ToggleSelection();
 			}
 			else
@@ -185,11 +147,8 @@ FReply UInventorySlotWidget::NativeOnMouseButtonUp(const FGeometry &InGeometry, 
 				// Normal click: Clear all selections and select only this item
 				if (!InventoryComponent)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("  No InventoryComponent!"));
 					return FReply::Handled();
 				}
-
-				UE_LOG(LogTemp, Log, TEXT("  Normal click - selecting only slot %d"), SlotIndex);
 
 				// Update this slot's selection state immediately for instant feedback
 				TSet<int32> &SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
@@ -238,15 +197,12 @@ void UInventorySlotWidget::NativeOnDragDetected(const FGeometry &InGeometry, con
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Drag detected on slot %d"), SlotIndex);
-
 	// Clear all selections when starting a drag operation (both grid and list)
 	TSet<int32> &SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
 	if (SelectionSet.Num() > 0)
 	{
 		SelectionSet.Empty();
 		BroadcastSelectionChanged();
-		UE_LOG(LogTemp, Log, TEXT("Cleared all grid selections on drag start"));
 	}
 
 	// Also clear list view selections to keep both views in sync
@@ -318,7 +274,6 @@ bool UInventorySlotWidget::NativeOnDrop(const FGeometry &InGeometry, const FDrag
 			{
 				SelectionSet.Remove(DragDropOp->SourceSlotIndex);
 				BroadcastSelectionChanged();
-				UE_LOG(LogTemp, Log, TEXT("Deselected slot %d after split"), DragDropOp->SourceSlotIndex);
 			}
 		}
 		bDragStarted = false;
@@ -341,8 +296,6 @@ bool UInventorySlotWidget::NativeOnDrop(const FGeometry &InGeometry, const FDrag
 		// Broadcast the change BEFORE moving the item
 		// This ensures all slots have correct bIsSelected when UpdateAppearance is called
 		BroadcastSelectionChanged();
-
-		UE_LOG(LogTemp, Log, TEXT("Moved selection from slot %d to slot %d"), DragDropOp->SourceSlotIndex, SlotIndex);
 	}
 
 	// Handle normal move/swap
@@ -359,13 +312,11 @@ void UInventorySlotWidget::NativeOnDragEnter(const FGeometry &InGeometry, const 
 	// Highlight slot when dragging over
 	if (SelectionHighlight)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Slot %d: NativeOnDragEnter - Showing SelectionHighlight with DragHoverColor"), SlotIndex);
 		SelectionHighlight->SetColorAndOpacity(DragHoverColor);
 		SelectionHighlight->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	else if (SelectionBorder)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Slot %d: NativeOnDragEnter - Using SelectionBorder with DragHoverColor"), SlotIndex);
 		SelectionBorder->SetBrushColor(DragHoverColor);
 		SelectionBorder->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	}
@@ -428,55 +379,37 @@ void UInventorySlotWidget::SetItem(const FInventoryItem &Item)
 void UInventorySlotWidget::OnSlotClicked()
 {
 	// This is called by the button, but we handle selection in NativeOnMouseButtonDown instead
-	// Keep this for potential future use or debugging
-	if (CurrentItem.IsValid())
-	{
-		UE_LOG(LogTemp, Log, TEXT("Slot %d button clicked: %s"), SlotIndex, *CurrentItem.ItemData->ItemName.ToString());
-	}
 }
 
 void UInventorySlotWidget::HandleContextMenuAction_Implementation(FName ActionID)
 {
-	UE_LOG(LogTemp, Warning, TEXT("===== HandleContextMenuAction called with ActionID: '%s' ====="), *ActionID.ToString());
-
 	if (ActionID == "Split")
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Calling HandleSplitItem"));
 		HandleSplitItem();
 	}
 	else if (ActionID == "Destroy")
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Calling HandleDestroyItem"));
 		HandleDestroyItem();
 	}
 	else if (ActionID == "ShowInfo")
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Calling HandleShowInfo"));
 		HandleShowInfo();
 	}
 	else if (ActionID == "StackAll")
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Calling HandleStackAll"));
 		HandleStackAll();
 	}
 	else if (ActionID == "StackAllEmpty")
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Calling HandleStackAllEmpty"));
 		HandleStackAllEmpty();
 	}
 	else if (ActionID == "SelectAll")
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Calling HandleSelectAll"));
 		HandleSelectAll();
 	}
 	else if (ActionID == "InvertSelection")
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Calling HandleInvertSelection"));
 		HandleInvertSelection();
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("UNKNOWN ACTION ID: '%s'"), *ActionID.ToString());
 	}
 }
 
@@ -489,7 +422,6 @@ void UInventorySlotWidget::HandleSplitItem()
 
 	if (CurrentItem.Quantity <= 1)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Cannot split item with quantity 1 or less"));
 		return;
 	}
 
@@ -500,7 +432,6 @@ void UInventorySlotWidget::HandleSplitItem()
 	int32 EmptySlot = InventoryComponent->FindEmptySlot();
 	if (EmptySlot == -1)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No empty slot available for split"));
 		return;
 	}
 
@@ -516,12 +447,6 @@ void UInventorySlotWidget::HandleSplitItem()
 
 		// Then compress to move items to sequential slots
 		ParentInventoryWidget->CompressItems();
-
-		UE_LOG(LogTemp, Log, TEXT("Split %d items from slot %d to slot %d, then reflowed and compressed"), SplitAmount, SlotIndex, EmptySlot);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Log, TEXT("Split %d items from slot %d to slot %d"), SplitAmount, SlotIndex, EmptySlot);
 	}
 }
 
@@ -549,11 +474,6 @@ void UInventorySlotWidget::HandleDestroyItem()
 			{
 				// Now it's safe to remove the item and trigger the inventory update
 				CachedInventoryComponent->RemoveItemAtSlot(CachedSlotIndex, CachedQuantity);
-
-				UE_LOG(LogTemp, Log, TEXT("Destroyed %d x %s from slot %d"),
-					CachedQuantity,
-					*ItemName,
-					CachedSlotIndex);
 			} });
 	}
 }
@@ -571,13 +491,8 @@ void UInventorySlotWidget::HandleShowInfo()
 
 void UInventorySlotWidget::HandleStackAll()
 {
-	UE_LOG(LogTemp, Warning, TEXT(">>>>>> HandleStackAll ENTRY - SlotIndex=%d, InventoryComponent=%s"),
-		   SlotIndex,
-		   InventoryComponent ? TEXT("Valid") : TEXT("NULL"));
-
 	if (!InventoryComponent)
 	{
-		UE_LOG(LogTemp, Error, TEXT(">>>>>> HandleStackAll EARLY EXIT - Missing InventoryComponent"));
 		return;
 	}
 
@@ -587,13 +502,9 @@ void UInventorySlotWidget::HandleStackAll()
 	// If slot is empty, stack ALL items in the inventory (same as Stack All Empty)
 	if (!ItemToStack.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("HandleStackAll called on empty slot - stacking ALL items"));
 		HandleStackAllEmpty();
 		return;
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Stack All triggered for slot %d - stacking items of type '%s'"),
-		   SlotIndex, *ItemToStack.ItemData->ItemName.ToString());
 
 	// Get the item ID we want to stack
 	FName TargetItemID = ItemToStack.ItemData->ItemID;
@@ -616,12 +527,8 @@ void UInventorySlotWidget::HandleStackAll()
 
 	if (MatchingSlots.Num() <= 1)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Stack All: Only one stack found, nothing to merge"));
 		return;
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Stack All: Found %d stacks of '%s'"),
-		   MatchingSlots.Num(), *CurrentItem.ItemData->ItemName.ToString());
 
 	// Sort slots so we process them in order
 	MatchingSlots.Sort();
@@ -650,9 +557,6 @@ void UInventorySlotWidget::HandleStackAll()
 			// Check if target has space
 			if (TargetItem.IsValid() && TargetItem.Quantity < TargetItem.ItemData->MaxStackSize)
 			{
-				UE_LOG(LogTemp, Log, TEXT("  Merging slot %d (qty=%d) into slot %d (qty=%d)"),
-					   SourceSlot, SourceItem.Quantity, TargetSlot, TargetItem.Quantity);
-
 				InventoryComponent->MergeStacks(SourceSlot, TargetSlot);
 
 				// Check if source is now empty, if so we're done with this source
@@ -665,8 +569,6 @@ void UInventorySlotWidget::HandleStackAll()
 			}
 		}
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Stack All completed for '%s'"), *ItemToStack.ItemData->ItemName.ToString());
 }
 
 void UInventorySlotWidget::HandleStackAllEmpty()
@@ -675,8 +577,6 @@ void UInventorySlotWidget::HandleStackAllEmpty()
 	{
 		return;
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Stack All (Empty) triggered - consolidating all stackable items"));
 
 	// Get all items
 	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
@@ -705,8 +605,6 @@ void UInventorySlotWidget::HandleStackAllEmpty()
 			}
 		}
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Stack All completed"));
 }
 
 void UInventorySlotWidget::HandleSelectAll()
@@ -715,8 +613,6 @@ void UInventorySlotWidget::HandleSelectAll()
 	{
 		return;
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Select All triggered"));
 
 	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
 	TSet<int32> &SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
@@ -734,8 +630,6 @@ void UInventorySlotWidget::HandleSelectAll()
 
 	// Broadcast to all slots in the inventory
 	BroadcastSelectionChanged();
-
-	UE_LOG(LogTemp, Log, TEXT("Selected %d slots"), SelectionSet.Num());
 }
 
 void UInventorySlotWidget::HandleInvertSelection()
@@ -747,8 +641,6 @@ void UInventorySlotWidget::HandleInvertSelection()
 
 	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
 	TSet<int32> &SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
-
-	UE_LOG(LogTemp, Log, TEXT("Invert Selection - Before: %d items selected"), SelectionSet.Num());
 
 	// Build a new selection set with inverted state
 	TSet<int32> NewSelection;
@@ -763,19 +655,12 @@ void UInventorySlotWidget::HandleInvertSelection()
 			if (!bWasSelected)
 			{
 				NewSelection.Add(i);
-				UE_LOG(LogTemp, Log, TEXT("  Slot %d: was NOT selected, now selecting"), i);
-			}
-			else
-			{
-				UE_LOG(LogTemp, Log, TEXT("  Slot %d: was selected, now deselecting"), i);
 			}
 		}
 	}
 
 	// Update the shared selection state
 	SelectionSet = NewSelection;
-
-	UE_LOG(LogTemp, Log, TEXT("Invert Selection - After: %d items selected"), SelectionSet.Num());
 
 	// Broadcast to all slots in the inventory
 	BroadcastSelectionChanged();
@@ -791,14 +676,11 @@ void UInventorySlotWidget::UpdateAppearance()
 			// Show hover overlay with specified color
 			HoverOverlay->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 			HoverOverlay->SetBrushColor(HoverOverlayColor);
-			UE_LOG(LogTemp, Warning, TEXT("Slot %d: Showing HOVER overlay (%.2f, %.2f, %.2f, %.2f)"),
-				SlotIndex, HoverOverlayColor.R, HoverOverlayColor.G, HoverOverlayColor.B, HoverOverlayColor.A);
 		}
 		else
 		{
 			// Hide hover overlay
 			HoverOverlay->SetVisibility(ESlateVisibility::Hidden);
-			UE_LOG(LogTemp, Log, TEXT("Slot %d: Hiding hover overlay"), SlotIndex);
 		}
 	}
 
@@ -811,7 +693,6 @@ void UInventorySlotWidget::UpdateAppearance()
 
 			if (CurrentItem.ItemData->ItemIcon.IsNull())
 			{
-				ItemIcon->SetOpacity(ItemNoIconOpacity);
 				ItemIcon->SetBrushFromTexture(nullptr);
 			}
 			else
@@ -919,8 +800,6 @@ void UInventorySlotWidget::CloseCurrentContextMenu()
 {
 	if (CurrentOpenContextMenu.IsValid())
 	{
-		UE_LOG(LogTemp, Log, TEXT("Closing previous context menu"));
-
 		UUserWidget *MenuToClose = CurrentOpenContextMenu.Get();
 
 		// Clear the reference FIRST before closing
@@ -944,7 +823,6 @@ void UInventorySlotWidget::SetCurrentContextMenu(UUserWidget *ContextMenu)
 {
 	if (ContextMenu)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Setting new current context menu"));
 		CurrentOpenContextMenu = ContextMenu;
 	}
 }
@@ -979,8 +857,6 @@ void UInventorySlotWidget::SetSelected(bool bSelected)
 
 	// Then broadcast to all slots in the inventory
 	BroadcastSelectionChanged();
-
-	UE_LOG(LogTemp, Log, TEXT("Slot %d selection state: %s"), SlotIndex, bSelected ? TEXT("Selected") : TEXT("Deselected"));
 }
 
 void UInventorySlotWidget::ToggleSelection()
@@ -1016,11 +892,9 @@ void UInventorySlotWidget::ClearAllSelections()
 
 	// Broadcast to all slots in the inventory
 	BroadcastSelectionChanged();
-
-	UE_LOG(LogTemp, Log, TEXT("Cleared all selections for inventory"));
 }
 
-void UInventorySlotWidget::ClearAllSelectionsForInventory(UInventoryComponent* InInventoryComponent)
+void UInventorySlotWidget::ClearAllSelectionsForInventory(UInventoryComponent *InInventoryComponent)
 {
 	if (!InInventoryComponent)
 	{
@@ -1031,7 +905,7 @@ void UInventorySlotWidget::ClearAllSelectionsForInventory(UInventoryComponent* I
 	InventorySelections.Remove(InInventoryComponent);
 
 	// Find and broadcast to all slots in the inventory
-	TArray<TWeakObjectPtr<UInventorySlotWidget>>* AllSlots = SlotWidgetRegistry.Find(InInventoryComponent);
+	TArray<TWeakObjectPtr<UInventorySlotWidget>> *AllSlots = SlotWidgetRegistry.Find(InInventoryComponent);
 	if (AllSlots)
 	{
 		for (int32 i = AllSlots->Num() - 1; i >= 0; i--)
@@ -1042,7 +916,7 @@ void UInventorySlotWidget::ClearAllSelectionsForInventory(UInventoryComponent* I
 				continue;
 			}
 
-			UInventorySlotWidget* SlotWidget = (*AllSlots)[i].Get();
+			UInventorySlotWidget *SlotWidget = (*AllSlots)[i].Get();
 			if (SlotWidget)
 			{
 				SlotWidget->bIsSelected = false;
@@ -1050,8 +924,6 @@ void UInventorySlotWidget::ClearAllSelectionsForInventory(UInventoryComponent* I
 			}
 		}
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Cleared all grid selections for inventory (static)"));
 }
 
 bool UInventorySlotWidget::HasAnySelection() const

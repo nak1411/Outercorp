@@ -57,14 +57,14 @@ class OUTERCORP_API UInventorySlotWidget : public UUserWidget, public IInventory
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
-	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
-	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
-	virtual void NativeOnDragEnter(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
-	virtual void NativeOnDragLeave(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
-	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
-	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry &InGeometry, const FPointerEvent &InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry &InGeometry, const FPointerEvent &InMouseEvent) override;
+	virtual void NativeOnDragDetected(const FGeometry &InGeometry, const FPointerEvent &InMouseEvent, UDragDropOperation *&OutOperation) override;
+	virtual bool NativeOnDrop(const FGeometry &InGeometry, const FDragDropEvent &InDragDropEvent, UDragDropOperation *InOperation) override;
+	virtual void NativeOnDragEnter(const FGeometry &InGeometry, const FDragDropEvent &InDragDropEvent, UDragDropOperation *InOperation) override;
+	virtual void NativeOnDragLeave(const FDragDropEvent &InDragDropEvent, UDragDropOperation *InOperation) override;
+	virtual void NativeOnMouseEnter(const FGeometry &InGeometry, const FPointerEvent &InMouseEvent) override;
+	virtual void NativeOnMouseLeave(const FPointerEvent &InMouseEvent) override;
 
 	/** Track if we started a drag operation */
 	bool bDragStarted = false;
@@ -75,7 +75,6 @@ public:
 	bool bIsHovered = false;
 
 protected:
-
 	/** Item icon image */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	TObjectPtr<UImage> ItemIcon;
@@ -124,10 +123,6 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
 	TObjectPtr<UInventoryComponent> InventoryComponent;
 
-	/** Opacity for item icon when item has no icon */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float ItemNoIconOpacity = 0.3f;
-
 	/** Opacity for item icon when item has an icon */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float ItemIconOpacity = 1.0f;
@@ -136,25 +131,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
 	FLinearColor DragHoverColor = FLinearColor(0.2f, 0.5f, 1.0f, 0.5f);
 
-	/** Color for mouse hover state (when mouse is over this slot) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
-	FLinearColor MouseHoverColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.1f);
-
-	/** Normal background color */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
-	FLinearColor NormalColor = FLinearColor(0.05f, 0.05f, 0.05f, 0.9f);
-
 	/** Hover overlay color - shown when slot is hovered (use semi-transparent white to lighten) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
 	FLinearColor HoverOverlayColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.2f);
-
-	/** Padding/inset for item icon to leave room for selection and drag highlight borders */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
-	FMargin IconPadding = FMargin(4.0f);
-
-	/** Border thickness for selection and drag highlight */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
-	float BorderThickness = 2.0f;
 
 	/** Color for selection border when item is selected */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
@@ -163,7 +142,7 @@ protected:
 public:
 	/** Set the item for this slot */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	void SetItem(const FInventoryItem& Item);
+	void SetItem(const FInventoryItem &Item);
 
 	/** Set slot index */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -171,7 +150,7 @@ public:
 
 	/** Set inventory component reference */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	void SetInventoryComponent(UInventoryComponent* InInventoryComponent) { InventoryComponent = InInventoryComponent; }
+	void SetInventoryComponent(UInventoryComponent *InInventoryComponent) { InventoryComponent = InInventoryComponent; }
 
 	/** Get current item */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
@@ -207,7 +186,7 @@ protected:
 
 	/** Set the currently open context menu (call this after creating the menu) */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	static void SetCurrentContextMenu(UUserWidget* ContextMenu);
+	static void SetCurrentContextMenu(UUserWidget *ContextMenu);
 
 private:
 	/** Static reference to currently open context menu (shared across all slots) */
@@ -216,7 +195,7 @@ private:
 public:
 	/** Get the current open context menu (useful for Blueprint IsValid checks) */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
-	static UUserWidget* GetCurrentContextMenu();
+	static UUserWidget *GetCurrentContextMenu();
 	/** Blueprint-callable function to handle context menu actions */
 	virtual void HandleContextMenuAction_Implementation(FName ActionID) override;
 
@@ -232,7 +211,7 @@ protected:
 
 	/** Blueprint event for showing item info UI */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
-	void ShowItemInfoUI(const FInventoryItem& Item);
+	void ShowItemInfoUI(const FInventoryItem &Item);
 
 	/** Handle stack all action */
 	void HandleStackAll();
@@ -248,7 +227,7 @@ protected:
 
 	/** Blueprint event for notifying selection changes */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
-	void OnSelectionChanged(const TArray<int32>& SelectedSlots);
+	void OnSelectionChanged(const TArray<int32> &SelectedSlots);
 
 	/** Blueprint event for notifying hover state changes */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
@@ -279,7 +258,7 @@ public:
 	void ClearAllSelections();
 
 	/** Clear all selections for a specific inventory component (static method) */
-	static void ClearAllSelectionsForInventory(UInventoryComponent* InInventoryComponent);
+	static void ClearAllSelectionsForInventory(UInventoryComponent *InInventoryComponent);
 
 	/** Check if any slots are currently selected */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory|Selection")
@@ -292,8 +271,8 @@ protected:
 
 private:
 	/** Shared selection state across all slots in the same inventory */
-	static TMap<UInventoryComponent*, TSet<int32>> InventorySelections;
+	static TMap<UInventoryComponent *, TSet<int32>> InventorySelections;
 
 	/** Registry of all slot widgets by inventory component */
-	static TMap<UInventoryComponent*, TArray<TWeakObjectPtr<UInventorySlotWidget>>> SlotWidgetRegistry;
+	static TMap<UInventoryComponent *, TArray<TWeakObjectPtr<UInventorySlotWidget>>> SlotWidgetRegistry;
 };

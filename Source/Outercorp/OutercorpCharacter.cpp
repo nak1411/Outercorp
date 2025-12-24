@@ -78,14 +78,14 @@ void AOutercorpCharacter::BeginPlay()
 				BaseHUDWidget->AddToViewport(0); // Base layer
 
 				// Get the WindowCanvas to add our modular windows to
-				UCanvasPanel* WindowCanvas = GetHUDCanvas();
+				UCanvasPanel *WindowCanvas = GetHUDCanvas();
 				if (WindowCanvas && ModularWindowClass)
 				{
 					// Create the inventory window and add it to the canvas
 					InventoryWindow = CreateWidget<UUserWidget>(GetWorld(), ModularWindowClass);
 					if (InventoryWindow)
 					{
-						UCanvasPanelSlot* Slot = WindowCanvas->AddChildToCanvas(InventoryWindow);
+						UCanvasPanelSlot *Slot = WindowCanvas->AddChildToCanvas(InventoryWindow);
 						if (Slot)
 						{
 							// Set position and size for the window
@@ -96,7 +96,7 @@ void AOutercorpCharacter::BeginPlay()
 						}
 
 						// Call Init() on the window to initialize the modular window system
-						UWindow* Window = Cast<UWindow>(InventoryWindow);
+						UWindow *Window = Cast<UWindow>(InventoryWindow);
 						if (Window)
 						{
 							bool bInitSuccess = Window->Init();
@@ -118,7 +118,7 @@ void AOutercorpCharacter::BeginPlay()
 					CharacterWindow = CreateWidget<UUserWidget>(GetWorld(), ModularWindowClass);
 					if (CharacterWindow)
 					{
-						UCanvasPanelSlot* Slot = WindowCanvas->AddChildToCanvas(CharacterWindow);
+						UCanvasPanelSlot *Slot = WindowCanvas->AddChildToCanvas(CharacterWindow);
 						if (Slot)
 						{
 							// Set position and size for the window
@@ -129,7 +129,7 @@ void AOutercorpCharacter::BeginPlay()
 						}
 
 						// Call Init() on the window to initialize the modular window system
-						UWindow* Window = Cast<UWindow>(CharacterWindow);
+						UWindow *Window = Cast<UWindow>(CharacterWindow);
 						if (Window)
 						{
 							bool bInitSuccess = Window->Init();
@@ -151,18 +151,18 @@ void AOutercorpCharacter::BeginPlay()
 					ItemInfoWindow = CreateWidget<UUserWidget>(GetWorld(), ModularWindowClass);
 					if (ItemInfoWindow)
 					{
-						UCanvasPanelSlot* Slot = WindowCanvas->AddChildToCanvas(ItemInfoWindow);
+						UCanvasPanelSlot *Slot = WindowCanvas->AddChildToCanvas(ItemInfoWindow);
 						if (Slot)
 						{
 							// Set position and size for the window
 							Slot->SetPosition(FVector2D(400, 200));
-							Slot->SetSize(FVector2D(350, 450));
+							Slot->SetSize(FVector2D(600, 500));
 							Slot->SetAnchors(FAnchors(0, 0, 0, 0));
 							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Set item info window slot properties"));
 						}
 
 						// Call Init() on the window to initialize the modular window system
-						UWindow* Window = Cast<UWindow>(ItemInfoWindow);
+						UWindow *Window = Cast<UWindow>(ItemInfoWindow);
 						if (Window)
 						{
 							bool bInitSuccess = Window->Init();
@@ -219,7 +219,7 @@ void AOutercorpCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	// This prevents saving maximized state
 	if (InventoryWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
 		if (Slot)
 		{
 			FVector2D CurrentSize = Slot->GetSize();
@@ -235,7 +235,7 @@ void AOutercorpCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	if (CharacterWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
 		if (Slot)
 		{
 			FVector2D CurrentSize = Slot->GetSize();
@@ -250,7 +250,7 @@ void AOutercorpCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	if (ItemInfoWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
 		if (Slot)
 		{
 			FVector2D CurrentSize = Slot->GetSize();
@@ -425,7 +425,7 @@ void AOutercorpCharacter::OpenInventory_Implementation()
 		UE_LOG(LogOutercorp, Error, TEXT("OpenInventory: InventoryWindow is null!"));
 	}
 
-	APlayerController* PC = Cast<APlayerController>(GetController());
+	APlayerController *PC = Cast<APlayerController>(GetController());
 	if (PC)
 	{
 		// Set input mode to Game and UI
@@ -461,7 +461,7 @@ void AOutercorpCharacter::BindInventoryEvents()
 	InventoryWidget->InitializeInventory(InventoryComponent);
 }
 
-UCanvasPanel* AOutercorpCharacter::GetHUDCanvas() const
+UCanvasPanel *AOutercorpCharacter::GetHUDCanvas() const
 {
 	if (!BaseHUDWidget)
 	{
@@ -470,7 +470,7 @@ UCanvasPanel* AOutercorpCharacter::GetHUDCanvas() const
 	}
 
 	// Try to get the canvas panel named "WindowCanvas" from the HUD widget
-	UCanvasPanel* Canvas = Cast<UCanvasPanel>(BaseHUDWidget->GetWidgetFromName(FName("WindowCanvas")));
+	UCanvasPanel *Canvas = Cast<UCanvasPanel>(BaseHUDWidget->GetWidgetFromName(FName("WindowCanvas")));
 
 	if (!Canvas)
 	{
@@ -576,7 +576,7 @@ void AOutercorpCharacter::OpenCharacter_Implementation()
 		UE_LOG(LogOutercorp, Log, TEXT("OpenCharacter: CharacterWindow is null, needs to be created in Blueprint"));
 	}
 
-	APlayerController* PC = Cast<APlayerController>(GetController());
+	APlayerController *PC = Cast<APlayerController>(GetController());
 	if (PC)
 	{
 		// Set input mode to Game and UI
@@ -688,7 +688,7 @@ bool AOutercorpCharacter::IsAnyUIWidgetOpen() const
 	return bInventoryOpen || bCharacterOpen || bItemInfoOpen;
 }
 
-UUserWidget* AOutercorpCharacter::GetModularWindowChild(UUserWidget* ModularWindow) const
+UUserWidget *AOutercorpCharacter::GetModularWindowChild(UUserWidget *ModularWindow) const
 {
 	if (!ModularWindow)
 	{
@@ -699,24 +699,24 @@ UUserWidget* AOutercorpCharacter::GetModularWindowChild(UUserWidget* ModularWind
 	UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Searching in window type: %s"), *ModularWindow->GetClass()->GetName());
 
 	// First, try getting the root widget and traversing from there
-	UPanelWidget* RootWidget = ModularWindow->GetRootWidget() ? Cast<UPanelWidget>(ModularWindow->GetRootWidget()) : nullptr;
+	UPanelWidget *RootWidget = ModularWindow->GetRootWidget() ? Cast<UPanelWidget>(ModularWindow->GetRootWidget()) : nullptr;
 
 	if (RootWidget)
 	{
 		UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Root widget type: %s, child count: %d"),
-			*RootWidget->GetClass()->GetName(), RootWidget->GetChildrenCount());
+			   *RootWidget->GetClass()->GetName(), RootWidget->GetChildrenCount());
 
 		// Iterate through all children of root widget
 		for (int32 i = 0; i < RootWidget->GetChildrenCount(); ++i)
 		{
-			UWidget* Child = RootWidget->GetChildAt(i);
+			UWidget *Child = RootWidget->GetChildAt(i);
 			if (Child)
 			{
 				UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Root child %d: %s (name: %s)"),
-					i, *Child->GetClass()->GetName(), *Child->GetName());
+					   i, *Child->GetClass()->GetName(), *Child->GetName());
 
 				// Check if this child is a UUserWidget
-				if (UUserWidget* UserWidgetChild = Cast<UUserWidget>(Child))
+				if (UUserWidget *UserWidgetChild = Cast<UUserWidget>(Child))
 				{
 					// Check if it's our target widget type
 					if (UserWidgetChild->IsA(UCharacterWidget::StaticClass()) || UserWidgetChild->IsA(UInventoryWidget::StaticClass()))
@@ -727,18 +727,18 @@ UUserWidget* AOutercorpCharacter::GetModularWindowChild(UUserWidget* ModularWind
 				}
 
 				// If it's a panel, check its children too
-				if (UPanelWidget* Panel = Cast<UPanelWidget>(Child))
+				if (UPanelWidget *Panel = Cast<UPanelWidget>(Child))
 				{
 					UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Child %d is a panel with %d children"), i, Panel->GetChildrenCount());
 					for (int32 j = 0; j < Panel->GetChildrenCount(); ++j)
 					{
-						UWidget* PanelChild = Panel->GetChildAt(j);
+						UWidget *PanelChild = Panel->GetChildAt(j);
 						if (PanelChild)
 						{
 							UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Panel child %d: %s (name: %s)"),
-								j, *PanelChild->GetClass()->GetName(), *PanelChild->GetName());
+								   j, *PanelChild->GetClass()->GetName(), *PanelChild->GetName());
 
-							if (UUserWidget* UserWidgetChild = Cast<UUserWidget>(PanelChild))
+							if (UUserWidget *UserWidgetChild = Cast<UUserWidget>(PanelChild))
 							{
 								if (UserWidgetChild->IsA(UCharacterWidget::StaticClass()) || UserWidgetChild->IsA(UInventoryWidget::StaticClass()))
 								{
@@ -759,15 +759,14 @@ UUserWidget* AOutercorpCharacter::GetModularWindowChild(UUserWidget* ModularWind
 		FName("ChildWidget"),
 		FName("ContentWidget"),
 		FName("WindowContent"),
-		FName("WidgetContent")
-	};
+		FName("WidgetContent")};
 
-	for (const FName& Name : PossibleNames)
+	for (const FName &Name : PossibleNames)
 	{
-		if (UWidget* Widget = ModularWindow->GetWidgetFromName(Name))
+		if (UWidget *Widget = ModularWindow->GetWidgetFromName(Name))
 		{
 			UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Found widget by name '%s': %s"), *Name.ToString(), *Widget->GetClass()->GetName());
-			if (UUserWidget* UserWidget = Cast<UUserWidget>(Widget))
+			if (UUserWidget *UserWidget = Cast<UUserWidget>(Widget))
 			{
 				return UserWidget;
 			}
@@ -778,7 +777,7 @@ UUserWidget* AOutercorpCharacter::GetModularWindowChild(UUserWidget* ModularWind
 	return nullptr;
 }
 
-void AOutercorpCharacter::DebugPrintWidgetType(UUserWidget* Widget) const
+void AOutercorpCharacter::DebugPrintWidgetType(UUserWidget *Widget) const
 {
 	if (!Widget)
 	{
@@ -794,7 +793,7 @@ void AOutercorpCharacter::DebugPrintWidgetType(UUserWidget* Widget) const
 	UE_LOG(LogOutercorp, Log, TEXT("DebugPrintWidgetType: Is CharacterWidget? %s"), Widget->IsA(UCharacterWidget::StaticClass()) ? TEXT("YES") : TEXT("NO"));
 }
 
-void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* ModularWindow)
+void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindow)
 {
 	if (!ModularWindow)
 	{
@@ -806,7 +805,7 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* ModularWindo
 	CharacterWindow = ModularWindow;
 
 	// Get the ChildWidgetCanvas from the modular window
-	UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
+	UCanvasPanel *ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
 	{
 		UE_LOG(LogOutercorp, Error, TEXT("SetupCharacterWidgetInWindow: Could not find ChildWidgetCanvas in modular window"));
@@ -828,7 +827,7 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* ModularWindo
 	}
 
 	// Add the character widget to the child canvas
-	UCanvasPanelSlot* Slot = ChildCanvas->AddChildToCanvas(CharacterWidget);
+	UCanvasPanelSlot *Slot = ChildCanvas->AddChildToCanvas(CharacterWidget);
 	if (Slot)
 	{
 		// Make the widget fill the entire canvas
@@ -839,7 +838,7 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* ModularWindo
 	UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Successfully added character widget to modular window"));
 
 	// Set the window title on the modular window
-	UTextBlock* WindowTitleText = Cast<UTextBlock>(ModularWindow->GetWidgetFromName(FName("TitleText")));
+	UTextBlock *WindowTitleText = Cast<UTextBlock>(ModularWindow->GetWidgetFromName(FName("TitleText")));
 	if (WindowTitleText)
 	{
 		WindowTitleText->SetText(FText::FromString(TEXT("Character")));
@@ -854,7 +853,7 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* ModularWindo
 	BindCharacterEvents();
 
 	// Try to bind to the modular window's close button
-	UButton* WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
+	UButton *WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
 	if (WindowCloseButton)
 	{
 		UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Found CloseBtn in modular window, binding to CloseCharacter"));
@@ -870,7 +869,7 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* ModularWindo
 	// We don't add it here to avoid duplicates.
 
 	// Set keyboard focus to the character widget so it can receive ESC/I key events
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
 		CharacterWidget->SetKeyboardFocus();
 		UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Set keyboard focus to character widget"));
@@ -885,7 +884,7 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget* ModularWindo
 	}
 }
 
-void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* ModularWindow)
+void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget *ModularWindow)
 {
 	if (!ModularWindow)
 	{
@@ -897,7 +896,7 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* ModularWindo
 	InventoryWindow = ModularWindow;
 
 	// Get the ChildWidgetCanvas from the modular window
-	UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
+	UCanvasPanel *ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
 	{
 		UE_LOG(LogOutercorp, Error, TEXT("SetupInventoryWidgetInWindow: Could not find ChildWidgetCanvas in modular window"));
@@ -919,7 +918,7 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* ModularWindo
 	}
 
 	// Add the inventory widget to the child canvas
-	UCanvasPanelSlot* Slot = ChildCanvas->AddChildToCanvas(InventoryWidget);
+	UCanvasPanelSlot *Slot = ChildCanvas->AddChildToCanvas(InventoryWidget);
 	if (Slot)
 	{
 		// Make the widget fill the entire canvas
@@ -930,7 +929,7 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* ModularWindo
 	UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Successfully added inventory widget to modular window"));
 
 	// Set the window title on the modular window
-	UTextBlock* WindowTitleText = Cast<UTextBlock>(ModularWindow->GetWidgetFromName(FName("TitleText")));
+	UTextBlock *WindowTitleText = Cast<UTextBlock>(ModularWindow->GetWidgetFromName(FName("TitleText")));
 	if (WindowTitleText)
 	{
 		WindowTitleText->SetText(FText::FromString(TEXT("Inventory")));
@@ -945,7 +944,7 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* ModularWindo
 	BindInventoryEvents();
 
 	// Try to bind to the modular window's close button
-	UButton* WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
+	UButton *WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
 	if (WindowCloseButton)
 	{
 		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Found CloseBtn in modular window, binding to CloseInventory"));
@@ -961,7 +960,7 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* ModularWindo
 	// We don't add it here to avoid duplicates.
 
 	// Set keyboard focus to the inventory widget so it can receive ESC/C key events
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
 		InventoryWidget->SetKeyboardFocus();
 		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Set keyboard focus to inventory widget"));
@@ -976,7 +975,7 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget* ModularWindo
 	}
 }
 
-void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget* ModularWindow)
+void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget *ModularWindow)
 {
 	if (!ModularWindow)
 	{
@@ -988,7 +987,7 @@ void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget* ModularWindow
 	ItemInfoWindow = ModularWindow;
 
 	// Get the ChildWidgetCanvas from the modular window
-	UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
+	UCanvasPanel *ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
 	{
 		UE_LOG(LogOutercorp, Error, TEXT("SetupItemInfoWidgetInWindow: Could not find ChildWidgetCanvas in modular window"));
@@ -1010,7 +1009,7 @@ void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget* ModularWindow
 	}
 
 	// Add the item info widget to the child canvas
-	UCanvasPanelSlot* Slot = ChildCanvas->AddChildToCanvas(ItemInfoWidget);
+	UCanvasPanelSlot *Slot = ChildCanvas->AddChildToCanvas(ItemInfoWidget);
 	if (Slot)
 	{
 		// Make the widget fill the entire canvas
@@ -1021,7 +1020,7 @@ void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget* ModularWindow
 	UE_LOG(LogOutercorp, Log, TEXT("SetupItemInfoWidgetInWindow: Successfully added item info widget to modular window"));
 
 	// Try to bind to the modular window's close button
-	UButton* WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
+	UButton *WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
 	if (WindowCloseButton)
 	{
 		UE_LOG(LogOutercorp, Log, TEXT("SetupItemInfoWidgetInWindow: Found CloseBtn in modular window, binding to CloseItemInfo"));
@@ -1031,9 +1030,21 @@ void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget* ModularWindow
 	{
 		UE_LOG(LogOutercorp, Warning, TEXT("SetupItemInfoWidgetInWindow: Could not find CloseBtn in modular window - X button won't work!"));
 	}
+
+	// Set the window title on the modular window
+	UTextBlock *WindowTitleText = Cast<UTextBlock>(ModularWindow->GetWidgetFromName(FName("TitleText")));
+	if (WindowTitleText)
+	{
+		WindowTitleText->SetText(FText::FromString(TEXT("Info")));
+		UE_LOG(LogOutercorp, Log, TEXT("SetupItemInfoWidgetInWindow: Set window title to 'ItemInfo'"));
+	}
+	else
+	{
+		UE_LOG(LogOutercorp, Warning, TEXT("SetupItemInfoWidgetInWindow: Could not find TitleText in modular window"));
+	}
 }
 
-void AOutercorpCharacter::OpenItemInfo(const FInventoryItem& Item)
+void AOutercorpCharacter::OpenItemInfo(const FInventoryItem &Item)
 {
 	UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Called for item %s"), Item.IsValid() ? *Item.ItemData->ItemName.ToString() : TEXT("Invalid"));
 
@@ -1064,7 +1075,7 @@ void AOutercorpCharacter::OpenItemInfo(const FInventoryItem& Item)
 	}
 
 	// Ensure UI input mode is enabled
-	APlayerController* PC = Cast<APlayerController>(GetController());
+	APlayerController *PC = Cast<APlayerController>(GetController());
 	if (PC)
 	{
 		FInputModeGameAndUI InputMode;
@@ -1094,7 +1105,7 @@ void AOutercorpCharacter::OnItemInfoWidgetClosed()
 	UE_LOG(LogOutercorp, Log, TEXT("OnItemInfoWidgetClosed: Called"));
 
 	// Only restore game input if no other UI widgets are open
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
 		// Check if other windows are still open
 		bool bAnyWidgetOpen = (InventoryWindow != nullptr && InventoryWindow->GetVisibility() == ESlateVisibility::Visible) ||
@@ -1123,7 +1134,7 @@ void AOutercorpCharacter::OnItemInfoWidgetClosed()
 	}
 }
 
-bool AOutercorpCharacter::IsWindowMaximized(UUserWidget* WindowWidget) const
+bool AOutercorpCharacter::IsWindowMaximized(UUserWidget *WindowWidget) const
 {
 	if (!IsValid(WindowWidget))
 	{
@@ -1131,16 +1142,16 @@ bool AOutercorpCharacter::IsWindowMaximized(UUserWidget* WindowWidget) const
 	}
 
 	// Cast to UWindow to access modules
-	UWindow* Window = Cast<UWindow>(WindowWidget);
+	UWindow *Window = Cast<UWindow>(WindowWidget);
 	if (!Window)
 	{
 		return false;
 	}
 
 	// Check all modules on the window for fullscreen modules
-	for (UWindow_Module* Module : Window->Modules)
+	for (UWindow_Module *Module : Window->Modules)
 	{
-		if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+		if (UModule_Fullscreen_None *FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
 		{
 			// Check if this window is currently fullscreened
 			if (FullscreenModule->IsFullscreen(Window))
@@ -1153,7 +1164,7 @@ bool AOutercorpCharacter::IsWindowMaximized(UUserWidget* WindowWidget) const
 	return false;
 }
 
-void AOutercorpCharacter::UnMaximizeWindow(UUserWidget* WindowWidget)
+void AOutercorpCharacter::UnMaximizeWindow(UUserWidget *WindowWidget)
 {
 	if (!IsValid(WindowWidget))
 	{
@@ -1161,16 +1172,16 @@ void AOutercorpCharacter::UnMaximizeWindow(UUserWidget* WindowWidget)
 	}
 
 	// Cast to UWindow to access modules
-	UWindow* Window = Cast<UWindow>(WindowWidget);
+	UWindow *Window = Cast<UWindow>(WindowWidget);
 	if (!Window)
 	{
 		return;
 	}
 
 	// Find and call Unscreen on any active fullscreen module
-	for (UWindow_Module* Module : Window->Modules)
+	for (UWindow_Module *Module : Window->Modules)
 	{
-		if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+		if (UModule_Fullscreen_None *FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
 		{
 			if (FullscreenModule->IsFullscreen(Window))
 			{
@@ -1184,7 +1195,7 @@ void AOutercorpCharacter::UnMaximizeWindow(UUserWidget* WindowWidget)
 
 void AOutercorpCharacter::SaveUILayout()
 {
-	UOutercorpSaveGame* SaveGameInstance = Cast<UOutercorpSaveGame>(UGameplayStatics::CreateSaveGameObject(UOutercorpSaveGame::StaticClass()));
+	UOutercorpSaveGame *SaveGameInstance = Cast<UOutercorpSaveGame>(UGameplayStatics::CreateSaveGameObject(UOutercorpSaveGame::StaticClass()));
 	if (!SaveGameInstance)
 	{
 		UE_LOG(LogOutercorp, Error, TEXT("SaveUILayout: Failed to create save game object"));
@@ -1198,7 +1209,7 @@ void AOutercorpCharacter::SaveUILayout()
 	// Save inventory window layout
 	if (InventoryWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
 		if (Slot)
 		{
 			FVector2D WindowPosition = Slot->GetPosition();
@@ -1212,15 +1223,15 @@ void AOutercorpCharacter::SaveUILayout()
 			if (bLooksMaximized)
 			{
 				UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: InventoryWindow appears maximized (size: %s), looking for saved values"),
-					*WindowSize.ToString());
+					   *WindowSize.ToString());
 
 				// Try to get the pre-maximized size from the fullscreen module
-				UWindow* Window = Cast<UWindow>(InventoryWindow);
+				UWindow *Window = Cast<UWindow>(InventoryWindow);
 				if (Window)
 				{
-					for (UWindow_Module* Module : Window->Modules)
+					for (UWindow_Module *Module : Window->Modules)
 					{
-						if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+						if (UModule_Fullscreen_None *FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
 						{
 							// Check if the fullscreen module has valid saved values
 							if (FullscreenModule->SizeSaved.X >= MinWindowSize && FullscreenModule->SizeSaved.Y >= MinWindowSize)
@@ -1228,13 +1239,13 @@ void AOutercorpCharacter::SaveUILayout()
 								WindowPosition = FullscreenModule->PositionSaved;
 								WindowSize = FullscreenModule->SizeSaved;
 								UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Using fullscreen module saved values - Pos: %s, Size: %s"),
-									*WindowPosition.ToString(), *WindowSize.ToString());
+									   *WindowPosition.ToString(), *WindowSize.ToString());
 								break;
 							}
 							else
 							{
 								UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Fullscreen module has invalid saved values: %s"),
-									*FullscreenModule->SizeSaved.ToString());
+									   *FullscreenModule->SizeSaved.ToString());
 							}
 						}
 					}
@@ -1251,7 +1262,7 @@ void AOutercorpCharacter::SaveUILayout()
 				SaveGameInstance->InventoryWindowLayout = FWindowLayoutData(WindowPosition, WindowSize);
 				bHasValidData = true;
 				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved inventory layout - Pos: %s, Size: %s"),
-					*WindowPosition.ToString(), *WindowSize.ToString());
+					   *WindowPosition.ToString(), *WindowSize.ToString());
 			}
 			else
 			{
@@ -1263,7 +1274,7 @@ void AOutercorpCharacter::SaveUILayout()
 	// Save character window layout
 	if (CharacterWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
 		if (Slot)
 		{
 			FVector2D WindowPosition = Slot->GetPosition();
@@ -1272,12 +1283,12 @@ void AOutercorpCharacter::SaveUILayout()
 			// Check if window is maximized - if so, use the saved pre-maximized position/size
 			if (IsWindowMaximized(CharacterWindow))
 			{
-				UWindow* Window = Cast<UWindow>(CharacterWindow);
+				UWindow *Window = Cast<UWindow>(CharacterWindow);
 				if (Window)
 				{
-					for (UWindow_Module* Module : Window->Modules)
+					for (UWindow_Module *Module : Window->Modules)
 					{
-						if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+						if (UModule_Fullscreen_None *FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
 						{
 							if (FullscreenModule->IsFullscreen(Window))
 							{
@@ -1297,7 +1308,7 @@ void AOutercorpCharacter::SaveUILayout()
 				SaveGameInstance->CharacterWindowLayout = FWindowLayoutData(WindowPosition, WindowSize);
 				bHasValidData = true;
 				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved character layout - Pos: %s, Size: %s"),
-					*WindowPosition.ToString(), *WindowSize.ToString());
+					   *WindowPosition.ToString(), *WindowSize.ToString());
 			}
 			else
 			{
@@ -1309,7 +1320,7 @@ void AOutercorpCharacter::SaveUILayout()
 	// Save item info window layout
 	if (ItemInfoWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
 		if (Slot)
 		{
 			FVector2D WindowPosition = Slot->GetPosition();
@@ -1318,12 +1329,12 @@ void AOutercorpCharacter::SaveUILayout()
 			// Check if window is maximized - if so, use the saved pre-maximized position/size
 			if (IsWindowMaximized(ItemInfoWindow))
 			{
-				UWindow* Window = Cast<UWindow>(ItemInfoWindow);
+				UWindow *Window = Cast<UWindow>(ItemInfoWindow);
 				if (Window)
 				{
-					for (UWindow_Module* Module : Window->Modules)
+					for (UWindow_Module *Module : Window->Modules)
 					{
-						if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+						if (UModule_Fullscreen_None *FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
 						{
 							if (FullscreenModule->IsFullscreen(Window))
 							{
@@ -1343,7 +1354,7 @@ void AOutercorpCharacter::SaveUILayout()
 				SaveGameInstance->ItemInfoWindowLayout = FWindowLayoutData(WindowPosition, WindowSize);
 				bHasValidData = true;
 				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved item info layout - Pos: %s, Size: %s"),
-					*WindowPosition.ToString(), *WindowSize.ToString());
+					   *WindowPosition.ToString(), *WindowSize.ToString());
 			}
 			else
 			{
@@ -1378,7 +1389,7 @@ void AOutercorpCharacter::LoadUILayout()
 		return;
 	}
 
-	UOutercorpSaveGame* LoadedGame = Cast<UOutercorpSaveGame>(UGameplayStatics::LoadGameFromSlot(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex));
+	UOutercorpSaveGame *LoadedGame = Cast<UOutercorpSaveGame>(UGameplayStatics::LoadGameFromSlot(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex));
 	if (!LoadedGame)
 	{
 		UE_LOG(LogOutercorp, Error, TEXT("LoadUILayout: Failed to load save game"));
@@ -1393,7 +1404,7 @@ void AOutercorpCharacter::LoadUILayout()
 	// Restore inventory window layout
 	if (InventoryWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
 		if (Slot)
 		{
 			FVector2D LoadedSize = LoadedGame->InventoryWindowLayout.Size;
@@ -1403,7 +1414,7 @@ void AOutercorpCharacter::LoadUILayout()
 				Slot->SetPosition(LoadedGame->InventoryWindowLayout.Position);
 				Slot->SetSize(LoadedSize);
 				UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored inventory layout - Pos: %s, Size: %s"),
-					*LoadedGame->InventoryWindowLayout.Position.ToString(), *LoadedSize.ToString());
+					   *LoadedGame->InventoryWindowLayout.Position.ToString(), *LoadedSize.ToString());
 			}
 			else
 			{
@@ -1415,7 +1426,7 @@ void AOutercorpCharacter::LoadUILayout()
 	// Restore character window layout
 	if (CharacterWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
 		if (Slot)
 		{
 			FVector2D LoadedSize = LoadedGame->CharacterWindowLayout.Size;
@@ -1425,7 +1436,7 @@ void AOutercorpCharacter::LoadUILayout()
 				Slot->SetPosition(LoadedGame->CharacterWindowLayout.Position);
 				Slot->SetSize(LoadedSize);
 				UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored character layout - Pos: %s, Size: %s"),
-					*LoadedGame->CharacterWindowLayout.Position.ToString(), *LoadedSize.ToString());
+					   *LoadedGame->CharacterWindowLayout.Position.ToString(), *LoadedSize.ToString());
 			}
 			else
 			{
@@ -1437,7 +1448,7 @@ void AOutercorpCharacter::LoadUILayout()
 	// Restore item info window layout
 	if (ItemInfoWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
 		if (Slot)
 		{
 			FVector2D LoadedSize = LoadedGame->ItemInfoWindowLayout.Size;
@@ -1447,7 +1458,7 @@ void AOutercorpCharacter::LoadUILayout()
 				Slot->SetPosition(LoadedGame->ItemInfoWindowLayout.Position);
 				Slot->SetSize(LoadedSize);
 				UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored item info layout - Pos: %s, Size: %s"),
-					*LoadedGame->ItemInfoWindowLayout.Position.ToString(), *LoadedSize.ToString());
+					   *LoadedGame->ItemInfoWindowLayout.Position.ToString(), *LoadedSize.ToString());
 			}
 			else
 			{
@@ -1464,19 +1475,19 @@ void AOutercorpCharacter::LoadUILayout()
 	if (IsWindowMaximized(InventoryWindow))
 	{
 		UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: InventoryWindow loaded maximized, setting up fullscreen module saved values"));
-		UWindow* Window = Cast<UWindow>(InventoryWindow);
+		UWindow *Window = Cast<UWindow>(InventoryWindow);
 		if (Window)
 		{
 			// Find the fullscreen module and populate its saved position/size with the LOADED values
-			for (UWindow_Module* Module : Window->Modules)
+			for (UWindow_Module *Module : Window->Modules)
 			{
-				if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+				if (UModule_Fullscreen_None *FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
 				{
 					// Use the loaded (non-maximized) position/size from the save file
 					FullscreenModule->PositionSaved = LoadedGame->InventoryWindowLayout.Position;
 					FullscreenModule->SizeSaved = LoadedGame->InventoryWindowLayout.Size;
 					UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Set InventoryWindow fullscreen saved values to Pos: %s, Size: %s"),
-						*FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
+						   *FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
 					break;
 				}
 			}
@@ -1487,17 +1498,17 @@ void AOutercorpCharacter::LoadUILayout()
 	if (IsWindowMaximized(CharacterWindow))
 	{
 		UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: CharacterWindow loaded maximized, setting up fullscreen module saved values"));
-		UWindow* Window = Cast<UWindow>(CharacterWindow);
+		UWindow *Window = Cast<UWindow>(CharacterWindow);
 		if (Window)
 		{
-			for (UWindow_Module* Module : Window->Modules)
+			for (UWindow_Module *Module : Window->Modules)
 			{
-				if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+				if (UModule_Fullscreen_None *FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
 				{
 					FullscreenModule->PositionSaved = LoadedGame->CharacterWindowLayout.Position;
 					FullscreenModule->SizeSaved = LoadedGame->CharacterWindowLayout.Size;
 					UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Set CharacterWindow fullscreen saved values to Pos: %s, Size: %s"),
-						*FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
+						   *FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
 					break;
 				}
 			}
@@ -1508,17 +1519,17 @@ void AOutercorpCharacter::LoadUILayout()
 	if (IsWindowMaximized(ItemInfoWindow))
 	{
 		UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: ItemInfoWindow loaded maximized, setting up fullscreen module saved values"));
-		UWindow* Window = Cast<UWindow>(ItemInfoWindow);
+		UWindow *Window = Cast<UWindow>(ItemInfoWindow);
 		if (Window)
 		{
-			for (UWindow_Module* Module : Window->Modules)
+			for (UWindow_Module *Module : Window->Modules)
 			{
-				if (UModule_Fullscreen_None* FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
+				if (UModule_Fullscreen_None *FullscreenModule = Cast<UModule_Fullscreen_None>(Module))
 				{
 					FullscreenModule->PositionSaved = LoadedGame->ItemInfoWindowLayout.Position;
 					FullscreenModule->SizeSaved = LoadedGame->ItemInfoWindowLayout.Size;
 					UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Set ItemInfoWindow fullscreen saved values to Pos: %s, Size: %s"),
-						*FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
+						   *FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
 					break;
 				}
 			}
@@ -1546,7 +1557,7 @@ void AOutercorpCharacter::ResetUILayout()
 
 	if (InventoryWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
 		if (Slot)
 		{
 			Slot->SetPosition(FVector2D(100, 100));
@@ -1555,7 +1566,7 @@ void AOutercorpCharacter::ResetUILayout()
 		}
 
 		// Exit fullscreen if needed
-		UWindow* Window = Cast<UWindow>(InventoryWindow);
+		UWindow *Window = Cast<UWindow>(InventoryWindow);
 		if (Window)
 		{
 			Window->UpdateUIForCapabilities();
@@ -1564,7 +1575,7 @@ void AOutercorpCharacter::ResetUILayout()
 
 	if (CharacterWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(CharacterWindow->Slot);
 		if (Slot)
 		{
 			Slot->SetPosition(FVector2D(750, 100));
@@ -1573,7 +1584,7 @@ void AOutercorpCharacter::ResetUILayout()
 		}
 
 		// Exit fullscreen if needed
-		UWindow* Window = Cast<UWindow>(CharacterWindow);
+		UWindow *Window = Cast<UWindow>(CharacterWindow);
 		if (Window)
 		{
 			Window->UpdateUIForCapabilities();
@@ -1582,7 +1593,7 @@ void AOutercorpCharacter::ResetUILayout()
 
 	if (ItemInfoWindow)
 	{
-		UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
+		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(ItemInfoWindow->Slot);
 		if (Slot)
 		{
 			Slot->SetPosition(FVector2D(400, 200));
@@ -1591,7 +1602,7 @@ void AOutercorpCharacter::ResetUILayout()
 		}
 
 		// Exit fullscreen if needed
-		UWindow* Window = Cast<UWindow>(ItemInfoWindow);
+		UWindow *Window = Cast<UWindow>(ItemInfoWindow);
 		if (Window)
 		{
 			Window->UpdateUIForCapabilities();

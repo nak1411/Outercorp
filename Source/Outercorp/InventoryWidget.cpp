@@ -126,17 +126,10 @@ void UInventoryWidget::NativeConstruct()
 		);
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::NativeConstruct: Starting button binding"));
-
 	// Bind button events
 	if (CloseButton)
 	{
-		UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::NativeConstruct: CloseButton found, binding OnClicked"));
 		CloseButton->OnClicked.AddDynamic(this, &UInventoryWidget::OnCloseButtonClicked);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UInventoryWidget::NativeConstruct: CloseButton is NULL! Make sure you have a Button named 'CloseButton' in your widget Blueprint with BindWidget or BindWidgetOptional"));
 	}
 
 	if (SortByNameButton)
@@ -164,18 +157,6 @@ void UInventoryWidget::NativeConstruct()
 		ListViewButton->OnClicked.AddDynamic(this, &UInventoryWidget::OnListViewButtonClicked);
 	}
 
-	// Set up the ListView entry widget class
-	if (ItemListView && ListRowWidgetClass)
-	{
-		// Note: The entry widget class should also be set in the Blueprint,
-		// but we set it here as well to ensure it's configured
-		UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::NativeConstruct: Setting ListView entry widget class"));
-	}
-	else if (ItemListView && !ListRowWidgetClass)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UInventoryWidget::NativeConstruct: ListView exists but ListRowWidgetClass is not set!"));
-	}
-
 	// Create shared column settings
 	ColumnSettings = NewObject<UInventoryColumnSettings>(this);
 
@@ -184,7 +165,6 @@ void UInventoryWidget::NativeConstruct()
 	{
 		ListViewHeader->OnColumnHeaderClicked.AddDynamic(this, &UInventoryWidget::OnColumnHeaderClicked);
 		ListViewHeader->SetColumnSettings(ColumnSettings);
-		UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::NativeConstruct: Bound to ListViewHeader column click events"));
 	}
 
 	// Initialize to grid view by default
@@ -320,7 +300,6 @@ FReply UInventoryWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, co
 			PC->GetMousePosition(MouseX, MouseY);
 			FVector2D MousePosition(MouseX, MouseY);
 
-			UE_LOG(LogTemp, Log, TEXT("Right-clicked in empty area of list view at position (%f, %f)"), MousePosition.X, MousePosition.Y);
 			OnEmptyAreaRightClicked(MousePosition);
 
 			return FReply::Handled();
@@ -477,10 +456,8 @@ void UInventoryWidget::UpdateCapacityDisplay()
 
 void UInventoryWidget::CloseInventory()
 {
-	UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::CloseInventory: Broadcasting close event"));
 	// Just broadcast the close event - let the owning character handle cleanup
 	OnInventoryClosed.Broadcast();
-	UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::CloseInventory: Broadcast complete"));
 }
 
 void UInventoryWidget::OnInventoryUpdated(int32 SlotIndex, const FInventoryItem &Item)
@@ -509,7 +486,6 @@ void UInventoryWidget::OnInventoryUpdated(int32 SlotIndex, const FInventoryItem 
 	// Also refresh list view if we're in list view mode
 	if (bIsListView)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("OnInventoryUpdated: Refreshing list view because we're in list mode"));
 		if (ListViewRowContainer)
 		{
 			PopulateTableView();
@@ -533,7 +509,6 @@ void UInventoryWidget::OnCapacityChanged(int32 NewCapacity)
 
 void UInventoryWidget::OnCloseButtonClicked()
 {
-	UE_LOG(LogTemp, Log, TEXT("UInventoryWidget::OnCloseButtonClicked: X button clicked"));
 	CloseInventory();
 }
 
@@ -569,7 +544,6 @@ void UInventoryWidget::ApplyClippingSettings()
 		ItemScrollBox->SetAllowOverscroll(false);
 		ItemScrollBox->SetOrientation(EOrientation::Orient_Vertical);
 
-		UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: Vertical ScrollBox configured"));
 
 		// Update scrollbar visibility based on current items
 		UpdateScrollbarVisibility();
@@ -585,7 +559,6 @@ void UInventoryWidget::ApplyClippingSettings()
 		HorizontalScrollBox->SetOrientation(EOrientation::Orient_Horizontal);
 		HorizontalScrollBox->SetAlwaysShowScrollbar(false);
 
-		UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: Horizontal ScrollBox configured"));
 	}
 
 	// Force the UniformGridPanel to use exact slot sizes without compression
@@ -616,7 +589,6 @@ void UInventoryWidget::ApplyClippingSettings()
 			ParentSizeBox->ClearHeightOverride();
 			ParentSizeBox->SetMinDesiredHeight(0.0f);
 
-			UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: SizeBox - Fixed width: %f (%d columns), Natural height"), GridWidth, ColumnsForWidth);
 		}
 		else if (!GridSizeBox)
 		{
@@ -627,10 +599,8 @@ void UInventoryWidget::ApplyClippingSettings()
 			GridSizeBox->SetMaxDesiredWidth(GridWidth);
 			// Don't set height override - let grid determine its natural height
 
-			UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: Created SizeBox wrapper - Fixed width: %f (%d columns)"), GridWidth, ColumnsForWidth);
 		}
 
-		UE_LOG(LogTemp, Log, TEXT("ApplyClippingSettings: Grid slot size %f x %f, fixed width: %f for %d columns"), SlotSize, SlotSize, GridWidth, ColumnsForWidth);
 	}
 }
 
@@ -638,7 +608,6 @@ void UInventoryWidget::EnableHorizontalScrolling()
 {
 	if (!ItemScrollBox)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("EnableHorizontalScrolling: ItemScrollBox is null"));
 		return;
 	}
 
@@ -646,7 +615,6 @@ void UInventoryWidget::EnableHorizontalScrolling()
 	TSharedPtr<SWidget> SlateWidget = ItemScrollBox->GetCachedWidget();
 	if (!SlateWidget.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("EnableHorizontalScrolling: Could not get Slate widget"));
 		return;
 	}
 
@@ -657,11 +625,9 @@ void UInventoryWidget::EnableHorizontalScrolling()
 		SlateScrollBox->SetScrollBarRightClickDragAllowed(true);
 		SlateScrollBox->SetAllowOverscroll(EAllowOverscroll::No);
 
-		UE_LOG(LogTemp, Log, TEXT("EnableHorizontalScrolling: Horizontal scrolling enabled via Slate"));
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("EnableHorizontalScrolling: Failed to cast to SScrollBox"));
 	}
 }
 
@@ -686,14 +652,8 @@ void UInventoryWidget::CreateSlotWidgets()
 	int32 RowsNeeded = FMath::CeilToInt(static_cast<float>(InventoryComponent->MaxSlots) / static_cast<float>(ColumnsToUse));
 	RowsNeeded = FMath::Min(RowsNeeded, MaxPreCreatedRows);
 
-	UE_LOG(LogTemp, Log, TEXT("CreateSlotWidgets: Pre-creating maximum grid %d x %d for inventory capacity of %d"),
-		ColumnsToUse, RowsNeeded, InventoryComponent->MaxSlots);
-
 	// Pre-create all slots in a fixed grid layout
 	int32 TotalSlots = ColumnsToUse * RowsNeeded;
-
-	UE_LOG(LogTemp, Log, TEXT("CreateSlotWidgets: Creating grid %d x %d = %d slots for inventory capacity of %d"),
-		ColumnsToUse, RowsNeeded, TotalSlots, InventoryComponent->MaxSlots);
 
 	for (int32 i = 0; i < TotalSlots; ++i)
 	{
@@ -739,12 +699,10 @@ void UInventoryWidget::CreateSlotWidgets()
 			if (CalculatedColumns > 0)
 			{
 				CurrentVisibleColumns = CalculatedColumns;
-				UE_LOG(LogTemp, Warning, TEXT("CreateSlotWidgets: Adjusted visible columns to %d based on width %.1f"), CurrentVisibleColumns, CurrentSize.X);
 			}
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("CreateSlotWidgets: Grid created with %d pre-created columns, %d visible columns"), ColumnsToUse, CurrentVisibleColumns);
 
 	// Update visibility after creating slots
 	UpdateSlotVisibility();
@@ -811,7 +769,6 @@ void UInventoryWidget::SetupClickCapture()
 		FSlateApplication::Get().RegisterInputPreProcessor(InputProcessor, 999);
 		bIsClickCaptureActive = true;
 
-		UE_LOG(LogTemp, Log, TEXT("Inventory click capture activated"));
 	}
 }
 
@@ -819,7 +776,6 @@ void UInventoryWidget::UpdateScrollbarVisibility()
 {
 	if (!ItemScrollBox || !InventoryComponent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility: ItemScrollBox or InventoryComponent is null"));
 		return;
 	}
 
@@ -845,7 +801,6 @@ void UInventoryWidget::UpdateScrollbarVisibility()
 	{
 		ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Collapsed);
 		ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::Never);
-		UE_LOG(LogTemp, Log, TEXT("UpdateScrollbarVisibility: No items, hiding scrollbar and disabling scroll"));
 		return;
 	}
 
@@ -859,9 +814,6 @@ void UInventoryWidget::UpdateScrollbarVisibility()
 	float AvailableHeight = ItemScrollBox->GetCachedGeometry().GetLocalSize().Y;
 	float RowHeight = SlotSize + (SlotPadding.Top + SlotPadding.Bottom);
 
-	UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility DEBUG: LastOccupiedSlot=%d, ColumnsToUse=%d, LastRowWithItem=%d, AvailableHeight=%.1f, RowHeight=%.1f"),
-		LastOccupiedSlot, ColumnsToUse, LastRowWithItem, AvailableHeight, RowHeight);
-
 	// If geometry is not valid yet, force scrollbar to be visible if there are items beyond first few rows
 	if (AvailableHeight <= 0.0f)
 	{
@@ -870,7 +822,6 @@ void UInventoryWidget::UpdateScrollbarVisibility()
 		{
 			ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Visible);
 			ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::WhenScrollingPossible);
-			UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility: No valid geometry, but showing scrollbar due to LastRow=%d"), LastRowWithItem);
 		}
 		return;
 	}
@@ -882,22 +833,17 @@ void UInventoryWidget::UpdateScrollbarVisibility()
 	// We need to check from row 0 to the last row with items
 	int32 TotalRowsNeeded = LastRowWithItem + 1;
 
-	UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility DEBUG: TotalRowsNeeded=%d, VisibleRows=%d"), TotalRowsNeeded, VisibleRows);
 
 	// Show scrollbar if the content needs more rows than can fit in the viewport
 	if (TotalRowsNeeded > VisibleRows)
 	{
 		ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Visible);
 		ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::WhenScrollingPossible);
-		UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility: SHOWING SCROLLBAR - Items need scrolling (TotalRows: %d, VisibleRows: %d, LastRow: %d)"),
-			TotalRowsNeeded, VisibleRows, LastRowWithItem);
 	}
 	else
 	{
 		ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Collapsed);
 		ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::Never);
-		UE_LOG(LogTemp, Warning, TEXT("UpdateScrollbarVisibility: HIDING SCROLLBAR - All items visible (TotalRows: %d, VisibleRows: %d, LastRow: %d)"),
-			TotalRowsNeeded, VisibleRows, LastRowWithItem);
 	}
 }
 
@@ -905,13 +851,11 @@ void UInventoryWidget::CompressItems()
 {
 	if (!InventoryComponent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("CompressItems: InventoryComponent is null"));
 		return;
 	}
 
 	int32 ColumnsToUse = (CurrentVisibleColumns > 0) ? CurrentVisibleColumns : GridColumns;
 
-	UE_LOG(LogTemp, Warning, TEXT("CompressItems: Starting compression with %d columns"), ColumnsToUse);
 
 	// Build a list of all items with their current slot indices
 	TArray<TPair<int32, FInventoryItem>> OccupiedSlots;
@@ -927,11 +871,9 @@ void UInventoryWidget::CompressItems()
 
 	if (OccupiedSlots.Num() == 0)
 	{
-		UE_LOG(LogTemp, Log, TEXT("CompressItems: No items to compress"));
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("CompressItems: Found %d occupied slots"), OccupiedSlots.Num());
 
 	// Calculate visible area based on current window size
 	float AvailableHeight = 0.0f;
@@ -949,9 +891,6 @@ void UInventoryWidget::CompressItems()
 		int32 VisibleRows = FMath::FloorToInt(AvailableHeight / RowHeight);
 		MaxVisibleSlots = ColumnsToUse * VisibleRows;
 		MaxVisibleSlots = FMath::Min(MaxVisibleSlots, InventoryComponent->MaxSlots);
-
-		UE_LOG(LogTemp, Warning, TEXT("CompressItems: Visible area can fit %d rows x %d columns = %d slots"),
-			VisibleRows, ColumnsToUse, MaxVisibleSlots);
 	}
 
 	// Move each item to the earliest available slot within visible area
@@ -977,11 +916,9 @@ void UInventoryWidget::CompressItems()
 
 			if (bMoveSuccess)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("CompressItems: Moved item from slot %d to slot %d"), CurrentSlot, NextTargetSlot);
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("CompressItems: Failed to move item from slot %d to slot %d"), CurrentSlot, NextTargetSlot);
 			}
 
 			NextTargetSlot++;
@@ -994,20 +931,17 @@ void UInventoryWidget::CompressItems()
 	// Update scrollbar visibility after compression
 	UpdateScrollbarVisibility();
 
-	UE_LOG(LogTemp, Warning, TEXT("CompressItems: Compression complete, items now occupy slots 0-%d"), NextTargetSlot - 1);
 }
 
 void UInventoryWidget::ScrollToSlot(int32 TargetSlotIndex)
 {
 	if (!ItemScrollBox || !InventoryComponent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ScrollToSlot: ItemScrollBox or InventoryComponent is null"));
 		return;
 	}
 
 	if (TargetSlotIndex < 0 || TargetSlotIndex >= InventoryComponent->MaxSlots)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ScrollToSlot: Invalid slot index %d"), TargetSlotIndex);
 		return;
 	}
 
@@ -1023,7 +957,6 @@ void UInventoryWidget::ScrollToSlot(int32 TargetSlotIndex)
 
 	if (AvailableHeight <= 0.0f || RowHeight <= 0.0f)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ScrollToSlot: Invalid geometry (AvailableHeight=%.1f, RowHeight=%.1f)"), AvailableHeight, RowHeight);
 		return;
 	}
 
@@ -1035,13 +968,9 @@ void UInventoryWidget::ScrollToSlot(int32 TargetSlotIndex)
 	int32 FirstVisibleRow = FMath::FloorToInt(CurrentScrollOffset / RowHeight);
 	int32 LastVisibleRow = FirstVisibleRow + VisibleRows - 1;
 
-	UE_LOG(LogTemp, Warning, TEXT("ScrollToSlot: Slot %d is in row %d, currently visible rows %d-%d"),
-		TargetSlotIndex, TargetRow, FirstVisibleRow, LastVisibleRow);
-
 	// Check if target row is already visible
 	if (TargetRow >= FirstVisibleRow && TargetRow <= LastVisibleRow)
 	{
-		UE_LOG(LogTemp, Log, TEXT("ScrollToSlot: Slot %d is already visible"), TargetSlotIndex);
 		return;
 	}
 
@@ -1060,7 +989,6 @@ void UInventoryWidget::ScrollToSlot(int32 TargetSlotIndex)
 	}
 
 	ItemScrollBox->SetScrollOffset(TargetScrollOffset);
-	UE_LOG(LogTemp, Warning, TEXT("ScrollToSlot: Scrolled to offset %.1f to show row %d"), TargetScrollOffset, TargetRow);
 }
 
 int32 UInventoryWidget::CalculateColumnsFromWidth(float AvailableWidth) const
@@ -1091,7 +1019,6 @@ void UInventoryWidget::ReflowItemsToGrid()
 
 	int32 ColumnsToUse = (CurrentVisibleColumns > 0) ? CurrentVisibleColumns : GridColumns;
 
-	UE_LOG(LogTemp, Warning, TEXT("ReflowItemsToGrid: Reflowing to %d columns"), ColumnsToUse);
 
 	// Clear the grid
 	ItemGrid->ClearChildren();
@@ -1117,7 +1044,6 @@ void UInventoryWidget::ReflowItemsToGrid()
 	// Update clipping settings with the new layout
 	ApplyClippingSettings();
 
-	UE_LOG(LogTemp, Warning, TEXT("ReflowItemsToGrid: Grid reflowed with %d columns"), ColumnsToUse);
 }
 
 void UInventoryWidget::ExecuteDebouncedReflow()
@@ -1129,13 +1055,9 @@ void UInventoryWidget::ExecuteDebouncedReflow()
 	{
 		// No column change, but we were called - this means vertical resize
 		// Just compress items to fit the new visible area
-		UE_LOG(LogTemp, Warning, TEXT("ExecuteDebouncedReflow: Vertical resize detected, compressing items"));
 		CompressItems();
 		return;
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("ExecuteDebouncedReflow: Reflowing from %d to %d columns after resize complete"),
-		CurrentVisibleColumns, PendingColumnCount);
 
 	CurrentVisibleColumns = PendingColumnCount;
 
@@ -1163,7 +1085,6 @@ void UInventoryWidget::OnColumnHeaderClicked(FName ColumnName)
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("OnColumnHeaderClicked: Column '%s' clicked"), *ColumnName.ToString());
 
 	// Determine sort direction based on current header state
 	bool bAscending = true;
@@ -1173,15 +1094,11 @@ void UInventoryWidget::OnColumnHeaderClicked(FName ColumnName)
 		if (ListViewHeader->CurrentSortColumn == ColumnName)
 		{
 			bAscending = !ListViewHeader->bSortAscending;
-			UE_LOG(LogTemp, Log, TEXT("OnColumnHeaderClicked: Same column, toggling from %s to %s"),
-				ListViewHeader->bSortAscending ? TEXT("Ascending") : TEXT("Descending"),
-				bAscending ? TEXT("Ascending") : TEXT("Descending"));
 		}
 		else
 		{
 			// New column, start with ascending
 			bAscending = true;
-			UE_LOG(LogTemp, Log, TEXT("OnColumnHeaderClicked: New column, setting to Ascending"));
 		}
 
 		// Update the header to show the new sort state
@@ -1238,8 +1155,6 @@ void UInventoryWidget::ToggleViewMode()
 
 void UInventoryWidget::SetViewMode(bool bListView)
 {
-	UE_LOG(LogTemp, Warning, TEXT("========== SetViewMode Called =========="));
-	UE_LOG(LogTemp, Warning, TEXT("Switching to: %s"), bListView ? TEXT("LIST VIEW") : TEXT("GRID VIEW"));
 
 	bIsListView = bListView;
 
@@ -1251,7 +1166,6 @@ void UInventoryWidget::SetViewMode(bool bListView)
 	{
 		int32 TargetIndex = bIsListView ? 1 : 0;
 		ViewModeSwitcher->SetActiveWidgetIndex(TargetIndex);
-		UE_LOG(LogTemp, Log, TEXT("ViewModeSwitcher: Set to index %d"), TargetIndex);
 
 		// Populate list view when switching to it
 		if (bIsListView)
@@ -1286,10 +1200,6 @@ void UInventoryWidget::SetViewMode(bool bListView)
 									// Force the list to regenerate/refresh its visible entries
 									ItemListView->RequestRefresh();
 									ItemListView->RegenerateAllEntries();
-
-									UE_LOG(LogTemp, Warning, TEXT("ListView regenerated. Final size: %.2f x %.2f"),
-										ItemListView->GetCachedGeometry().GetLocalSize().X,
-										ItemListView->GetCachedGeometry().GetLocalSize().Y);
 								}
 							}, 0.1f, false);
 						}
@@ -1312,43 +1222,33 @@ void UInventoryWidget::SetViewMode(bool bListView)
 	else
 	{
 		// Fallback to show/hide method
-		UE_LOG(LogTemp, Warning, TEXT("ViewModeSwitcher not found, using visibility toggle method"));
 
 		// Show/hide the appropriate view
 		if (ItemGrid)
 		{
 			ItemGrid->SetVisibility(bIsListView ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-			UE_LOG(LogTemp, Log, TEXT("ItemGrid visibility: %s"), bIsListView ? TEXT("Collapsed") : TEXT("Visible"));
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("ItemGrid is NULL!"));
 		}
 
 		if (ItemScrollBox)
 		{
 			ItemScrollBox->SetVisibility(bIsListView ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-			UE_LOG(LogTemp, Log, TEXT("ItemScrollBox visibility: %s"), bIsListView ? TEXT("Collapsed") : TEXT("Visible"));
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("ItemScrollBox is NULL!"));
 		}
 
 		if (ItemListView)
 		{
-			UE_LOG(LogTemp, Log, TEXT("ItemListView found! Setting visibility..."));
 			ItemListView->SetVisibility(bIsListView ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
 			// Log ListView details
-			UE_LOG(LogTemp, Log, TEXT("ItemListView Visibility: %s"), bIsListView ? TEXT("Visible") : TEXT("Collapsed"));
-			UE_LOG(LogTemp, Log, TEXT("ItemListView Current Item Count: %d"), ItemListView->GetNumItems());
-			UE_LOG(LogTemp, Log, TEXT("ItemListView IsVisible: %s"), ItemListView->GetVisibility() == ESlateVisibility::Visible ? TEXT("YES") : TEXT("NO"));
 
 			// Populate list view when switching to it
 			if (bIsListView)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("About to populate list view..."));
 
 				// Use table view if available, otherwise fall back to list view
 				if (ListViewRowContainer)
@@ -1399,29 +1299,24 @@ void UInventoryWidget::SetViewMode(bool bListView)
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("ItemListView is NULL! Did you add a ListView widget named 'ItemListView' to WBP_Inventory?"));
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("========== SetViewMode Complete =========="));
 }
 
 void UInventoryWidget::PopulateListView()
 {
 	if (!ItemListView)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("PopulateListView: ItemListView is NULL!"));
 		return;
 	}
 
 	if (!InventoryComponent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("PopulateListView: InventoryComponent is NULL!"));
 		return;
 	}
 
 	// Check if Entry Widget Class is set
-	UE_LOG(LogTemp, Warning, TEXT("PopulateListView: Checking ListView configuration..."));
 
 	// Try to get the entry widget class from the ListView
 	// Note: We can't directly access it, but we can check after adding items
@@ -1430,7 +1325,6 @@ void UInventoryWidget::PopulateListView()
 	ItemListView->ClearListItems();
 
 	TArray<FInventoryItem> Items = InventoryComponent->GetAllItems();
-	UE_LOG(LogTemp, Log, TEXT("PopulateListView: Total items in inventory: %d"), Items.Num());
 
 	int32 ValidItemCount = 0;
 	int32 FilteredOutCount = 0;
@@ -1449,7 +1343,6 @@ void UInventoryWidget::PopulateListView()
 			if (!PassesFilter(Item))
 			{
 				FilteredOutCount++;
-				UE_LOG(LogTemp, Verbose, TEXT("PopulateListView: Item at slot %d filtered out"), i);
 				continue;
 			}
 
@@ -1461,9 +1354,6 @@ void UInventoryWidget::PopulateListView()
 
 			// Add to list view
 			ItemListView->AddItem(ItemData);
-
-			UE_LOG(LogTemp, Log, TEXT("PopulateListView: Added item '%s' at slot %d to list view"),
-				*Item.ItemData->ItemName.ToString(), i);
 		}
 	}
 
@@ -1480,30 +1370,13 @@ void UInventoryWidget::PopulateListView()
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("PopulateListView: Valid items: %d, Filtered out: %d, Added to list: %d"),
-		ValidItemCount, FilteredOutCount, ItemListView->GetNumItems());
-
 	// Check ListView configuration
 	FVector2D ListViewSize = ItemListView->GetCachedGeometry().GetLocalSize();
-	UE_LOG(LogTemp, Warning, TEXT("========================================"));
-	UE_LOG(LogTemp, Warning, TEXT("ListView Diagnostics:"));
-	UE_LOG(LogTemp, Warning, TEXT("  Size: %.2f x %.2f"), ListViewSize.X, ListViewSize.Y);
-	UE_LOG(LogTemp, Warning, TEXT("  Items in list: %d"), ItemListView->GetNumItems());
-	UE_LOG(LogTemp, Warning, TEXT("  Visibility: %d"), (int32)ItemListView->GetVisibility());
 
 	if (ListViewSize.X <= 0 || ListViewSize.Y <= 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT(""));
-		UE_LOG(LogTemp, Error, TEXT("PROBLEM: ListView has ZERO SIZE!"));
-		UE_LOG(LogTemp, Error, TEXT("Fix in Blueprint:"));
-		UE_LOG(LogTemp, Error, TEXT("  1. Open WBP_Inventory"));
-		UE_LOG(LogTemp, Error, TEXT("  2. Select ItemListView widget"));
-		UE_LOG(LogTemp, Error, TEXT("  3. Set Size to 'Fill' or give it explicit dimensions"));
-		UE_LOG(LogTemp, Error, TEXT("  4. Make sure it's not inside a collapsed container"));
-		UE_LOG(LogTemp, Error, TEXT(""));
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("========================================"));
 
 	// Force refresh the list view
 	ItemListView->RequestRefresh();
@@ -1513,10 +1386,6 @@ void UInventoryWidget::PopulateTableView()
 {
 	if (!ListViewRowContainer || !ListRowWidgetClass || !InventoryComponent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("PopulateTableView: Missing required components!"));
-		UE_LOG(LogTemp, Warning, TEXT("  ListViewRowContainer: %s"), ListViewRowContainer ? TEXT("OK") : TEXT("NULL"));
-		UE_LOG(LogTemp, Warning, TEXT("  ListRowWidgetClass: %s"), ListRowWidgetClass ? TEXT("OK") : TEXT("NULL"));
-		UE_LOG(LogTemp, Warning, TEXT("  InventoryComponent: %s"), InventoryComponent ? TEXT("OK") : TEXT("NULL"));
 		return;
 	}
 
@@ -1525,7 +1394,6 @@ void UInventoryWidget::PopulateTableView()
 	TableViewRows.Empty();
 
 	TArray<FInventoryItem> Items = InventoryComponent->GetAllItems();
-	UE_LOG(LogTemp, Log, TEXT("PopulateTableView: Total items in inventory: %d"), Items.Num());
 
 	int32 ValidItemCount = 0;
 	int32 FilteredOutCount = 0;
@@ -1575,16 +1443,10 @@ void UInventoryWidget::PopulateTableView()
 				// Cache the row widget
 				TableViewRows.Add(RowWidget);
 
-				UE_LOG(LogTemp, Log, TEXT("PopulateTableView: Added item '%s' at slot %d (visual row %d)"),
-					*Item.ItemData->ItemName.ToString(), i, VisualRowIndex);
-
 				VisualRowIndex++; // Increment visual row counter
 			}
 		}
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("PopulateTableView: Valid items: %d, Filtered out: %d, Rows created: %d"),
-		ValidItemCount, FilteredOutCount, TableViewRows.Num());
 }
 
 void UInventoryWidget::SyncSelectionsGridToList()
@@ -1594,7 +1456,6 @@ void UInventoryWidget::SyncSelectionsGridToList()
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("SyncSelectionsGridToList: Syncing selections from grid to list view"));
 
 	// Get selected slots from grid view
 	TArray<int32> SelectedSlotIndices = SlotWidgets[0]->GetSelectedSlots();
@@ -1603,7 +1464,6 @@ void UInventoryWidget::SyncSelectionsGridToList()
 	{
 		// No selections in grid, clear all list selections
 		UInventoryListRowWidget::ClearAllRowSelections();
-		UE_LOG(LogTemp, Log, TEXT("SyncSelectionsGridToList: No grid selections, cleared list selections"));
 		return;
 	}
 
@@ -1624,7 +1484,6 @@ void UInventoryWidget::SyncSelectionsGridToList()
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("SyncSelectionsGridToList: Synchronized %d selections to list view"), SelectionCount);
 }
 
 void UInventoryWidget::SyncSelectionsListToGrid()
@@ -1634,7 +1493,6 @@ void UInventoryWidget::SyncSelectionsListToGrid()
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("SyncSelectionsListToGrid: Syncing selections from list to grid view"));
 
 	// Get selected rows from list view
 	const TSet<UInventoryListRowWidget*>& SelectedRows = UInventoryListRowWidget::GetSelectedRows();
@@ -1643,7 +1501,6 @@ void UInventoryWidget::SyncSelectionsListToGrid()
 	{
 		// No selections in list, clear all grid selections
 		UInventorySlotWidget::ClearAllSelectionsForInventory(InventoryComponent);
-		UE_LOG(LogTemp, Log, TEXT("SyncSelectionsListToGrid: No list selections, cleared grid selections"));
 		return;
 	}
 
@@ -1671,14 +1528,10 @@ void UInventoryWidget::SyncSelectionsListToGrid()
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("SyncSelectionsListToGrid: Synchronized %d selections to grid view"), SelectionCount);
 }
 
 void UInventoryWidget::HandleContextMenuAction_Implementation(FName ActionID)
 {
-	UE_LOG(LogTemp, Warning, TEXT("===== INVENTORY WIDGET HandleContextMenuAction ====="));
-	UE_LOG(LogTemp, Warning, TEXT("ActionID: %s"), *ActionID.ToString());
-	UE_LOG(LogTemp, Warning, TEXT("InventoryComponent valid: %s"), InventoryComponent ? TEXT("YES") : TEXT("NO"));
 
 	if (ActionID == "StackAll" || ActionID == "StackAllEmpty")
 	{
@@ -1694,7 +1547,6 @@ void UInventoryWidget::HandleContextMenuAction_Implementation(FName ActionID)
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("UNKNOWN ACTION ID: '%s'"), *ActionID.ToString());
 	}
 }
 
@@ -1702,15 +1554,12 @@ void UInventoryWidget::HandleStackAllEmpty()
 {
 	if (!InventoryComponent)
 	{
-		UE_LOG(LogTemp, Error, TEXT("HandleStackAllEmpty: InventoryComponent is NULL!"));
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("========== Stack All (Empty) triggered - consolidating all stackable items =========="));
 
 	// Get all items
 	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
-	UE_LOG(LogTemp, Warning, TEXT("HandleStackAllEmpty: Found %d total items"), AllItems.Num());
 
 	// Group items by ItemID to find stackable groups
 	TMap<FName, TArray<int32>> ItemGroups;
@@ -1720,12 +1569,9 @@ void UInventoryWidget::HandleStackAllEmpty()
 		{
 			FName ItemID = AllItems[i].ItemData->ItemID;
 			ItemGroups.FindOrAdd(ItemID).Add(i);
-			UE_LOG(LogTemp, Log, TEXT("  Slot %d: %s (qty=%d, max=%d)"),
-				i, *AllItems[i].ItemData->ItemName.ToString(), AllItems[i].Quantity, AllItems[i].ItemData->MaxStackSize);
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("HandleStackAllEmpty: Found %d different item types to potentially stack"), ItemGroups.Num());
 
 	// For each group, try to stack them together
 	for (const auto& Group : ItemGroups)
@@ -1760,9 +1606,6 @@ void UInventoryWidget::HandleStackAllEmpty()
 					// Check if target has space
 					if (TargetItem.IsValid() && TargetItem.Quantity < TargetItem.ItemData->MaxStackSize)
 					{
-						UE_LOG(LogTemp, Log, TEXT("  Merging slot %d (qty=%d) into slot %d (qty=%d)"),
-							SourceSlot, SourceItem.Quantity, TargetSlot, TargetItem.Quantity);
-
 						InventoryComponent->MergeStacks(SourceSlot, TargetSlot);
 
 						// Check if source is now empty
@@ -1777,7 +1620,6 @@ void UInventoryWidget::HandleStackAllEmpty()
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Stack All completed"));
 
 	// Refresh the display after stacking
 	if (bIsListView)
@@ -1799,7 +1641,6 @@ void UInventoryWidget::HandleStackAllEmpty()
 
 void UInventoryWidget::HandleSelectAll()
 {
-	UE_LOG(LogTemp, Log, TEXT("Select All triggered"));
 
 	if (bIsListView)
 	{
@@ -1824,12 +1665,10 @@ void UInventoryWidget::HandleSelectAll()
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("Select All completed"));
 }
 
 void UInventoryWidget::HandleInvertSelection()
 {
-	UE_LOG(LogTemp, Log, TEXT("Invert Selection triggered"));
 
 	if (bIsListView)
 	{
@@ -1854,5 +1693,4 @@ void UInventoryWidget::HandleInvertSelection()
 		}
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("Invert Selection completed"));
 }

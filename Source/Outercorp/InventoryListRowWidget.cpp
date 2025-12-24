@@ -9,6 +9,7 @@
 #include "Components/SizeBox.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/VerticalBox.h"
 #include "InventoryItemData.h"
 #include "InventorySlotWidget.h"
 #include "Engine/Texture2D.h"
@@ -19,6 +20,7 @@
 // Initialize static members
 TSet<UInventoryListRowWidget*> UInventoryListRowWidget::SelectedRows;
 TWeakObjectPtr<UUserWidget> UInventoryListRowWidget::CurrentContextMenu;
+TWeakObjectPtr<UInventoryListRowWidget> UInventoryListRowWidget::LastClickedRow;
 
 void UInventoryListRowWidget::NativeConstruct()
 {
@@ -66,20 +68,16 @@ void UInventoryListRowWidget::NativeConstruct()
 
 void UInventoryListRowWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
 {
-	UE_LOG(LogTemp, Warning, TEXT("InventoryListRowWidget: NativeOnListItemObjectSet called"));
-
 	ItemData = Cast<UInventoryListItemData>(ListItemObject);
 
 	if (!ItemData)
 	{
-		UE_LOG(LogTemp, Error, TEXT("InventoryListRowWidget: Failed to cast ListItemObject to UInventoryListItemData!"));
 		return;
 	}
 
 	// Set row index from slot index for alternating colors
 	RowIndex = ItemData->SlotIndex;
 
-	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: ItemData set successfully, calling RefreshDisplay"));
 	RefreshDisplay();
 
 	// Update background color based on alternating rows setting
@@ -96,20 +94,8 @@ void UInventoryListRowWidget::NativeOnItemSelectionChanged(bool bIsItemSelected)
 
 void UInventoryListRowWidget::RefreshDisplay()
 {
-	UE_LOG(LogTemp, Warning, TEXT("InventoryListRowWidget: RefreshDisplay called"));
-
-	// Check all widgets
-	UE_LOG(LogTemp, Log, TEXT("  ItemNameText: %s"), ItemNameText ? TEXT("OK") : TEXT("NULL"));
-	UE_LOG(LogTemp, Log, TEXT("  QuantityText: %s"), QuantityText ? TEXT("OK") : TEXT("NULL"));
-	UE_LOG(LogTemp, Log, TEXT("  WeightText: %s"), WeightText ? TEXT("OK") : TEXT("NULL"));
-	UE_LOG(LogTemp, Log, TEXT("  ValueText: %s"), ValueText ? TEXT("OK") : TEXT("NULL"));
-	UE_LOG(LogTemp, Log, TEXT("  RarityText: %s"), RarityText ? TEXT("OK") : TEXT("NULL"));
-	UE_LOG(LogTemp, Log, TEXT("  CategoryText: %s"), CategoryText ? TEXT("OK") : TEXT("NULL"));
-	UE_LOG(LogTemp, Log, TEXT("  ItemIcon: %s"), ItemIcon ? TEXT("OK") : TEXT("NULL"));
-
 	if (!ItemData || !ItemData->Item.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("InventoryListRowWidget: No valid item data, clearing fields"));
 		// Empty row - clear all fields
 		if (ItemNameText) ItemNameText->SetText(FText::FromString(TEXT("-")));
 		if (QuantityText) QuantityText->SetText(FText::FromString(TEXT("-")));
@@ -121,23 +107,13 @@ void UInventoryListRowWidget::RefreshDisplay()
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Item data valid, updating display"));
-
 	const FInventoryItem& Item = ItemData->Item;
 	UInventoryItemData* ItemDataAsset = Item.ItemData;
 
 	if (!ItemDataAsset)
 	{
-		UE_LOG(LogTemp, Error, TEXT("InventoryListRowWidget: ItemDataAsset is NULL!"));
 		return;
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Setting item name to '%s'"), *ItemDataAsset->ItemName.ToString());
-
-	// Check this widget's size
-	FVector2D WidgetSize = GetCachedGeometry().GetLocalSize();
-	UE_LOG(LogTemp, Warning, TEXT("InventoryListRowWidget: Row widget size: %.2f x %.2f"), WidgetSize.X, WidgetSize.Y);
-	UE_LOG(LogTemp, Warning, TEXT("InventoryListRowWidget: Row widget visibility: %d"), (int32)GetVisibility());
 
 	// Set item name
 	if (ItemNameText)
@@ -147,11 +123,6 @@ void UInventoryListRowWidget::RefreshDisplay()
 
 		// Ensure text doesn't overflow - clip to bounds
 		ItemNameText->SetAutoWrapText(false);
-
-		UE_LOG(LogTemp, Log, TEXT("  ItemNameText size: %.2f x %.2f, visibility: %d"),
-			ItemNameText->GetCachedGeometry().GetLocalSize().X,
-			ItemNameText->GetCachedGeometry().GetLocalSize().Y,
-			(int32)ItemNameText->GetVisibility());
 	}
 
 	// Set quantity
@@ -243,7 +214,6 @@ FReply UInventoryListRowWidget::NativeOnMouseButtonDown(const FGeometry& InGeome
 			if (!ItemData || !ItemData->Item.IsValid())
 			{
 				// Empty row - call empty row context menu event
-				UE_LOG(LogTemp, Log, TEXT("Calling OnEmptyRowRightClicked at position (%f, %f)"), MousePosition.X, MousePosition.Y);
 				OnEmptyRowRightClicked(MousePosition);
 			}
 			else
@@ -254,7 +224,6 @@ FReply UInventoryListRowWidget::NativeOnMouseButtonDown(const FGeometry& InGeome
 					SelectRow(false);
 				}
 
-				UE_LOG(LogTemp, Log, TEXT("Calling OnRightClicked at position (%f, %f)"), MousePosition.X, MousePosition.Y);
 				OnRightClicked(MousePosition);
 			}
 		}
@@ -265,17 +234,11 @@ FReply UInventoryListRowWidget::NativeOnMouseButtonDown(const FGeometry& InGeome
 	// Handle left-click
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Left mouse down on list row - ItemData=%s, Item.IsValid=%s"),
-			ItemData ? TEXT("YES") : TEXT("NO"),
-			(ItemData && ItemData->Item.IsValid()) ? TEXT("YES") : TEXT("NO"));
-
 		// Only start drag if row has an item
 		if (ItemData && ItemData->Item.IsValid())
 		{
 			// Reset drag flag
 			bDragStarted = false;
-
-			UE_LOG(LogTemp, Log, TEXT("Starting drag detection for row slot %d"), ItemData->SlotIndex);
 
 			// Start drag detection
 			return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
@@ -293,10 +256,27 @@ FReply UInventoryListRowWidget::NativeOnMouseButtonUp(const FGeometry& InGeometr
 		// Only handle if row has an item
 		if (ItemData && ItemData->Item.IsValid())
 		{
-			// Check if Shift or Ctrl is held for multi-selection
-			bool bAddToSelection = InMouseEvent.IsControlDown() || InMouseEvent.IsShiftDown();
+			bool bShiftDown = InMouseEvent.IsShiftDown();
+			bool bCtrlDown = InMouseEvent.IsControlDown();
 
-			ToggleSelection(bAddToSelection);
+			if (bShiftDown)
+			{
+				// Shift-click: Range selection from last clicked to this row
+				SelectRange();
+			}
+			else if (bCtrlDown)
+			{
+				// Ctrl-click: Toggle this row while keeping other selections
+				ToggleSelection(true);
+			}
+			else
+			{
+				// Normal click: Select only this row (clear others)
+				ToggleSelection(false);
+			}
+
+			// Update last clicked row for future range selections
+			LastClickedRow = this;
 
 			return FReply::Handled();
 		}
@@ -333,8 +313,8 @@ void UInventoryListRowWidget::SelectRow(bool bAddToSelection)
 	// Update visual
 	UpdateSelectionVisual();
 
-	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Row selected - Slot %d (%d total selected)"),
-		ItemData->SlotIndex, SelectedRows.Num());
+	// Update last clicked row
+	LastClickedRow = this;
 }
 
 void UInventoryListRowWidget::DeselectRow()
@@ -349,21 +329,28 @@ void UInventoryListRowWidget::DeselectRow()
 
 	// Update visual
 	UpdateSelectionVisual();
-
-	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Row deselected - Slot %d (%d total selected)"),
-		ItemData ? ItemData->SlotIndex : -1, SelectedRows.Num());
 }
 
 void UInventoryListRowWidget::ToggleSelection(bool bAddToSelection)
 {
 	if (bIsSelected)
 	{
-		// If already selected and adding to selection (Ctrl/Shift), deselect this row
+		// If already selected and adding to selection (Ctrl), deselect this row
 		if (bAddToSelection)
 		{
 			DeselectRow();
 		}
-		// If not adding to selection, clicking selected row does nothing (keeps it selected)
+		else
+		{
+			// Normal click on already selected row - clear all other selections
+			// This handles the case where multiple items are selected and you click one of them
+			if (SelectedRows.Num() > 1)
+			{
+				ClearAllRowSelections();
+				SelectRow(false);
+			}
+			// If only this row is selected, clicking it again does nothing (keeps it selected)
+		}
 	}
 	else
 	{
@@ -387,8 +374,6 @@ void UInventoryListRowWidget::ClearAllRowSelections()
 
 	// Clear the set just in case
 	SelectedRows.Empty();
-
-	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: All row selections cleared"));
 }
 
 void UInventoryListRowWidget::UpdateSelectionVisual()
@@ -468,13 +453,10 @@ void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, 
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Drag detected on row with slot %d"), ItemData->SlotIndex);
-
 	// Clear all selections when starting a drag operation (both list and grid)
 	if (SelectedRows.Num() > 0)
 	{
 		ClearAllRowSelections();
-		UE_LOG(LogTemp, Log, TEXT("Cleared all list row selections on drag start"));
 	}
 
 	// Also clear grid view selections to keep both views in sync
@@ -493,13 +475,6 @@ void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, 
 	// Use the DragVisualClass if set in Blueprint, otherwise try to find the BP widget
 	TSubclassOf<UInventorySlotWidget> WidgetClass = DragVisualClass;
 
-	if (!WidgetClass)
-	{
-		// Try to load the default WBP_InventorySlot class
-		UE_LOG(LogTemp, Warning, TEXT("DragVisualClass not set - please set it in WBP_InventoryListRow to WBP_InventorySlot"));
-		// We could try to load it here, but it's better to have it set in Blueprint
-	}
-
 	if (WidgetClass)
 	{
 		UInventorySlotWidget* DragVisual = CreateWidget<UInventorySlotWidget>(GetOwningPlayer(), WidgetClass);
@@ -512,13 +487,6 @@ void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, 
 			DragDropOp->DraggedVisual = DragVisual;
 			DragDropOp->Pivot = EDragPivot::CenterCenter;
 			DragDropOp->Offset = FVector2D(0, 0);
-
-			UE_LOG(LogTemp, Log, TEXT("Created drag visual for item: %s"),
-				ItemData->Item.ItemData ? *ItemData->Item.ItemData->ItemName.ToString() : TEXT("NULL"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("Failed to create drag visual widget from class!"));
 		}
 	}
 
@@ -548,9 +516,6 @@ bool UInventoryListRowWidget::NativeOnDrop(const FGeometry& InGeometry, const FD
 		return false;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("InventoryListRowWidget: Drop from slot %d to slot %d"),
-		DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
-
 	// Handle split operation
 	if (DragDropOp->bIsSplitOperation)
 	{
@@ -558,8 +523,6 @@ bool UInventoryListRowWidget::NativeOnDrop(const FGeometry& InGeometry, const FD
 		if (SplitAmount > 0)
 		{
 			ItemData->InventoryComponent->SplitStack(DragDropOp->SourceSlotIndex, ItemData->SlotIndex, SplitAmount);
-			UE_LOG(LogTemp, Log, TEXT("Split %d items from slot %d to slot %d"),
-				SplitAmount, DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
 		}
 		bDragStarted = false;
 		return true;
@@ -576,15 +539,11 @@ bool UInventoryListRowWidget::NativeOnDrop(const FGeometry& InGeometry, const FD
 		DraggedItem.ItemData->ItemID == TargetItem.ItemData->ItemID)
 	{
 		// Same item type - merge stacks
-		UE_LOG(LogTemp, Log, TEXT("Merging stacks: slot %d to slot %d"),
-			DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
 		ItemData->InventoryComponent->MergeStacks(DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
 	}
 	else
 	{
 		// Different items or target is empty - swap
-		UE_LOG(LogTemp, Log, TEXT("Swapping items: slot %d with slot %d"),
-			DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
 		ItemData->InventoryComponent->MoveItem(DragDropOp->SourceSlotIndex, ItemData->SlotIndex);
 	}
 
@@ -598,9 +557,6 @@ void UInventoryListRowWidget::NativeOnDragEnter(const FGeometry& InGeometry, con
 
 	// Show visual feedback that this row can accept the drop
 	UpdateDragVisual(true);
-
-	UE_LOG(LogTemp, Verbose, TEXT("InventoryListRowWidget: Drag enter on row with slot %d"),
-		ItemData ? ItemData->SlotIndex : -1);
 }
 
 void UInventoryListRowWidget::NativeOnDragLeave(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
@@ -612,9 +568,6 @@ void UInventoryListRowWidget::NativeOnDragLeave(const FDragDropEvent& InDragDrop
 
 	// Reset drag flag when drag leaves
 	bDragStarted = false;
-
-	UE_LOG(LogTemp, Verbose, TEXT("InventoryListRowWidget: Drag leave on row with slot %d"),
-		ItemData ? ItemData->SlotIndex : -1);
 }
 
 void UInventoryListRowWidget::UpdateDragVisual(bool bIsDragTarget)
@@ -783,21 +736,6 @@ void UInventoryListRowWidget::OnColumnWidthsChanged()
 
 void UInventoryListRowWidget::HandleContextMenuAction_Implementation(FName ActionID)
 {
-	UE_LOG(LogTemp, Warning, TEXT("===== LIST ROW HandleContextMenuAction ====="));
-	UE_LOG(LogTemp, Warning, TEXT("ActionID: %s"), *ActionID.ToString());
-	UE_LOG(LogTemp, Warning, TEXT("ItemData valid: %s"), ItemData ? TEXT("YES") : TEXT("NO"));
-	if (ItemData)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("  Item valid: %s"), ItemData->Item.IsValid() ? TEXT("YES") : TEXT("NO"));
-		UE_LOG(LogTemp, Warning, TEXT("  SlotIndex: %d"), ItemData->SlotIndex);
-		UE_LOG(LogTemp, Warning, TEXT("  InventoryComponent valid: %s"), ItemData->InventoryComponent ? TEXT("YES") : TEXT("NO"));
-		if (ItemData->Item.IsValid())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("  Item name: %s"), *ItemData->Item.ItemData->ItemName.ToString());
-			UE_LOG(LogTemp, Warning, TEXT("  Quantity: %d"), ItemData->Item.Quantity);
-		}
-	}
-
 	if (ActionID == "Split")
 	{
 		HandleSplitItem();
@@ -830,20 +768,13 @@ void UInventoryListRowWidget::HandleContextMenuAction_Implementation(FName Actio
 
 void UInventoryListRowWidget::HandleSplitItem()
 {
-	UE_LOG(LogTemp, Warning, TEXT("HandleSplitItem called"));
-
 	if (!ItemData || !ItemData->Item.IsValid() || !ItemData->InventoryComponent)
 	{
-		UE_LOG(LogTemp, Error, TEXT("HandleSplitItem FAILED: ItemData=%s, Item.IsValid=%s, InvComp=%s"),
-			ItemData ? TEXT("YES") : TEXT("NO"),
-			(ItemData && ItemData->Item.IsValid()) ? TEXT("YES") : TEXT("NO"),
-			(ItemData && ItemData->InventoryComponent) ? TEXT("YES") : TEXT("NO"));
 		return;
 	}
 
 	if (ItemData->Item.Quantity <= 1)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Cannot split item with quantity 1 or less"));
 		return;
 	}
 
@@ -851,30 +782,18 @@ void UInventoryListRowWidget::HandleSplitItem()
 	int32 EmptySlot = ItemData->InventoryComponent->FindEmptySlot();
 	if (EmptySlot == -1)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No empty slot available for split"));
 		return;
 	}
 
 	// Split stack in half
 	int32 SplitAmount = ItemData->Item.Quantity / 2;
-	UE_LOG(LogTemp, Warning, TEXT("Calling SplitStack: FromSlot=%d, ToSlot=%d, Amount=%d"),
-		ItemData->SlotIndex, EmptySlot, SplitAmount);
-
 	ItemData->InventoryComponent->SplitStack(ItemData->SlotIndex, EmptySlot, SplitAmount);
-
-	UE_LOG(LogTemp, Warning, TEXT("Split completed: %d items from slot %d to slot %d"), SplitAmount, ItemData->SlotIndex, EmptySlot);
 }
 
 void UInventoryListRowWidget::HandleDestroyItem()
 {
-	UE_LOG(LogTemp, Warning, TEXT("HandleDestroyItem called"));
-
 	if (!ItemData || !ItemData->Item.IsValid() || !ItemData->InventoryComponent)
 	{
-		UE_LOG(LogTemp, Error, TEXT("HandleDestroyItem FAILED: ItemData=%s, Item.IsValid=%s, InvComp=%s"),
-			ItemData ? TEXT("YES") : TEXT("NO"),
-			(ItemData && ItemData->Item.IsValid()) ? TEXT("YES") : TEXT("NO"),
-			(ItemData && ItemData->InventoryComponent) ? TEXT("YES") : TEXT("NO"));
 		return;
 	}
 
@@ -884,8 +803,6 @@ void UInventoryListRowWidget::HandleDestroyItem()
 	FString ItemName = ItemData->Item.ItemData->ItemName.ToString();
 	UInventoryComponent* CachedInventoryComponent = ItemData->InventoryComponent;
 
-	UE_LOG(LogTemp, Warning, TEXT("Scheduling destroy for slot %d (%s x%d)"), CachedSlotIndex, *ItemName, CachedQuantity);
-
 	// Defer the actual item removal until the next frame
 	if (UWorld* World = GetWorld())
 	{
@@ -893,44 +810,21 @@ void UInventoryListRowWidget::HandleDestroyItem()
 		{
 			if (IsValid(CachedInventoryComponent))
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Executing deferred destroy: RemoveItemAtSlot(%d, %d)"), CachedSlotIndex, CachedQuantity);
 				CachedInventoryComponent->RemoveItemAtSlot(CachedSlotIndex, CachedQuantity);
-				UE_LOG(LogTemp, Warning, TEXT("Destroyed %d x %s from slot %d"),
-					CachedQuantity,
-					*ItemName,
-					CachedSlotIndex);
-			}
-			else
-			{
-				UE_LOG(LogTemp, Error, TEXT("Deferred destroy FAILED: InventoryComponent is no longer valid!"));
 			}
 		});
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("HandleDestroyItem: Could not get World!"));
 	}
 }
 
 void UInventoryListRowWidget::HandleShowInfo()
 {
-	UE_LOG(LogTemp, Warning, TEXT("HandleShowInfo called"));
-
 	if (!ItemData || !ItemData->Item.IsValid())
 	{
-		UE_LOG(LogTemp, Error, TEXT("HandleShowInfo FAILED: ItemData=%s, Item.IsValid=%s"),
-			ItemData ? TEXT("YES") : TEXT("NO"),
-			(ItemData && ItemData->Item.IsValid()) ? TEXT("YES") : TEXT("NO"));
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("Calling ShowItemInfoUI Blueprint event for item: %s"),
-		*ItemData->Item.ItemData->ItemName.ToString());
-
 	// Call Blueprint event to show UI
 	ShowItemInfoUI(ItemData->Item);
-
-	UE_LOG(LogTemp, Warning, TEXT("ShowItemInfoUI Blueprint event called (check if event is implemented in BP)"));
 }
 
 void UInventoryListRowWidget::HandleStackAll()
@@ -946,13 +840,9 @@ void UInventoryListRowWidget::HandleStackAll()
 	// If slot is empty, stack ALL items in the inventory (same as Stack All Empty)
 	if (!ItemToStack.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("HandleStackAll called on empty slot - stacking ALL items"));
 		HandleStackAllEmpty();
 		return;
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Stack All triggered for slot %d - stacking items of type '%s'"),
-		ItemData->SlotIndex, *ItemToStack.ItemData->ItemName.ToString());
 
 	// Get the item ID we want to stack
 	FName TargetItemID = ItemToStack.ItemData->ItemID;
@@ -975,12 +865,8 @@ void UInventoryListRowWidget::HandleStackAll()
 
 	if (MatchingSlots.Num() <= 1)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Stack All: Only one stack found, nothing to merge"));
 		return;
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Stack All: Found %d stacks of '%s'"),
-		MatchingSlots.Num(), *ItemToStack.ItemData->ItemName.ToString());
 
 	// Sort slots so we process them in order
 	MatchingSlots.Sort();
@@ -1009,9 +895,6 @@ void UInventoryListRowWidget::HandleStackAll()
 			// Check if target has space
 			if (TargetItem.IsValid() && TargetItem.Quantity < TargetItem.ItemData->MaxStackSize)
 			{
-				UE_LOG(LogTemp, Log, TEXT("  Merging slot %d (qty=%d) into slot %d (qty=%d)"),
-					SourceSlot, SourceItem.Quantity, TargetSlot, TargetItem.Quantity);
-
 				ItemData->InventoryComponent->MergeStacks(SourceSlot, TargetSlot);
 
 				// Check if source is now empty, if so we're done with this source
@@ -1024,8 +907,6 @@ void UInventoryListRowWidget::HandleStackAll()
 			}
 		}
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Stack All completed for '%s'"), *ItemToStack.ItemData->ItemName.ToString());
 }
 
 void UInventoryListRowWidget::HandleStackAllEmpty()
@@ -1034,8 +915,6 @@ void UInventoryListRowWidget::HandleStackAllEmpty()
 	{
 		return;
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Stack All (Empty) triggered - consolidating all stackable items"));
 
 	// Get all items
 	TArray<FInventoryItem> AllItems = ItemData->InventoryComponent->GetAllItems();
@@ -1064,14 +943,10 @@ void UInventoryListRowWidget::HandleStackAllEmpty()
 			}
 		}
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Stack All completed"));
 }
 
 void UInventoryListRowWidget::HandleSelectAll()
 {
-	UE_LOG(LogTemp, Log, TEXT("Select All triggered"));
-
 	// Select all rows
 	for (UInventoryListRowWidget* Row : SelectedRows)
 	{
@@ -1083,25 +958,127 @@ void UInventoryListRowWidget::HandleSelectAll()
 
 	// Also need to select all rows that aren't in the set yet
 	// This would require access to all row widgets, which we don't have here
-	// For now, just log that it was called
-	UE_LOG(LogTemp, Warning, TEXT("Select All for list view - needs access to all rows"));
 }
 
 void UInventoryListRowWidget::HandleInvertSelection()
 {
-	UE_LOG(LogTemp, Log, TEXT("Invert Selection triggered"));
-
 	// Invert selection of all rows
 	// This would require access to all row widgets, which we don't have here
-	// For now, just log that it was called
-	UE_LOG(LogTemp, Warning, TEXT("Invert Selection for list view - needs access to all rows"));
+}
+
+void UInventoryListRowWidget::SelectRange()
+{
+	// Get the last clicked row
+	UInventoryListRowWidget* StartRow = LastClickedRow.Get();
+	if (!StartRow || !StartRow->IsValidLowLevel())
+	{
+		// No previous selection, just select this row
+		SelectRow(false);
+		return;
+	}
+
+	// Get all rows in the list
+	TArray<UInventoryListRowWidget*> AllRows = GetAllRowsInList();
+	if (AllRows.Num() == 0)
+	{
+		// Fallback to simple selection
+		SelectRow(false);
+		return;
+	}
+
+	// Find indices of start and end rows in the list
+	int32 StartIndex = -1;
+	int32 EndIndex = -1;
+
+	for (int32 i = 0; i < AllRows.Num(); ++i)
+	{
+		if (AllRows[i] == StartRow)
+		{
+			StartIndex = i;
+		}
+		if (AllRows[i] == this)
+		{
+			EndIndex = i;
+		}
+	}
+
+	// Validate indices
+	if (StartIndex == -1 || EndIndex == -1)
+	{
+		// Could not find rows in list, fallback to simple selection
+		SelectRow(false);
+		return;
+	}
+
+	// Ensure StartIndex is less than EndIndex
+	if (StartIndex > EndIndex)
+	{
+		Swap(StartIndex, EndIndex);
+	}
+
+	// Clear all selections first
+	ClearAllRowSelections();
+
+	// Select all rows in range
+	for (int32 i = StartIndex; i <= EndIndex; ++i)
+	{
+		if (AllRows.IsValidIndex(i) && AllRows[i] && AllRows[i]->IsValidLowLevel())
+		{
+			UInventoryListRowWidget* Row = AllRows[i];
+			if (Row->ItemData && Row->ItemData->Item.IsValid())
+			{
+				Row->bIsSelected = true;
+				SelectedRows.Add(Row);
+				Row->UpdateSelectionVisual();
+			}
+		}
+	}
+}
+
+TArray<UInventoryListRowWidget*> UInventoryListRowWidget::GetAllRowsInList() const
+{
+	TArray<UInventoryListRowWidget*> AllRows;
+
+	// Try to get the parent VerticalBox or ListView container
+	UWidget* Parent = GetParent();
+	while (Parent)
+	{
+		// Check if parent is a VerticalBox (for table view)
+		if (UVerticalBox* VerticalBox = Cast<UVerticalBox>(Parent))
+		{
+			// Get all children of the vertical box
+			TArray<UWidget*> Children = VerticalBox->GetAllChildren();
+			for (UWidget* Child : Children)
+			{
+				if (UInventoryListRowWidget* RowWidget = Cast<UInventoryListRowWidget>(Child))
+				{
+					AllRows.Add(RowWidget);
+				}
+			}
+			break;
+		}
+
+		// Move up the widget hierarchy
+		Parent = Parent->GetParent();
+	}
+
+	// Sort by slot index to ensure correct order
+	AllRows.Sort([](const UInventoryListRowWidget& A, const UInventoryListRowWidget& B) -> bool
+	{
+		if (!A.ItemData || !B.ItemData)
+		{
+			return false;
+		}
+		return A.ItemData->SlotIndex < B.ItemData->SlotIndex;
+	});
+
+	return AllRows;
 }
 
 void UInventoryListRowWidget::CloseCurrentContextMenu()
 {
 	if (CurrentContextMenu.IsValid())
 	{
-		UE_LOG(LogTemp, Log, TEXT("Closing previous context menu"));
 		CurrentContextMenu->RemoveFromParent();
 		CurrentContextMenu.Reset();
 	}
@@ -1114,7 +1091,6 @@ void UInventoryListRowWidget::SetCurrentContextMenu(UUserWidget* ContextMenu)
 
 	if (ContextMenu)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Setting new current context menu"));
 		CurrentContextMenu = ContextMenu;
 	}
 }

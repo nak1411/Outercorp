@@ -158,6 +158,9 @@ protected:
 	/** Static pointer to the currently open context menu (shared across all rows) */
 	static TWeakObjectPtr<UUserWidget> CurrentContextMenu;
 
+	/** Static pointer to the last clicked row (for shift-click range selection) */
+	static TWeakObjectPtr<UInventoryListRowWidget> LastClickedRow;
+
 public:
 	/** The data for this row */
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
@@ -198,6 +201,13 @@ public:
 	/** Toggle selection of this row */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void ToggleSelection(bool bAddToSelection = false);
+
+	/** Handle range selection from last clicked row to this row (for shift-click) */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void SelectRange();
+
+	/** Get all rows from the same list view container */
+	TArray<UInventoryListRowWidget*> GetAllRowsInList() const;
 
 	/** Clear all row selections */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
