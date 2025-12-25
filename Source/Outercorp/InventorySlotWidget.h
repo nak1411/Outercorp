@@ -70,6 +70,9 @@ protected:
 	/** Track if we started a drag operation */
 	bool bDragStarted = false;
 
+	/** Cached item name to avoid unnecessary text updates */
+	FText CachedItemName;
+
 public:
 	/** Track if mouse is currently hovering over this slot */
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory")

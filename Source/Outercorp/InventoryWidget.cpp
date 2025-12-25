@@ -218,6 +218,12 @@ void UInventoryWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 		{
 			CreateSlotWidgets();
 			bWaitingForGeometry = false;
+
+			// Initialize cached size to prevent triggering reflow on next tick
+			if (ItemScrollBox)
+			{
+				CachedGridSize = ItemScrollBox->GetCachedGeometry().GetLocalSize();
+			}
 		}
 	}
 
@@ -335,6 +341,12 @@ void UInventoryWidget::InitializeInventory(UInventoryComponent *InInventoryCompo
 	{
 		// Initial refresh if slots were created
 		RefreshInventory();
+
+		// Initialize cached size to prevent triggering reflow on first tick
+		if (ItemScrollBox)
+		{
+			CachedGridSize = ItemScrollBox->GetCachedGeometry().GetLocalSize();
+		}
 	}
 }
 
@@ -820,15 +832,12 @@ void UInventoryWidget::UpdateScrollbarVisibility()
 	float AvailableHeight = ItemScrollBox->GetCachedGeometry().GetLocalSize().Y;
 	float RowHeight = SlotSize.Y + (SlotPadding.Top + SlotPadding.Bottom);
 
-	// If geometry is not valid yet, force scrollbar to be visible if there are items beyond first few rows
+	// If geometry is not valid yet, hide scrollbar to prevent flicker on initial open
 	if (AvailableHeight <= 0.0f)
 	{
-		// No valid geometry yet - be conservative and show scrollbar if there are many items
-		if (LastRowWithItem > 3)
-		{
-			ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Visible);
-			ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::WhenScrollingPossible);
-		}
+		// No valid geometry yet - hide scrollbar to prevent flicker, it will be shown on next update
+		ItemScrollBox->SetScrollBarVisibility(ESlateVisibility::Collapsed);
+		ItemScrollBox->SetConsumeMouseWheel(EConsumeMouseWheel::Never);
 		return;
 	}
 

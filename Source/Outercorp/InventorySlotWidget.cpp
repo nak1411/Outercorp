@@ -713,18 +713,21 @@ void UInventorySlotWidget::UpdateAppearance()
 		// Set item icon
 		if (ItemIcon)
 		{
-			ItemIcon->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
-
 			if (CurrentItem.ItemData->ItemIcon.IsNull())
 			{
 				ItemIcon->SetBrushFromTexture(nullptr);
+				ItemIcon->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 			}
 			else
 			{
-				ItemIcon->SetOpacity(ItemIconOpacity);
-				// Load icon asynchronously
+				// Load icon synchronously (already loaded in most cases due to caching)
 				UTexture2D *IconTexture = CurrentItem.ItemData->ItemIcon.LoadSynchronous();
-				ItemIcon->SetBrushFromTexture(IconTexture);
+				if (IconTexture)
+				{
+					ItemIcon->SetBrushFromTexture(IconTexture);
+					ItemIcon->SetOpacity(ItemIconOpacity);
+					ItemIcon->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+				}
 			}
 		}
 
@@ -745,9 +748,27 @@ void UInventorySlotWidget::UpdateAppearance()
 		// Set item name text
 		if (ItemText)
 		{
-			ItemText->SetText(CurrentItem.ItemData->ItemName);
-			ItemText->SetColorAndOpacity(CurrentItem.ItemData->GetRarityColor());
-			ItemText->SetVisibility(ESlateVisibility::Visible);
+			FText NewText = CurrentItem.ItemData->ItemName;
+			FLinearColor NewColor = CurrentItem.ItemData->GetRarityColor();
+
+			// Check if text or visibility needs updating
+			bool bTextChanged = !CachedItemName.EqualTo(NewText);
+			bool bIsHidden = ItemText->GetVisibility() != ESlateVisibility::Visible;
+
+			// Update text if it changed OR if the widget is currently hidden (first time showing)
+			if (bTextChanged || bIsHidden)
+			{
+				// Text changed or first time showing - update both color and text
+				ItemText->SetColorAndOpacity(NewColor);
+				ItemText->SetText(NewText);
+				ItemText->SetVisibility(ESlateVisibility::Visible);
+				CachedItemName = NewText;
+			}
+			else
+			{
+				// Text is the same and visible, just update color if needed
+				ItemText->SetColorAndOpacity(NewColor);
+			}
 		}
 
 		// Set quantity border visibility
@@ -773,7 +794,7 @@ void UInventorySlotWidget::UpdateAppearance()
 	}
 	else
 	{
-		// Empty slot - hide icon completely
+		// Empty slot - hide icon completely and clear cached text
 		if (ItemIcon)
 		{
 			ItemIcon->SetVisibility(ESlateVisibility::Hidden);
@@ -787,6 +808,7 @@ void UInventorySlotWidget::UpdateAppearance()
 		if (ItemText)
 		{
 			ItemText->SetVisibility(ESlateVisibility::Hidden);
+			CachedItemName = FText::GetEmpty(); // Clear cache for empty slots
 		}
 
 		if (QuantityBorder)
