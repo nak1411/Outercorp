@@ -7,6 +7,7 @@
 #include "Blueprint/DragDropOperation.h"
 #include "InventoryItemData.h"
 #include "InventoryContextMenuHandler.h"
+#include "TooltipWidget.h"
 #include "InventorySlotWidget.generated.h"
 
 class UInventoryComponent;
@@ -147,6 +148,22 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
 	bool bShowHoverOnEmptySlots = false;
 
+	/** Whether to enable tooltips on this slot */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Tooltip")
+	bool bEnableTooltip = true;
+
+	/** Tooltip widget class to spawn */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Tooltip")
+	TSubclassOf<UTooltipWidget> TooltipClass;
+
+	/** Tooltip display configuration */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Tooltip")
+	FTooltipDisplayConfig TooltipConfig;
+
+	/** Reference to currently active tooltip */
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Tooltip")
+	TObjectPtr<UTooltipWidget> ActiveTooltip;
+
 public:
 	/** Set the item for this slot */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -243,6 +260,12 @@ protected:
 
 	/** Broadcast selection change to all slots in the inventory */
 	void BroadcastSelectionChanged();
+
+	/** Show tooltip for this slot */
+	void ShowTooltip();
+
+	/** Hide tooltip for this slot */
+	void HideTooltip();
 
 public:
 	/** Get current selection state for this slot */

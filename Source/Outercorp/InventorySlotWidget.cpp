@@ -4,6 +4,7 @@
 #include "InventoryComponent.h"
 #include "InventoryWidget.h"
 #include "InventoryListRowWidget.h"
+#include "TooltipWidget.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
@@ -67,6 +68,9 @@ void UInventorySlotWidget::NativeDestruct()
 {
 	// Clear hover state when widget is destroyed
 	bIsHovered = false;
+
+	// Hide and destroy tooltip if active
+	HideTooltip();
 
 	// Unregister from the registry
 	if (InventoryComponent)
@@ -350,6 +354,12 @@ void UInventorySlotWidget::NativeOnMouseEnter(const FGeometry &InGeometry, const
 
 		// Notify Blueprint of hover state change
 		OnHoverStateChanged(true);
+
+		// Show tooltip if enabled and slot has an item
+		if (bEnableTooltip && CurrentItem.IsValid())
+		{
+			ShowTooltip();
+		}
 	}
 }
 
@@ -367,6 +377,12 @@ void UInventorySlotWidget::NativeOnMouseLeave(const FPointerEvent &InMouseEvent)
 
 		// Notify Blueprint of hover state change
 		OnHoverStateChanged(false);
+
+		// Hide tooltip when mouse leaves (unless it's persistent)
+		if (bEnableTooltip && ActiveTooltip && !TooltipConfig.bPersistent)
+		{
+			HideTooltip();
+		}
 	}
 }
 
@@ -1000,5 +1016,61 @@ void UInventorySlotWidget::BroadcastSelectionChanged()
 				SlotWidget->OnSelectionChanged(SelectedSlots);
 			}
 		}
+	}
+}
+
+void UInventorySlotWidget::ShowTooltip()
+{
+	// Don't show tooltip if disabled, no item, or no tooltip class
+	if (!bEnableTooltip || !CurrentItem.IsValid() || !TooltipClass)
+	{
+		return;
+	}
+
+	// Create tooltip if it doesn't exist
+	if (!ActiveTooltip)
+	{
+		ActiveTooltip = CreateWidget<UTooltipWidget>(GetOwningPlayer(), TooltipClass);
+		if (ActiveTooltip)
+		{
+			// Set item data BEFORE adding to viewport
+			ActiveTooltip->SetItem(CurrentItem);
+
+			// Set display configuration BEFORE adding to viewport
+			ActiveTooltip->SetDisplayConfig(TooltipConfig);
+
+			// Set source widget for snap positioning
+			ActiveTooltip->SetSourceWidget(this);
+
+			// Add to viewport - this creates the canvas slot
+			ActiveTooltip->AddToViewport(TooltipConfig.ZOrder);
+
+			// Defer Show() to next tick so the slot is available
+			if (UWorld* World = GetWorld())
+			{
+				World->GetTimerManager().SetTimerForNextTick([this]()
+				{
+					if (ActiveTooltip)
+					{
+						ActiveTooltip->Show();
+					}
+				});
+			}
+		}
+	}
+	else if (ActiveTooltip)
+	{
+		// Tooltip already exists, just show it
+		ActiveTooltip->Show();
+	}
+}
+
+void UInventorySlotWidget::HideTooltip()
+{
+	if (ActiveTooltip)
+	{
+		ActiveTooltip->Hide();
+		ActiveTooltip->RemoveFromParent();
+		ActiveTooltip = nullptr;
 	}
 }

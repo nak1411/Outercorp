@@ -8,6 +8,7 @@
 #include "Blueprint/DragDropOperation.h"
 #include "InventoryComponent.h"
 #include "InventoryContextMenuHandler.h"
+#include "TooltipWidget.h"
 #include "InventoryListRowWidget.generated.h"
 
 class UTextBlock;
@@ -48,6 +49,7 @@ class OUTERCORP_API UInventoryListRowWidget : public UUserWidget, public IUserOb
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 	virtual void NativeOnListItemObjectSet(UObject* ListItemObject) override;
 	virtual void NativeOnItemSelectionChanged(bool bIsSelected) override;
 
@@ -151,6 +153,22 @@ protected:
 	/** Widget class to use for drag visual (should be set to WBP_InventorySlot in Blueprint) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
 	TSubclassOf<UInventorySlotWidget> DragVisualClass;
+
+	/** Whether to enable tooltips on this row */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Tooltip")
+	bool bEnableTooltip = true;
+
+	/** Tooltip widget class to spawn */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Tooltip")
+	TSubclassOf<UTooltipWidget> TooltipClass;
+
+	/** Tooltip display configuration */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Tooltip")
+	FTooltipDisplayConfig TooltipConfig;
+
+	/** Reference to currently active tooltip */
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Tooltip")
+	TObjectPtr<UTooltipWidget> ActiveTooltip;
 
 	/** Static set of all selected rows across all inventory widgets */
 	static TSet<UInventoryListRowWidget*> SelectedRows;
@@ -307,4 +325,10 @@ private:
 
 	/** Handle invert selection action */
 	void HandleInvertSelection();
+
+	/** Show tooltip for this row */
+	void ShowTooltip();
+
+	/** Hide tooltip for this row */
+	void HideTooltip();
 };

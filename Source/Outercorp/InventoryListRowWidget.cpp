@@ -66,6 +66,14 @@ void UInventoryListRowWidget::NativeConstruct()
 	UpdateColumnWidths();
 }
 
+void UInventoryListRowWidget::NativeDestruct()
+{
+	// Hide and destroy tooltip if active
+	HideTooltip();
+
+	Super::NativeDestruct();
+}
+
 void UInventoryListRowWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
 {
 	ItemData = Cast<UInventoryListItemData>(ListItemObject);
@@ -429,6 +437,12 @@ void UInventoryListRowWidget::NativeOnMouseEnter(const FGeometry& InGeometry, co
 
 	// Update visual to show hover effect
 	UpdateSelectionVisual();
+
+	// Show tooltip if enabled and row has an item
+	if (bEnableTooltip && ItemData && ItemData->Item.IsValid())
+	{
+		ShowTooltip();
+	}
 }
 
 void UInventoryListRowWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
@@ -439,6 +453,12 @@ void UInventoryListRowWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEve
 
 	// Update visual to remove hover effect
 	UpdateSelectionVisual();
+
+	// Hide tooltip when mouse leaves (unless it's persistent)
+	if (bEnableTooltip && ActiveTooltip && !TooltipConfig.bPersistent)
+	{
+		HideTooltip();
+	}
 }
 
 void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
@@ -1098,4 +1118,60 @@ void UInventoryListRowWidget::SetCurrentContextMenu(UUserWidget* ContextMenu)
 UUserWidget* UInventoryListRowWidget::GetCurrentContextMenu()
 {
 	return CurrentContextMenu.Get();
+}
+
+void UInventoryListRowWidget::ShowTooltip()
+{
+	// Don't show tooltip if disabled, no item, or no tooltip class
+	if (!bEnableTooltip || !ItemData || !ItemData->Item.IsValid() || !TooltipClass)
+	{
+		return;
+	}
+
+	// Create tooltip if it doesn't exist
+	if (!ActiveTooltip)
+	{
+		ActiveTooltip = CreateWidget<UTooltipWidget>(GetOwningPlayer(), TooltipClass);
+		if (ActiveTooltip)
+		{
+			// Set item data BEFORE adding to viewport
+			ActiveTooltip->SetItem(ItemData->Item);
+
+			// Set display configuration BEFORE adding to viewport
+			ActiveTooltip->SetDisplayConfig(TooltipConfig);
+
+			// Set source widget for snap positioning
+			ActiveTooltip->SetSourceWidget(this);
+
+			// Add to viewport - this creates the canvas slot
+			ActiveTooltip->AddToViewport(TooltipConfig.ZOrder);
+
+			// Defer Show() to next tick so the slot is available
+			if (UWorld* World = GetWorld())
+			{
+				World->GetTimerManager().SetTimerForNextTick([this]()
+				{
+					if (ActiveTooltip)
+					{
+						ActiveTooltip->Show();
+					}
+				});
+			}
+		}
+	}
+	else if (ActiveTooltip)
+	{
+		// Tooltip already exists, just show it
+		ActiveTooltip->Show();
+	}
+}
+
+void UInventoryListRowWidget::HideTooltip()
+{
+	if (ActiveTooltip)
+	{
+		ActiveTooltip->Hide();
+		ActiveTooltip->RemoveFromParent();
+		ActiveTooltip = nullptr;
+	}
 }
