@@ -206,22 +206,28 @@ FVector2D UTooltipWidget::CalculateSnapPosition() const
 
 	// Get the geometry of the source widget
 	FGeometry SourceGeometry = SourceWidget->GetCachedGeometry();
-	FVector2D SourceSize = SourceGeometry.GetLocalSize();
 
-	// Get position in pixel space (not scaled)
+	// Get position in absolute pixel space
 	// LocalToViewport converts from widget local space to viewport pixel space
 	FVector2D PixelPosition;
 	FVector2D ParentScale;
 	USlateBlueprintLibrary::LocalToViewport(this, SourceGeometry, FVector2D::ZeroVector, PixelPosition, ParentScale);
 
-	FVector2D SourcePosition = PixelPosition;
+	// Get the absolute pixel size of the source widget (accounting for DPI scale)
+	FVector2D SourceSizePixels = SourceGeometry.GetAbsoluteSize();
 
-	// Get tooltip size - use OverrideSize for consistency
+	// Get DPI scale from viewport
+	float ViewportScale = UWidgetLayoutLibrary::GetViewportScale(this);
+
+	// Get tooltip size - OverrideSize is in unscaled coordinates, so we need to scale it
 	FVector2D TooltipSize = OverrideSize;
 	if (TooltipSize.X <= 0.0f || TooltipSize.Y <= 0.0f)
 	{
 		TooltipSize = FVector2D(300.0f, 200.0f);
 	}
+
+	// Scale tooltip size to match the absolute coordinate space
+	FVector2D TooltipSizePixels = TooltipSize * ViewportScale;
 
 	FVector2D Position;
 
@@ -230,62 +236,62 @@ FVector2D UTooltipWidget::CalculateSnapPosition() const
 	{
 	case ETooltipSnapAnchor::Bottom:
 		Position = FVector2D(
-			SourcePosition.X + (SourceSize.X - TooltipSize.X) * 0.5f, // Center horizontally
-			SourcePosition.Y + SourceSize.Y // Below widget
+			PixelPosition.X + (SourceSizePixels.X - TooltipSizePixels.X) * 0.5f, // Center horizontally
+			PixelPosition.Y + SourceSizePixels.Y // Below widget
 		);
 		break;
 
 	case ETooltipSnapAnchor::Top:
 		Position = FVector2D(
-			SourcePosition.X + (SourceSize.X - TooltipSize.X) * 0.5f, // Center horizontally
-			SourcePosition.Y - TooltipSize.Y // Above widget
+			PixelPosition.X + (SourceSizePixels.X - TooltipSizePixels.X) * 0.5f, // Center horizontally
+			PixelPosition.Y - TooltipSizePixels.Y // Above widget
 		);
 		break;
 
 	case ETooltipSnapAnchor::Left:
 		Position = FVector2D(
-			SourcePosition.X - TooltipSize.X, // Left of widget
-			SourcePosition.Y + (SourceSize.Y - TooltipSize.Y) * 0.5f // Center vertically
+			PixelPosition.X - TooltipSizePixels.X, // Left of widget
+			PixelPosition.Y + (SourceSizePixels.Y - TooltipSizePixels.Y) * 0.5f // Center vertically
 		);
 		break;
 
 	case ETooltipSnapAnchor::Right:
 		Position = FVector2D(
-			SourcePosition.X + SourceSize.X, // Right of widget
-			SourcePosition.Y + (SourceSize.Y - TooltipSize.Y) * 0.5f // Center vertically
+			PixelPosition.X + SourceSizePixels.X, // Right of widget
+			PixelPosition.Y + (SourceSizePixels.Y - TooltipSizePixels.Y) * 0.5f // Center vertically
 		);
 		break;
 
 	case ETooltipSnapAnchor::BottomRight:
 		Position = FVector2D(
-			SourcePosition.X + SourceSize.X, // Right edge
-			SourcePosition.Y + SourceSize.Y // Bottom edge
+			PixelPosition.X + SourceSizePixels.X, // Right edge
+			PixelPosition.Y + SourceSizePixels.Y // Bottom edge
 		);
 		break;
 
 	case ETooltipSnapAnchor::BottomLeft:
 		Position = FVector2D(
-			SourcePosition.X - TooltipSize.X, // Left of widget
-			SourcePosition.Y + SourceSize.Y // Bottom edge
+			PixelPosition.X - TooltipSizePixels.X, // Left of widget
+			PixelPosition.Y + SourceSizePixels.Y // Bottom edge
 		);
 		break;
 
 	case ETooltipSnapAnchor::TopRight:
 		Position = FVector2D(
-			SourcePosition.X + SourceSize.X, // Right edge
-			SourcePosition.Y - TooltipSize.Y // Above widget
+			PixelPosition.X + SourceSizePixels.X, // Right edge
+			PixelPosition.Y - TooltipSizePixels.Y // Above widget
 		);
 		break;
 
 	case ETooltipSnapAnchor::TopLeft:
 		Position = FVector2D(
-			SourcePosition.X - TooltipSize.X, // Left of widget
-			SourcePosition.Y - TooltipSize.Y // Above widget
+			PixelPosition.X - TooltipSizePixels.X, // Left of widget
+			PixelPosition.Y - TooltipSizePixels.Y // Above widget
 		);
 		break;
 
 	default:
-		Position = SourcePosition;
+		Position = PixelPosition;
 		break;
 	}
 

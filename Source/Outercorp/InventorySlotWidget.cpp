@@ -746,6 +746,7 @@ void UInventorySlotWidget::UpdateAppearance()
 		if (ItemText)
 		{
 			ItemText->SetText(CurrentItem.ItemData->ItemName);
+			ItemText->SetColorAndOpacity(CurrentItem.ItemData->GetRarityColor());
 			ItemText->SetVisibility(ESlateVisibility::Visible);
 		}
 
