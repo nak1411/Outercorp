@@ -109,6 +109,9 @@ void AOutercorpCharacter::BeginPlay()
 							Window->ED_SizeEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
 						}
 
+						// Pre-create the inventory widget to avoid first-open delay
+						SetupInventoryWidgetInWindow(InventoryWindow);
+
 						InventoryWindow->SetVisibility(ESlateVisibility::Hidden);
 					}
 
@@ -379,12 +382,6 @@ void AOutercorpCharacter::OpenInventory_Implementation()
 	// If the window already exists (was pre-created in HUD)
 	if (InventoryWindow)
 	{
-		// If the inventory widget hasn't been created yet, create it now
-		if (!InventoryWidget)
-		{
-			SetupInventoryWidgetInWindow(InventoryWindow);
-		}
-
 		InventoryWindow->SetVisibility(ESlateVisibility::Visible);
 	}
 	else
