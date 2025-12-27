@@ -93,15 +93,13 @@ void AOutercorpCharacter::BeginPlay()
 							Slot->SetPosition(FVector2D(100, 100));
 							Slot->SetSize(FVector2D(600, 400));
 							Slot->SetAnchors(FAnchors(0, 0, 0, 0));
-							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Set inventory window slot properties"));
 						}
 
 						// Call Init() on the window to initialize the modular window system
 						UWindow *Window = Cast<UWindow>(InventoryWindow);
 						if (Window)
 						{
-							bool bInitSuccess = Window->Init();
-							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Inventory window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
+							Window->Init();
 
 							// Set window capabilities from Blueprint-configurable properties
 							Window->SetWindowCapabilities(bInventoryCanMove, bInventoryCanResize, bInventoryCanFullscreen);
@@ -112,7 +110,6 @@ void AOutercorpCharacter::BeginPlay()
 						}
 
 						InventoryWindow->SetVisibility(ESlateVisibility::Hidden);
-						UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Created and hid InventoryWindow"));
 					}
 
 					// Create the character window and add it to the canvas
@@ -126,15 +123,13 @@ void AOutercorpCharacter::BeginPlay()
 							Slot->SetPosition(FVector2D(750, 100));
 							Slot->SetSize(FVector2D(400, 500));
 							Slot->SetAnchors(FAnchors(0, 0, 0, 0));
-							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Set character window slot properties"));
 						}
 
 						// Call Init() on the window to initialize the modular window system
 						UWindow *Window = Cast<UWindow>(CharacterWindow);
 						if (Window)
 						{
-							bool bInitSuccess = Window->Init();
-							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Character window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
+							Window->Init();
 
 							// Set window capabilities from Blueprint-configurable properties
 							Window->SetWindowCapabilities(bCharacterCanMove, bCharacterCanResize, bCharacterCanFullscreen);
@@ -145,7 +140,6 @@ void AOutercorpCharacter::BeginPlay()
 						}
 
 						CharacterWindow->SetVisibility(ESlateVisibility::Hidden);
-						UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Created and hid CharacterWindow"));
 					}
 
 					// Create the item info window and add it to the canvas
@@ -159,15 +153,13 @@ void AOutercorpCharacter::BeginPlay()
 							Slot->SetPosition(FVector2D(400, 200));
 							Slot->SetSize(FVector2D(600, 500));
 							Slot->SetAnchors(FAnchors(0, 0, 0, 0));
-							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Set item info window slot properties"));
 						}
 
 						// Call Init() on the window to initialize the modular window system
 						UWindow *Window = Cast<UWindow>(ItemInfoWindow);
 						if (Window)
 						{
-							bool bInitSuccess = Window->Init();
-							UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Item info window Init() = %s"), bInitSuccess ? TEXT("true") : TEXT("false"));
+							Window->Init();
 
 							// Set window capabilities from Blueprint-configurable properties
 							Window->SetWindowCapabilities(bItemInfoCanMove, bItemInfoCanResize, bItemInfoCanFullscreen);
@@ -178,7 +170,6 @@ void AOutercorpCharacter::BeginPlay()
 						}
 
 						ItemInfoWindow->SetVisibility(ESlateVisibility::Hidden);
-						UE_LOG(LogOutercorp, Log, TEXT("BeginPlay: Created and hid ItemInfoWindow"));
 					}
 
 					// Load saved UI layout after all windows are created
@@ -214,8 +205,6 @@ void AOutercorpCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
 
-	UE_LOG(LogOutercorp, Warning, TEXT("EndPlay: Forcing all windows to default size before save"));
-
 	// FORCE windows back to default sizes before saving
 	// This prevents saving maximized state
 	if (InventoryWindow)
@@ -229,7 +218,6 @@ void AOutercorpCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			{
 				Slot->SetSize(FVector2D(600, 400));
 				Slot->SetPosition(FVector2D(100, 100));
-				UE_LOG(LogOutercorp, Warning, TEXT("EndPlay: Reset InventoryWindow from %s to default size"), *CurrentSize.ToString());
 			}
 		}
 	}
@@ -244,7 +232,6 @@ void AOutercorpCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			{
 				Slot->SetSize(FVector2D(400, 500));
 				Slot->SetPosition(FVector2D(750, 100));
-				UE_LOG(LogOutercorp, Warning, TEXT("EndPlay: Reset CharacterWindow from %s to default size"), *CurrentSize.ToString());
 			}
 		}
 	}
@@ -259,14 +246,12 @@ void AOutercorpCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			{
 				Slot->SetSize(FVector2D(350, 450));
 				Slot->SetPosition(FVector2D(400, 200));
-				UE_LOG(LogOutercorp, Warning, TEXT("EndPlay: Reset ItemInfoWindow from %s to default size"), *CurrentSize.ToString());
 			}
 		}
 	}
 
 	// Save the layout with all windows at normal/default sizes
 	SaveUILayout();
-	UE_LOG(LogOutercorp, Warning, TEXT("EndPlay: Final UI layout saved"));
 }
 
 void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInputComponent)
@@ -375,51 +360,32 @@ void AOutercorpCharacter::ToggleInventory()
 {
 	if (!IsLocallyControlled())
 	{
-		UE_LOG(LogOutercorp, Warning, TEXT("ToggleInventory: Not locally controlled"));
 		return;
 	}
 
 	// Check if inventory is open by checking visibility
 	if (InventoryWindow != nullptr && InventoryWindow->GetVisibility() == ESlateVisibility::Visible)
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("ToggleInventory: Closing inventory"));
 		CloseInventory();
 	}
 	else
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("ToggleInventory: Opening inventory"));
 		OpenInventory();
 	}
 }
 
 void AOutercorpCharacter::OpenInventory_Implementation()
 {
-	UE_LOG(LogOutercorp, Log, TEXT("OpenInventory_Implementation: Called"));
-
 	// If the window already exists (was pre-created in HUD)
 	if (InventoryWindow)
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: InventoryWindow exists"));
-
 		// If the inventory widget hasn't been created yet, create it now
 		if (!InventoryWidget)
 		{
-			UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: Setting up inventory widget in existing window"));
 			SetupInventoryWidgetInWindow(InventoryWindow);
 		}
-		else
-		{
-			UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: InventoryWidget already exists"));
-		}
-
-		ESlateVisibility CurrentVisibility = InventoryWindow->GetVisibility();
-		UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: Current visibility: %d"), (int32)CurrentVisibility);
 
 		InventoryWindow->SetVisibility(ESlateVisibility::Visible);
-		UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: Set window to Visible"));
-
-		ESlateVisibility NewVisibility = InventoryWindow->GetVisibility();
-		UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: New visibility: %d"), (int32)NewVisibility);
 	}
 	else
 	{
@@ -435,7 +401,6 @@ void AOutercorpCharacter::OpenInventory_Implementation()
 		InputMode.SetHideCursorDuringCapture(false);
 		PC->SetInputMode(InputMode);
 		PC->SetShowMouseCursor(true);
-		UE_LOG(LogOutercorp, Log, TEXT("OpenInventory: Set input mode and mouse cursor"));
 	}
 }
 
@@ -443,7 +408,7 @@ void AOutercorpCharacter::BindInventoryEvents()
 {
 	if (!InventoryWidget)
 	{
-		UE_LOG(LogOutercorp, Error, TEXT("BindInventoryEvents: InventoryWidget is null! Make sure you set the InventoryWidget variable in Blueprint after creating the draggable window."));
+		UE_LOG(LogOutercorp, Error, TEXT("BindInventoryEvents: InventoryWidget is null!"));
 		return;
 	}
 
@@ -452,8 +417,6 @@ void AOutercorpCharacter::BindInventoryEvents()
 		UE_LOG(LogOutercorp, Error, TEXT("BindInventoryEvents: InventoryComponent is null!"));
 		return;
 	}
-
-	UE_LOG(LogOutercorp, Log, TEXT("BindInventoryEvents: Binding events and initializing inventory"));
 
 	// Bind to close event
 	InventoryWidget->OnInventoryClosed.AddDynamic(this, &AOutercorpCharacter::CloseInventory);
@@ -466,7 +429,7 @@ UCanvasPanel *AOutercorpCharacter::GetHUDCanvas() const
 {
 	if (!BaseHUDWidget)
 	{
-		UE_LOG(LogOutercorp, Error, TEXT("GetHUDCanvas: BaseHUDWidget is null! Make sure BaseHUDWidgetClass is set in BP_FirstPersonCharacter."));
+		UE_LOG(LogOutercorp, Error, TEXT("GetHUDCanvas: BaseHUDWidget is null!"));
 		return nullptr;
 	}
 
@@ -475,7 +438,7 @@ UCanvasPanel *AOutercorpCharacter::GetHUDCanvas() const
 
 	if (!Canvas)
 	{
-		UE_LOG(LogOutercorp, Error, TEXT("GetHUDCanvas: Could not find Canvas Panel named 'WindowCanvas' in the HUD widget. Make sure your WBP_Base_HUD has a Canvas Panel named exactly 'WindowCanvas'."));
+		UE_LOG(LogOutercorp, Error, TEXT("GetHUDCanvas: Could not find WindowCanvas in HUD widget"));
 	}
 
 	return Canvas;
@@ -487,7 +450,6 @@ void AOutercorpCharacter::CloseInventory()
 	if (InventoryWindow)
 	{
 		InventoryWindow->SetVisibility(ESlateVisibility::Hidden);
-		UE_LOG(LogOutercorp, Log, TEXT("CloseInventory: Hidden inventory window"));
 	}
 
 	// Don't null out references - we'll reuse them
@@ -499,15 +461,11 @@ void AOutercorpCharacter::CloseInventory()
 
 void AOutercorpCharacter::OnInventoryWidgetClosed()
 {
-	UE_LOG(LogOutercorp, Log, TEXT("OnInventoryWidgetClosed: Called"));
-
 	// Only restore game input if no other UI widgets are open
 	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
 		// Check if character window is still open (by visibility)
 		bool bAnyWidgetOpen = (CharacterWindow != nullptr && CharacterWindow->GetVisibility() == ESlateVisibility::Visible);
-
-		UE_LOG(LogOutercorp, Log, TEXT("OnInventoryWidgetClosed: bAnyWidgetOpen = %s"), bAnyWidgetOpen ? TEXT("true") : TEXT("false"));
 
 		if (bAnyWidgetOpen)
 		{
@@ -517,7 +475,6 @@ void AOutercorpCharacter::OnInventoryWidgetClosed()
 			InputMode.SetHideCursorDuringCapture(false);
 			PC->SetInputMode(InputMode);
 			PC->SetShowMouseCursor(true);
-			UE_LOG(LogOutercorp, Log, TEXT("OnInventoryWidgetClosed: Keeping UI mode (other widgets open)"));
 		}
 		else
 		{
@@ -525,7 +482,6 @@ void AOutercorpCharacter::OnInventoryWidgetClosed()
 			FInputModeGameOnly InputMode;
 			PC->SetInputMode(InputMode);
 			PC->SetShowMouseCursor(false);
-			UE_LOG(LogOutercorp, Log, TEXT("OnInventoryWidgetClosed: Restored game-only input mode"));
 		}
 	}
 }
@@ -534,19 +490,16 @@ void AOutercorpCharacter::ToggleCharacter()
 {
 	if (!IsLocallyControlled())
 	{
-		UE_LOG(LogOutercorp, Warning, TEXT("ToggleCharacter: Not locally controlled"));
 		return;
 	}
 
 	// Check if character window is open by checking visibility
 	if (CharacterWindow != nullptr && CharacterWindow->GetVisibility() == ESlateVisibility::Visible)
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("ToggleCharacter: Closing character window"));
 		CloseCharacter();
 	}
 	else
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("ToggleCharacter: Opening character window"));
 		OpenCharacter();
 	}
 }
@@ -559,22 +512,10 @@ void AOutercorpCharacter::OpenCharacter_Implementation()
 		// If the character widget hasn't been created yet, create it now
 		if (!CharacterWidget)
 		{
-			UE_LOG(LogOutercorp, Log, TEXT("OpenCharacter: Setting up character widget in existing window"));
 			SetupCharacterWidgetInWindow(CharacterWindow);
 		}
 
 		CharacterWindow->SetVisibility(ESlateVisibility::Visible);
-		UE_LOG(LogOutercorp, Log, TEXT("OpenCharacter: Showing existing character window"));
-	}
-	else
-	{
-		// This function should be overridden in Blueprint to create the modular window
-		// Blueprint should:
-		// 1. Create Modular Window with CharacterWidgetClass as child
-		// 2. Set CharacterWindow variable
-		// 3. Set CharacterWidget variable (from the content of modular window)
-		// 4. Call BindCharacterEvents()
-		UE_LOG(LogOutercorp, Log, TEXT("OpenCharacter: CharacterWindow is null, needs to be created in Blueprint"));
 	}
 
 	APlayerController *PC = Cast<APlayerController>(GetController());
@@ -593,11 +534,9 @@ void AOutercorpCharacter::BindCharacterEvents()
 {
 	if (!CharacterWidget)
 	{
-		UE_LOG(LogOutercorp, Error, TEXT("BindCharacterEvents: CharacterWidget is null! Make sure you set the CharacterWidget variable in Blueprint after creating the draggable window."));
+		UE_LOG(LogOutercorp, Error, TEXT("BindCharacterEvents: CharacterWidget is null!"));
 		return;
 	}
-
-	UE_LOG(LogOutercorp, Log, TEXT("BindCharacterEvents: Binding close event for character widget"));
 
 	// Bind to close event
 	CharacterWidget->OnCharacterClosed.AddDynamic(this, &AOutercorpCharacter::CloseCharacter);
@@ -609,7 +548,6 @@ void AOutercorpCharacter::CloseCharacter()
 	if (CharacterWindow)
 	{
 		CharacterWindow->SetVisibility(ESlateVisibility::Hidden);
-		UE_LOG(LogOutercorp, Log, TEXT("CloseCharacter: Hidden character window"));
 	}
 
 	// Don't null out references - we'll reuse them
@@ -621,15 +559,11 @@ void AOutercorpCharacter::CloseCharacter()
 
 void AOutercorpCharacter::OnCharacterWidgetClosed()
 {
-	UE_LOG(LogOutercorp, Log, TEXT("OnCharacterWidgetClosed: Called"));
-
 	// Only restore game input if no other UI widgets are open
 	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
 		// Check if inventory window is still open (by visibility)
 		bool bAnyWidgetOpen = (InventoryWindow != nullptr && InventoryWindow->GetVisibility() == ESlateVisibility::Visible);
-
-		UE_LOG(LogOutercorp, Log, TEXT("OnCharacterWidgetClosed: bAnyWidgetOpen = %s"), bAnyWidgetOpen ? TEXT("true") : TEXT("false"));
 
 		if (bAnyWidgetOpen)
 		{
@@ -639,7 +573,6 @@ void AOutercorpCharacter::OnCharacterWidgetClosed()
 			InputMode.SetHideCursorDuringCapture(false);
 			PC->SetInputMode(InputMode);
 			PC->SetShowMouseCursor(true);
-			UE_LOG(LogOutercorp, Log, TEXT("OnCharacterWidgetClosed: Keeping UI mode (other widgets open)"));
 		}
 		else
 		{
@@ -647,7 +580,6 @@ void AOutercorpCharacter::OnCharacterWidgetClosed()
 			FInputModeGameOnly InputMode;
 			PC->SetInputMode(InputMode);
 			PC->SetShowMouseCursor(false);
-			UE_LOG(LogOutercorp, Log, TEXT("OnCharacterWidgetClosed: Restored game-only input mode"));
 		}
 	}
 }
@@ -693,36 +625,26 @@ UUserWidget *AOutercorpCharacter::GetModularWindowChild(UUserWidget *ModularWind
 {
 	if (!ModularWindow)
 	{
-		UE_LOG(LogOutercorp, Warning, TEXT("GetModularWindowChild: ModularWindow is null"));
 		return nullptr;
 	}
-
-	UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Searching in window type: %s"), *ModularWindow->GetClass()->GetName());
 
 	// First, try getting the root widget and traversing from there
 	UPanelWidget *RootWidget = ModularWindow->GetRootWidget() ? Cast<UPanelWidget>(ModularWindow->GetRootWidget()) : nullptr;
 
 	if (RootWidget)
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Root widget type: %s, child count: %d"),
-			   *RootWidget->GetClass()->GetName(), RootWidget->GetChildrenCount());
-
 		// Iterate through all children of root widget
 		for (int32 i = 0; i < RootWidget->GetChildrenCount(); ++i)
 		{
 			UWidget *Child = RootWidget->GetChildAt(i);
 			if (Child)
 			{
-				UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Root child %d: %s (name: %s)"),
-					   i, *Child->GetClass()->GetName(), *Child->GetName());
-
 				// Check if this child is a UUserWidget
 				if (UUserWidget *UserWidgetChild = Cast<UUserWidget>(Child))
 				{
 					// Check if it's our target widget type
 					if (UserWidgetChild->IsA(UCharacterWidget::StaticClass()) || UserWidgetChild->IsA(UInventoryWidget::StaticClass()))
 					{
-						UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Found target widget at root child %d"), i);
 						return UserWidgetChild;
 					}
 				}
@@ -730,20 +652,15 @@ UUserWidget *AOutercorpCharacter::GetModularWindowChild(UUserWidget *ModularWind
 				// If it's a panel, check its children too
 				if (UPanelWidget *Panel = Cast<UPanelWidget>(Child))
 				{
-					UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Child %d is a panel with %d children"), i, Panel->GetChildrenCount());
 					for (int32 j = 0; j < Panel->GetChildrenCount(); ++j)
 					{
 						UWidget *PanelChild = Panel->GetChildAt(j);
 						if (PanelChild)
 						{
-							UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Panel child %d: %s (name: %s)"),
-								   j, *PanelChild->GetClass()->GetName(), *PanelChild->GetName());
-
 							if (UUserWidget *UserWidgetChild = Cast<UUserWidget>(PanelChild))
 							{
 								if (UserWidgetChild->IsA(UCharacterWidget::StaticClass()) || UserWidgetChild->IsA(UInventoryWidget::StaticClass()))
 								{
-									UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Found target widget in panel at index %d"), j);
 									return UserWidgetChild;
 								}
 							}
@@ -766,7 +683,6 @@ UUserWidget *AOutercorpCharacter::GetModularWindowChild(UUserWidget *ModularWind
 	{
 		if (UWidget *Widget = ModularWindow->GetWidgetFromName(Name))
 		{
-			UE_LOG(LogOutercorp, Log, TEXT("GetModularWindowChild: Found widget by name '%s': %s"), *Name.ToString(), *Widget->GetClass()->GetName());
 			if (UUserWidget *UserWidget = Cast<UUserWidget>(Widget))
 			{
 				return UserWidget;
@@ -774,24 +690,12 @@ UUserWidget *AOutercorpCharacter::GetModularWindowChild(UUserWidget *ModularWind
 		}
 	}
 
-	UE_LOG(LogOutercorp, Warning, TEXT("GetModularWindowChild: Could not find child widget in modular window after exhaustive search"));
 	return nullptr;
 }
 
 void AOutercorpCharacter::DebugPrintWidgetType(UUserWidget *Widget) const
 {
-	if (!Widget)
-	{
-		UE_LOG(LogOutercorp, Warning, TEXT("DebugPrintWidgetType: Widget is null"));
-		return;
-	}
-
-	FString ClassName = Widget->GetClass()->GetName();
-	FString FullPath = Widget->GetClass()->GetPathName();
-
-	UE_LOG(LogOutercorp, Log, TEXT("DebugPrintWidgetType: Class Name = %s"), *ClassName);
-	UE_LOG(LogOutercorp, Log, TEXT("DebugPrintWidgetType: Full Path = %s"), *FullPath);
-	UE_LOG(LogOutercorp, Log, TEXT("DebugPrintWidgetType: Is CharacterWidget? %s"), Widget->IsA(UCharacterWidget::StaticClass()) ? TEXT("YES") : TEXT("NO"));
+	// This function is kept for compatibility but no longer logs debug information
 }
 
 void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindow)
@@ -836,18 +740,11 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindo
 		Slot->SetOffsets(FMargin(0.0f, 0.0f, 0.0f, 0.0f));
 	}
 
-	UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Successfully added character widget to modular window"));
-
 	// Set the window title on the modular window
 	UTextBlock *WindowTitleText = Cast<UTextBlock>(ModularWindow->GetWidgetFromName(FName("TitleText")));
 	if (WindowTitleText)
 	{
 		WindowTitleText->SetText(FText::FromString(TEXT("Character")));
-		UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Set window title to 'Character'"));
-	}
-	else
-	{
-		UE_LOG(LogOutercorp, Warning, TEXT("SetupCharacterWidgetInWindow: Could not find TitleText in modular window"));
 	}
 
 	// Bind events
@@ -857,23 +754,13 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindo
 	UButton *WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
 	if (WindowCloseButton)
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Found CloseBtn in modular window, binding to CloseCharacter"));
 		WindowCloseButton->OnClicked.AddDynamic(this, &AOutercorpCharacter::CloseCharacter);
 	}
-	else
-	{
-		UE_LOG(LogOutercorp, Warning, TEXT("SetupCharacterWidgetInWindow: Could not find CloseBtn in modular window - X button won't work!"));
-	}
-
-	// Note: The modular window should already be added to the HUD canvas in Blueprint
-	// to ensure the canvas slot is set up before Init() is called.
-	// We don't add it here to avoid duplicates.
 
 	// Set keyboard focus to the character widget so it can receive ESC/I key events
 	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
 		CharacterWidget->SetKeyboardFocus();
-		UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Set keyboard focus to character widget"));
 
 		// Ensure input mode is set to Game and UI with mouse visible
 		FInputModeGameAndUI InputMode;
@@ -881,7 +768,6 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindo
 		InputMode.SetHideCursorDuringCapture(false);
 		PC->SetInputMode(InputMode);
 		PC->SetShowMouseCursor(true);
-		UE_LOG(LogOutercorp, Log, TEXT("SetupCharacterWidgetInWindow: Set input mode to Game and UI"));
 	}
 }
 
@@ -927,18 +813,11 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget *ModularWindo
 		Slot->SetOffsets(FMargin(0.0f, 0.0f, 0.0f, 0.0f));
 	}
 
-	UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Successfully added inventory widget to modular window"));
-
 	// Set the window title on the modular window
 	UTextBlock *WindowTitleText = Cast<UTextBlock>(ModularWindow->GetWidgetFromName(FName("TitleText")));
 	if (WindowTitleText)
 	{
 		WindowTitleText->SetText(FText::FromString(TEXT("Inventory")));
-		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Set window title to 'Inventory'"));
-	}
-	else
-	{
-		UE_LOG(LogOutercorp, Warning, TEXT("SetupInventoryWidgetInWindow: Could not find TitleText in modular window"));
 	}
 
 	// Bind events
@@ -948,23 +827,13 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget *ModularWindo
 	UButton *WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
 	if (WindowCloseButton)
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Found CloseBtn in modular window, binding to CloseInventory"));
 		WindowCloseButton->OnClicked.AddDynamic(this, &AOutercorpCharacter::CloseInventory);
 	}
-	else
-	{
-		UE_LOG(LogOutercorp, Warning, TEXT("SetupInventoryWidgetInWindow: Could not find CloseBtn in modular window - X button won't work!"));
-	}
-
-	// Note: The modular window should already be added to the HUD canvas in Blueprint
-	// to ensure the canvas slot is set up before Init() is called.
-	// We don't add it here to avoid duplicates.
 
 	// Set keyboard focus to the inventory widget so it can receive ESC/C key events
 	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
 		InventoryWidget->SetKeyboardFocus();
-		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Set keyboard focus to inventory widget"));
 
 		// Ensure input mode is set to Game and UI with mouse visible
 		FInputModeGameAndUI InputMode;
@@ -972,7 +841,6 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget *ModularWindo
 		InputMode.SetHideCursorDuringCapture(false);
 		PC->SetInputMode(InputMode);
 		PC->SetShowMouseCursor(true);
-		UE_LOG(LogOutercorp, Log, TEXT("SetupInventoryWidgetInWindow: Set input mode to Game and UI"));
 	}
 }
 
@@ -1018,18 +886,11 @@ void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget *ModularWindow
 		Slot->SetOffsets(FMargin(0.0f, 0.0f, 0.0f, 0.0f));
 	}
 
-	UE_LOG(LogOutercorp, Log, TEXT("SetupItemInfoWidgetInWindow: Successfully added item info widget to modular window"));
-
 	// Try to bind to the modular window's close button
 	UButton *WindowCloseButton = Cast<UButton>(ModularWindow->GetWidgetFromName(FName("CloseBtn")));
 	if (WindowCloseButton)
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("SetupItemInfoWidgetInWindow: Found CloseBtn in modular window, binding to CloseItemInfo"));
 		WindowCloseButton->OnClicked.AddDynamic(this, &AOutercorpCharacter::CloseItemInfo);
-	}
-	else
-	{
-		UE_LOG(LogOutercorp, Warning, TEXT("SetupItemInfoWidgetInWindow: Could not find CloseBtn in modular window - X button won't work!"));
 	}
 
 	// Set the window title on the modular window
@@ -1037,18 +898,11 @@ void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget *ModularWindow
 	if (WindowTitleText)
 	{
 		WindowTitleText->SetText(FText::FromString(TEXT("Info")));
-		UE_LOG(LogOutercorp, Log, TEXT("SetupItemInfoWidgetInWindow: Set window title to 'ItemInfo'"));
-	}
-	else
-	{
-		UE_LOG(LogOutercorp, Warning, TEXT("SetupItemInfoWidgetInWindow: Could not find TitleText in modular window"));
 	}
 }
 
 void AOutercorpCharacter::OpenItemInfo(const FInventoryItem &Item)
 {
-	UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Called for item %s"), Item.IsValid() ? *Item.ItemData->ItemName.ToString() : TEXT("Invalid"));
-
 	// Store the item data
 	CurrentDisplayedItem = Item;
 
@@ -1058,13 +912,11 @@ void AOutercorpCharacter::OpenItemInfo(const FInventoryItem &Item)
 		// If the item info widget hasn't been created yet, create it now
 		if (!ItemInfoWidget)
 		{
-			UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Setting up item info widget in existing window"));
 			SetupItemInfoWidgetInWindow(ItemInfoWindow);
 		}
 
 		// Show the window first
 		ItemInfoWindow->SetVisibility(ESlateVisibility::Visible);
-		UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Showing item info window"));
 
 		// Call SetItemInfo on the widget if it's a UItemInfoWidget
 		if (ItemInfoWidget)
@@ -1072,18 +924,12 @@ void AOutercorpCharacter::OpenItemInfo(const FInventoryItem &Item)
 			UItemInfoWidget* InfoWidget = Cast<UItemInfoWidget>(ItemInfoWidget);
 			if (InfoWidget)
 			{
-				UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Calling SetItemInfo on ItemInfoWidget"));
 				InfoWidget->SetItemInfo(Item);
-			}
-			else
-			{
-				UE_LOG(LogOutercorp, Warning, TEXT("OpenItemInfo: ItemInfoWidget is not a UItemInfoWidget, calling Blueprint event instead"));
 			}
 		}
 
 		// Call Blueprint event to update the display with the item data
 		UpdateItemInfoDisplay();
-		UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Called UpdateItemInfoDisplay"));
 	}
 	else
 	{
@@ -1099,7 +945,6 @@ void AOutercorpCharacter::OpenItemInfo(const FInventoryItem &Item)
 		InputMode.SetHideCursorDuringCapture(false);
 		PC->SetInputMode(InputMode);
 		PC->SetShowMouseCursor(true);
-		UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Set input mode and mouse cursor"));
 	}
 }
 
@@ -1109,7 +954,6 @@ void AOutercorpCharacter::CloseItemInfo()
 	if (ItemInfoWindow)
 	{
 		ItemInfoWindow->SetVisibility(ESlateVisibility::Hidden);
-		UE_LOG(LogOutercorp, Log, TEXT("CloseItemInfo: Hidden item info window"));
 	}
 
 	// Call the closed callback
@@ -1118,16 +962,12 @@ void AOutercorpCharacter::CloseItemInfo()
 
 void AOutercorpCharacter::OnItemInfoWidgetClosed()
 {
-	UE_LOG(LogOutercorp, Log, TEXT("OnItemInfoWidgetClosed: Called"));
-
 	// Only restore game input if no other UI widgets are open
 	if (APlayerController *PC = Cast<APlayerController>(GetController()))
 	{
 		// Check if other windows are still open
 		bool bAnyWidgetOpen = (InventoryWindow != nullptr && InventoryWindow->GetVisibility() == ESlateVisibility::Visible) ||
 							  (CharacterWindow != nullptr && CharacterWindow->GetVisibility() == ESlateVisibility::Visible);
-
-		UE_LOG(LogOutercorp, Log, TEXT("OnItemInfoWidgetClosed: bAnyWidgetOpen = %s"), bAnyWidgetOpen ? TEXT("true") : TEXT("false"));
 
 		if (bAnyWidgetOpen)
 		{
@@ -1137,7 +977,6 @@ void AOutercorpCharacter::OnItemInfoWidgetClosed()
 			InputMode.SetHideCursorDuringCapture(false);
 			PC->SetInputMode(InputMode);
 			PC->SetShowMouseCursor(true);
-			UE_LOG(LogOutercorp, Log, TEXT("OnItemInfoWidgetClosed: Keeping UI mode (other widgets open)"));
 		}
 		else
 		{
@@ -1145,7 +984,6 @@ void AOutercorpCharacter::OnItemInfoWidgetClosed()
 			FInputModeGameOnly InputMode;
 			PC->SetInputMode(InputMode);
 			PC->SetShowMouseCursor(false);
-			UE_LOG(LogOutercorp, Log, TEXT("OnItemInfoWidgetClosed: Restored game-only input mode"));
 		}
 	}
 }
@@ -1201,7 +1039,6 @@ void AOutercorpCharacter::UnMaximizeWindow(UUserWidget *WindowWidget)
 		{
 			if (FullscreenModule->IsFullscreen(Window))
 			{
-				UE_LOG(LogOutercorp, Log, TEXT("UnMaximizeWindow: Restoring window from maximized state"));
 				FullscreenModule->Unscreen(Window);
 				return;
 			}
@@ -1238,9 +1075,6 @@ void AOutercorpCharacter::SaveUILayout()
 
 			if (bLooksMaximized)
 			{
-				UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: InventoryWindow appears maximized (size: %s), looking for saved values"),
-					   *WindowSize.ToString());
-
 				// Try to get the pre-maximized size from the fullscreen module
 				UWindow *Window = Cast<UWindow>(InventoryWindow);
 				if (Window)
@@ -1254,22 +1088,11 @@ void AOutercorpCharacter::SaveUILayout()
 							{
 								WindowPosition = FullscreenModule->PositionSaved;
 								WindowSize = FullscreenModule->SizeSaved;
-								UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Using fullscreen module saved values - Pos: %s, Size: %s"),
-									   *WindowPosition.ToString(), *WindowSize.ToString());
 								break;
-							}
-							else
-							{
-								UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Fullscreen module has invalid saved values: %s"),
-									   *FullscreenModule->SizeSaved.ToString());
 							}
 						}
 					}
 				}
-			}
-			else
-			{
-				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: InventoryWindow normal size, saving as-is"));
 			}
 
 			// Only save if the window has a valid size
@@ -1277,12 +1100,6 @@ void AOutercorpCharacter::SaveUILayout()
 			{
 				SaveGameInstance->InventoryWindowLayout = FWindowLayoutData(WindowPosition, WindowSize);
 				bHasValidData = true;
-				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved inventory layout - Pos: %s, Size: %s"),
-					   *WindowPosition.ToString(), *WindowSize.ToString());
-			}
-			else
-			{
-				UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Skipping inventory window - invalid size: %s"), *WindowSize.ToString());
 			}
 		}
 	}
@@ -1310,7 +1127,6 @@ void AOutercorpCharacter::SaveUILayout()
 							{
 								WindowPosition = FullscreenModule->PositionSaved;
 								WindowSize = FullscreenModule->SizeSaved;
-								UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: CharacterWindow is maximized, using saved position/size"));
 								break;
 							}
 						}
@@ -1323,12 +1139,6 @@ void AOutercorpCharacter::SaveUILayout()
 			{
 				SaveGameInstance->CharacterWindowLayout = FWindowLayoutData(WindowPosition, WindowSize);
 				bHasValidData = true;
-				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved character layout - Pos: %s, Size: %s"),
-					   *WindowPosition.ToString(), *WindowSize.ToString());
-			}
-			else
-			{
-				UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Skipping character window - invalid size: %s"), *WindowSize.ToString());
 			}
 		}
 	}
@@ -1356,7 +1166,6 @@ void AOutercorpCharacter::SaveUILayout()
 							{
 								WindowPosition = FullscreenModule->PositionSaved;
 								WindowSize = FullscreenModule->SizeSaved;
-								UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: ItemInfoWindow is maximized, using saved position/size"));
 								break;
 							}
 						}
@@ -1369,12 +1178,6 @@ void AOutercorpCharacter::SaveUILayout()
 			{
 				SaveGameInstance->ItemInfoWindowLayout = FWindowLayoutData(WindowPosition, WindowSize);
 				bHasValidData = true;
-				UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Saved item info layout - Pos: %s, Size: %s"),
-					   *WindowPosition.ToString(), *WindowSize.ToString());
-			}
-			else
-			{
-				UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: Skipping item info window - invalid size: %s"), *WindowSize.ToString());
 			}
 		}
 	}
@@ -1382,26 +1185,17 @@ void AOutercorpCharacter::SaveUILayout()
 	// Only save to disk if we have at least one valid window size
 	if (!bHasValidData)
 	{
-		UE_LOG(LogOutercorp, Warning, TEXT("SaveUILayout: No valid window data to save, skipping save"));
 		return;
 	}
 
 	// Save to disk
-	if (UGameplayStatics::SaveGameToSlot(SaveGameInstance, UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex))
-	{
-		UE_LOG(LogOutercorp, Log, TEXT("SaveUILayout: Successfully saved UI layout to slot '%s'"), *UOutercorpSaveGame::SaveSlotName);
-	}
-	else
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SaveUILayout: Failed to save game to slot '%s'"), *UOutercorpSaveGame::SaveSlotName);
-	}
+	UGameplayStatics::SaveGameToSlot(SaveGameInstance, UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex);
 }
 
 void AOutercorpCharacter::LoadUILayout()
 {
 	if (!UGameplayStatics::DoesSaveGameExist(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex))
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: No save file exists, using default layout"));
 		return;
 	}
 
@@ -1411,8 +1205,6 @@ void AOutercorpCharacter::LoadUILayout()
 		UE_LOG(LogOutercorp, Error, TEXT("LoadUILayout: Failed to load save game"));
 		return;
 	}
-
-	UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Successfully loaded UI layout from disk"));
 
 	// Minimum valid window size to prevent loading collapsed/invalid states
 	const float MinWindowSize = 100.0f;
@@ -1429,12 +1221,6 @@ void AOutercorpCharacter::LoadUILayout()
 			{
 				Slot->SetPosition(LoadedGame->InventoryWindowLayout.Position);
 				Slot->SetSize(LoadedSize);
-				UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored inventory layout - Pos: %s, Size: %s"),
-					   *LoadedGame->InventoryWindowLayout.Position.ToString(), *LoadedSize.ToString());
-			}
-			else
-			{
-				UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: Skipping inventory window - saved size is invalid: %s"), *LoadedSize.ToString());
 			}
 		}
 	}
@@ -1451,12 +1237,6 @@ void AOutercorpCharacter::LoadUILayout()
 			{
 				Slot->SetPosition(LoadedGame->CharacterWindowLayout.Position);
 				Slot->SetSize(LoadedSize);
-				UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored character layout - Pos: %s, Size: %s"),
-					   *LoadedGame->CharacterWindowLayout.Position.ToString(), *LoadedSize.ToString());
-			}
-			else
-			{
-				UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: Skipping character window - saved size is invalid: %s"), *LoadedSize.ToString());
 			}
 		}
 	}
@@ -1473,12 +1253,6 @@ void AOutercorpCharacter::LoadUILayout()
 			{
 				Slot->SetPosition(LoadedGame->ItemInfoWindowLayout.Position);
 				Slot->SetSize(LoadedSize);
-				UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Restored item info layout - Pos: %s, Size: %s"),
-					   *LoadedGame->ItemInfoWindowLayout.Position.ToString(), *LoadedSize.ToString());
-			}
-			else
-			{
-				UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: Skipping item info window - saved size is invalid: %s"), *LoadedSize.ToString());
 			}
 		}
 	}
@@ -1490,7 +1264,6 @@ void AOutercorpCharacter::LoadUILayout()
 	// Check inventory window
 	if (IsWindowMaximized(InventoryWindow))
 	{
-		UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: InventoryWindow loaded maximized, setting up fullscreen module saved values"));
 		UWindow *Window = Cast<UWindow>(InventoryWindow);
 		if (Window)
 		{
@@ -1502,8 +1275,6 @@ void AOutercorpCharacter::LoadUILayout()
 					// Use the loaded (non-maximized) position/size from the save file
 					FullscreenModule->PositionSaved = LoadedGame->InventoryWindowLayout.Position;
 					FullscreenModule->SizeSaved = LoadedGame->InventoryWindowLayout.Size;
-					UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Set InventoryWindow fullscreen saved values to Pos: %s, Size: %s"),
-						   *FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
 					break;
 				}
 			}
@@ -1513,7 +1284,6 @@ void AOutercorpCharacter::LoadUILayout()
 	// Check character window
 	if (IsWindowMaximized(CharacterWindow))
 	{
-		UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: CharacterWindow loaded maximized, setting up fullscreen module saved values"));
 		UWindow *Window = Cast<UWindow>(CharacterWindow);
 		if (Window)
 		{
@@ -1523,8 +1293,6 @@ void AOutercorpCharacter::LoadUILayout()
 				{
 					FullscreenModule->PositionSaved = LoadedGame->CharacterWindowLayout.Position;
 					FullscreenModule->SizeSaved = LoadedGame->CharacterWindowLayout.Size;
-					UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Set CharacterWindow fullscreen saved values to Pos: %s, Size: %s"),
-						   *FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
 					break;
 				}
 			}
@@ -1534,7 +1302,6 @@ void AOutercorpCharacter::LoadUILayout()
 	// Check item info window
 	if (IsWindowMaximized(ItemInfoWindow))
 	{
-		UE_LOG(LogOutercorp, Warning, TEXT("LoadUILayout: ItemInfoWindow loaded maximized, setting up fullscreen module saved values"));
 		UWindow *Window = Cast<UWindow>(ItemInfoWindow);
 		if (Window)
 		{
@@ -1544,8 +1311,6 @@ void AOutercorpCharacter::LoadUILayout()
 				{
 					FullscreenModule->PositionSaved = LoadedGame->ItemInfoWindowLayout.Position;
 					FullscreenModule->SizeSaved = LoadedGame->ItemInfoWindowLayout.Size;
-					UE_LOG(LogOutercorp, Log, TEXT("LoadUILayout: Set ItemInfoWindow fullscreen saved values to Pos: %s, Size: %s"),
-						   *FullscreenModule->PositionSaved.ToString(), *FullscreenModule->SizeSaved.ToString());
 					break;
 				}
 			}
@@ -1558,19 +1323,10 @@ void AOutercorpCharacter::ResetUILayout()
 	// Delete the save file
 	if (UGameplayStatics::DoesSaveGameExist(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex))
 	{
-		if (UGameplayStatics::DeleteGameInSlot(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex))
-		{
-			UE_LOG(LogOutercorp, Log, TEXT("ResetUILayout: Deleted save file '%s'"), *UOutercorpSaveGame::SaveSlotName);
-		}
-		else
-		{
-			UE_LOG(LogOutercorp, Error, TEXT("ResetUILayout: Failed to delete save file '%s'"), *UOutercorpSaveGame::SaveSlotName);
-		}
+		UGameplayStatics::DeleteGameInSlot(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex);
 	}
 
 	// Reset all windows to default positions and sizes
-	const float MinWindowSize = 100.0f;
-
 	if (InventoryWindow)
 	{
 		UCanvasPanelSlot *Slot = Cast<UCanvasPanelSlot>(InventoryWindow->Slot);
@@ -1578,7 +1334,6 @@ void AOutercorpCharacter::ResetUILayout()
 		{
 			Slot->SetPosition(FVector2D(100, 100));
 			Slot->SetSize(FVector2D(600, 400));
-			UE_LOG(LogOutercorp, Log, TEXT("ResetUILayout: Reset inventory window"));
 		}
 
 		// Exit fullscreen if needed
@@ -1596,7 +1351,6 @@ void AOutercorpCharacter::ResetUILayout()
 		{
 			Slot->SetPosition(FVector2D(750, 100));
 			Slot->SetSize(FVector2D(400, 500));
-			UE_LOG(LogOutercorp, Log, TEXT("ResetUILayout: Reset character window"));
 		}
 
 		// Exit fullscreen if needed
@@ -1614,7 +1368,6 @@ void AOutercorpCharacter::ResetUILayout()
 		{
 			Slot->SetPosition(FVector2D(400, 200));
 			Slot->SetSize(FVector2D(350, 450));
-			UE_LOG(LogOutercorp, Log, TEXT("ResetUILayout: Reset item info window"));
 		}
 
 		// Exit fullscreen if needed
@@ -1624,8 +1377,6 @@ void AOutercorpCharacter::ResetUILayout()
 			Window->UpdateUIForCapabilities();
 		}
 	}
-
-	UE_LOG(LogOutercorp, Log, TEXT("ResetUILayout: UI layout reset to defaults"));
 }
 
 void AOutercorpCharacter::OnWindowLayoutChanged()
@@ -1634,7 +1385,6 @@ void AOutercorpCharacter::OnWindowLayoutChanged()
 	// This prevents saving the maximized state when the maximize action triggers the size change event
 	if (IsWindowMaximized(InventoryWindow) || IsWindowMaximized(CharacterWindow) || IsWindowMaximized(ItemInfoWindow))
 	{
-		UE_LOG(LogOutercorp, Log, TEXT("OnWindowLayoutChanged: Skipping auto-save because a window is maximized"));
 		return;
 	}
 

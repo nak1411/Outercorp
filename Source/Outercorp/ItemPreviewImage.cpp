@@ -34,18 +34,14 @@ void UItemPreviewImage::FindPreviewController()
 	UWorld* World = GetWorld();
 	if (!World)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ItemPreviewImage: No World!"));
 		return;
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("ItemPreviewImage: Searching for ItemPreviewController..."));
 
 	int32 Count = 0;
 	for (TActorIterator<AItemPreviewController> It(World); It; ++It)
 	{
 		Count++;
 		PreviewController = *It;
-		UE_LOG(LogTemp, Warning, TEXT("ItemPreviewImage: Found ItemPreviewController: %s"), *It->GetName());
 		break;
 	}
 
@@ -58,7 +54,6 @@ void UItemPreviewImage::FindPreviewController()
 
 FReply UItemPreviewImage::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ItemPreviewImage: Mouse button down"));
 
 	// Find controller if not found yet
 	if (!PreviewController)
@@ -74,8 +69,7 @@ FReply UItemPreviewImage::NativeOnMouseButtonDown(const FGeometry& InGeometry, c
 		{
 			bIsDragging = true;
 			LastMousePosition = InMouseEvent.GetScreenSpacePosition();
-
-			UE_LOG(LogTemp, Warning, TEXT("ItemPreviewImage: Starting drag"));
+			
 			// Capture mouse so we continue receiving events even if cursor leaves widget
 			return FReply::Handled().CaptureMouse(this->TakeWidget());
 		}
