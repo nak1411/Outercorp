@@ -43,9 +43,17 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Item Info")
 	FInventoryItem CurrentItem;
 
-	/** Reference to the item preview controller */
+	/** Blueprint class for the preview controller actor (set this to BP_ItemInfoPreview) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Info|Preview")
+	TSubclassOf<AItemPreviewController> PreviewControllerClass;
+
+	/** Reference to the spawned item preview controller */
 	UPROPERTY(BlueprintReadWrite, Category = "Item Info|Preview")
 	TObjectPtr<AItemPreviewController> PreviewController;
+
+	/** Spawn location for the preview actor (far from game world to avoid lighting conflicts) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item Info|Preview")
+	FVector PreviewSpawnLocation = FVector(0.0f, 0.0f, -100000.0f);
 
 	/** Is the user currently dragging to rotate? */
 	bool bIsDragging = false;

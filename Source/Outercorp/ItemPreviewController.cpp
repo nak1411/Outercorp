@@ -19,6 +19,9 @@ AItemPreviewController::AItemPreviewController()
 	CurrentRotation = FRotator::ZeroRotator;
 	TargetZoomDistance = DefaultZoomDistance;
 	CurrentZoomDistance = DefaultZoomDistance;
+	CurrentItemMinZoom = MinZoomDistance;
+	CurrentItemMaxZoom = MaxZoomDistance;
+	CurrentItemInitialZoom = DefaultZoomDistance;
 }
 
 void AItemPreviewController::BeginPlay()
@@ -39,14 +42,38 @@ void AItemPreviewController::BeginPlay()
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: SceneCaptureComponent found: %s"), *SceneCaptureComponent->GetName());
 		UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Configuring SceneCaptureComponent..."));
+
+		// Use ShowOnlyList to only render our specific item
 		SceneCaptureComponent->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
 		SceneCaptureComponent->bCaptureEveryFrame = true;
 		SceneCaptureComponent->bCaptureOnMovement = true;
 
-		// Check if render target is set
+		// Completely disable world rendering
+		SceneCaptureComponent->ShowFlags.SetAtmosphere(false);
+		SceneCaptureComponent->ShowFlags.SetFog(false);
+		SceneCaptureComponent->ShowFlags.SetVolumetricFog(false);
+		SceneCaptureComponent->ShowFlags.SetSkyLighting(false);
+		SceneCaptureComponent->ShowFlags.SetTemporalAA(false);
+
+		// Disable environment effects
+		SceneCaptureComponent->ShowFlags.SetAmbientOcclusion(false);
+		SceneCaptureComponent->ShowFlags.SetDeferredLighting(true);
+
+		// Enable lighting from local lights in ShowOnlyList
+		SceneCaptureComponent->ShowFlags.SetLighting(true);
+		SceneCaptureComponent->ShowFlags.SetPostProcessing(false);
+
+		// Capture with proper lighting (not base color)
+		SceneCaptureComponent->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+
+		// Check if render target is set and configure background color
 		if (SceneCaptureComponent->TextureTarget)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Render target is set: %s"), *SceneCaptureComponent->TextureTarget->GetName());
+
+			// Set the clear color on the render target
+			SceneCaptureComponent->TextureTarget->ClearColor = BackgroundColor;
+			UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Set background color to: %s"), *BackgroundColor.ToString());
 		}
 		else
 		{
@@ -56,6 +83,31 @@ void AItemPreviewController::BeginPlay()
 	else
 	{
 		UE_LOG(LogTemp, Error, TEXT("ItemPreviewController: SceneCaptureComponent not found!"));
+	}
+
+	// Log warning about light setup - lights must have bAffectsWorld=false set in Blueprint
+	UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: IMPORTANT - Make sure all lights in this actor have 'Affects World' set to FALSE in the Blueprint!"));
+
+	// Add all existing static mesh components to the ShowOnlyList (e.g., background plane)
+	if (SceneCaptureComponent)
+	{
+		TArray<UStaticMeshComponent*> StaticMeshComponents;
+		GetComponents<UStaticMeshComponent>(StaticMeshComponents);
+		int32 BackgroundMeshCount = 0;
+		for (UStaticMeshComponent* MeshComp : StaticMeshComponents)
+		{
+			if (MeshComp != CurrentItemMesh) // Don't add the item mesh yet, it will be added when an item is set
+			{
+				SceneCaptureComponent->ShowOnlyComponents.Add(MeshComp);
+				BackgroundMeshCount++;
+				UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Added background mesh to ShowOnlyComponents: %s"), *MeshComp->GetName());
+			}
+		}
+
+		if (BackgroundMeshCount > 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Added %d background mesh(es). IMPORTANT: Background meshes must use EMISSIVE materials to be visible!"), BackgroundMeshCount);
+		}
 	}
 
 	// Set initial camera position
@@ -121,15 +173,18 @@ void AItemPreviewController::AddZoomInput(float Delta)
 		return;
 
 	TargetZoomDistance -= Delta * ZoomSensitivity;
-	TargetZoomDistance = FMath::Clamp(TargetZoomDistance, MinZoomDistance, MaxZoomDistance);
+	// Use dynamic zoom range based on current item's auto-zoom calculation
+	TargetZoomDistance = FMath::Clamp(TargetZoomDistance, CurrentItemMinZoom, CurrentItemMaxZoom);
 }
 
 void AItemPreviewController::ResetView()
 {
 	TargetRotation = FRotator::ZeroRotator;
 	CurrentRotation = FRotator::ZeroRotator;
-	TargetZoomDistance = DefaultZoomDistance;
-	CurrentZoomDistance = DefaultZoomDistance;
+
+	// Reset to the item's initial calculated zoom distance (not the default)
+	TargetZoomDistance = CurrentItemInitialZoom;
+	CurrentZoomDistance = CurrentItemInitialZoom;
 
 	if (CurrentItemMesh)
 	{
@@ -142,6 +197,12 @@ void AItemPreviewController::ResetView()
 void AItemPreviewController::SetPreviewItem(const FInventoryItem& Item)
 {
 	UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: SetPreviewItem called"));
+
+	// Ensure background color is set (in case it got reset)
+	if (SceneCaptureComponent && SceneCaptureComponent->TextureTarget)
+	{
+		SceneCaptureComponent->TextureTarget->ClearColor = BackgroundColor;
+	}
 
 	// Clear previous item
 	ClearCurrentItem();
@@ -199,41 +260,80 @@ void AItemPreviewController::SetPreviewItem(const FInventoryItem& Item)
 		UE_LOG(LogTemp, Error, TEXT("ItemPreviewController: ItemMesh is null!"));
 	}
 
-	// Center the mesh at the origin so it rotates around its center
+	// Set up the mesh - it will rotate around its pivot point (as set in the mesh asset)
 	if (LoadedMesh && CurrentItemMesh)
 	{
-		FBoxSphereBounds Bounds = LoadedMesh->GetBounds();
-		FVector MeshCenter = Bounds.Origin;
+		// Place the mesh at the origin - its pivot point will be at (0,0,0)
+		// This means it will rotate around its pivot naturally
+		CurrentItemMesh->SetRelativeLocation(FVector::ZeroVector);
 
-		// Offset the mesh so its center is at the origin
-		CurrentItemMesh->SetRelativeLocation(-MeshCenter);
-
-		UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Centered mesh. Bounds center: %s"), *MeshCenter.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Mesh setup - using mesh pivot as rotation center"));
 	}
 
-	// Set initial rotation from item data
-	if (Item.ItemData)
+	// Set initial rotation from item data and calculate zoom
+	if (Item.ItemData && LoadedMesh && CurrentItemMesh)
 	{
 		CurrentItemMesh->SetRelativeRotation(Item.ItemData->DefaultPreviewRotation);
 		TargetRotation = Item.ItemData->DefaultPreviewRotation;
 		CurrentRotation = Item.ItemData->DefaultPreviewRotation;
 
-		// Set zoom distance from item data, or use default if not set
-		float ItemZoomDistance = Item.ItemData->PreviewCameraDistance;
-		UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Item PreviewCameraDistance = %f"), ItemZoomDistance);
+		// Update bounds with the rotation applied
+		CurrentItemMesh->UpdateBounds();
+		FBoxSphereBounds MeshBounds = CurrentItemMesh->Bounds;
 
-		if (ItemZoomDistance <= 0.0f)
+		UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Mesh bounds after rotation:"));
+		UE_LOG(LogTemp, Warning, TEXT("  Bounds Extent: %s"), *MeshBounds.BoxExtent.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("  Sphere Radius: %f"), MeshBounds.SphereRadius);
+
+		// Calculate zoom distance
+		float ItemZoomDistance = DefaultZoomDistance;
+
+		if (bAutoZoomToExtents)
 		{
-			ItemZoomDistance = DefaultZoomDistance;
-			UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: PreviewCameraDistance not set or invalid, using DefaultZoomDistance: %f"), DefaultZoomDistance);
+			// Use automatic zoom-to-extents based on mesh bounds
+			ItemZoomDistance = CalculateZoomDistanceForBounds(MeshBounds);
+			UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Using auto zoom-to-extents: %f"), ItemZoomDistance);
+
+			// Set dynamic zoom range based on the calculated distance
+			// Allow zooming in to 50% of auto-zoom distance, and out to 200% of auto-zoom distance
+			CurrentItemMinZoom = ItemZoomDistance * 0.5f;
+			CurrentItemMaxZoom = ItemZoomDistance * 2.0f;
+
+			// But still respect the absolute min/max if they're more restrictive
+			CurrentItemMinZoom = FMath::Max(CurrentItemMinZoom, MinZoomDistance);
+			if (!bAutoZoomCanExceedMaxDistance)
+			{
+				CurrentItemMaxZoom = FMath::Min(CurrentItemMaxZoom, MaxZoomDistance);
+			}
+
+			UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Dynamic zoom range: Min=%f, Max=%f"), CurrentItemMinZoom, CurrentItemMaxZoom);
+		}
+		else if (Item.ItemData->PreviewCameraDistance > 0.0f)
+		{
+			// Use manual distance from item data
+			ItemZoomDistance = Item.ItemData->PreviewCameraDistance;
+			ItemZoomDistance = FMath::Clamp(ItemZoomDistance, MinZoomDistance, MaxZoomDistance);
+			UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Using manual PreviewCameraDistance: %f"), ItemZoomDistance);
+
+			// Use standard zoom range for manual distances
+			CurrentItemMinZoom = MinZoomDistance;
+			CurrentItemMaxZoom = MaxZoomDistance;
+		}
+		else
+		{
+			// Use default distance
+			UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Using DefaultZoomDistance: %f"), DefaultZoomDistance);
+
+			// Use standard zoom range
+			CurrentItemMinZoom = MinZoomDistance;
+			CurrentItemMaxZoom = MaxZoomDistance;
 		}
 
-		// Ensure zoom distance is within valid range
-		ItemZoomDistance = FMath::Clamp(ItemZoomDistance, MinZoomDistance, MaxZoomDistance);
+		// Store the initial zoom distance for reset functionality
+		CurrentItemInitialZoom = ItemZoomDistance;
 
 		TargetZoomDistance = ItemZoomDistance;
 		CurrentZoomDistance = ItemZoomDistance;
-		UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Final zoom distance after clamping: %f (Min: %f, Max: %f)"), CurrentZoomDistance, MinZoomDistance, MaxZoomDistance);
 		UpdateCameraPosition();
 	}
 
@@ -269,14 +369,93 @@ void AItemPreviewController::UpdateCameraPosition()
 	}
 }
 
+float AItemPreviewController::CalculateZoomDistanceForBounds(const FBoxSphereBounds& Bounds) const
+{
+	if (!SceneCaptureComponent)
+	{
+		return DefaultZoomDistance;
+	}
+
+	// Get the camera's field of view (vertical FOV)
+	float VerticalFOV = SceneCaptureComponent->FOVAngle;
+
+	// Get aspect ratio from the render target
+	float AspectRatio = 1.0f;
+	if (SceneCaptureComponent->TextureTarget)
+	{
+		AspectRatio = (float)SceneCaptureComponent->TextureTarget->SizeX / (float)SceneCaptureComponent->TextureTarget->SizeY;
+	}
+
+	// Calculate horizontal FOV from vertical FOV and aspect ratio
+	float HorizontalFOV = FMath::RadiansToDegrees(2.0f * FMath::Atan(FMath::Tan(FMath::DegreesToRadians(VerticalFOV * 0.5f)) * AspectRatio));
+
+	// Transform bounds to camera-local space
+	// Camera is at (-distance, 0, 0) looking along +X axis
+	// So we need to know the extents as viewed from the camera position
+	FVector BoxExtent = Bounds.BoxExtent;
+
+	// Transform the bounds origin to local space of PreviewRoot
+	FVector BoundsOriginLocal = FVector::ZeroVector;
+	if (PreviewRoot)
+	{
+		BoundsOriginLocal = PreviewRoot->GetComponentTransform().InverseTransformPosition(Bounds.Origin);
+	}
+
+	// The camera looks along the -X axis toward the origin (0,0,0) where the mesh is centered
+	// Y extent affects horizontal screen space
+	// Z extent affects vertical screen space
+	// X extent affects depth (distance from camera to furthest point)
+
+	// Calculate the effective extents visible from the camera angle
+	float VisibleWidth = BoxExtent.Y;   // Half-width on screen
+	float VisibleHeight = BoxExtent.Z;  // Half-height on screen
+	float DepthExtent = BoxExtent.X;    // Depth along camera view direction
+
+	// Calculate distance needed for horizontal fit
+	float HalfHorizontalFOV = FMath::DegreesToRadians(HorizontalFOV * 0.5f);
+	float DistanceForWidth = (VisibleWidth * AutoZoomPaddingMultiplier) / FMath::Tan(HalfHorizontalFOV);
+
+	// Calculate distance needed for vertical fit
+	float HalfVerticalFOV = FMath::DegreesToRadians(VerticalFOV * 0.5f);
+	float DistanceForHeight = (VisibleHeight * AutoZoomPaddingMultiplier) / FMath::Tan(HalfVerticalFOV);
+
+	// Use the larger distance to ensure the object fits in both dimensions
+	float BaseDistance = FMath::Max(DistanceForWidth, DistanceForHeight);
+
+	// Add depth extent to ensure we're far enough back to see the full object
+	// (accounting for the part of the object that extends toward the camera)
+	BaseDistance += DepthExtent;
+
+	// Clamp to min zoom distance always, but only clamp to max if allowed
+	float FinalDistance = FMath::Max(BaseDistance, MinZoomDistance);
+
+	// Only enforce MaxZoomDistance if auto-zoom is not allowed to exceed it
+	if (!bAutoZoomCanExceedMaxDistance)
+	{
+		FinalDistance = FMath::Min(FinalDistance, MaxZoomDistance);
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Auto-zoom calculation:"));
+	UE_LOG(LogTemp, Warning, TEXT("  BoxExtent (world AABB): %s"), *BoxExtent.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("  BoundsOrigin (local): %s"), *BoundsOriginLocal.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("  VerticalFOV: %f, HorizontalFOV: %f, AspectRatio: %f"), VerticalFOV, HorizontalFOV, AspectRatio);
+	UE_LOG(LogTemp, Warning, TEXT("  VisibleWidth: %f, VisibleHeight: %f, DepthExtent: %f"), VisibleWidth, VisibleHeight, DepthExtent);
+	UE_LOG(LogTemp, Warning, TEXT("  DistanceForWidth: %f, DistanceForHeight: %f"), DistanceForWidth, DistanceForHeight);
+	UE_LOG(LogTemp, Warning, TEXT("  BaseDistance: %f, FinalDistance: %f (CanExceedMax: %s)"),
+		BaseDistance, FinalDistance, bAutoZoomCanExceedMaxDistance ? TEXT("true") : TEXT("false"));
+
+	return FinalDistance;
+}
+
 void AItemPreviewController::ClearCurrentItem()
 {
 	if (CurrentItemMesh)
 	{
-		// Clear show only list
+		// Remove only the item mesh from show only list, keep background meshes
 		if (SceneCaptureComponent)
 		{
-			SceneCaptureComponent->ShowOnlyComponents.Empty();
+			SceneCaptureComponent->ShowOnlyComponents.Remove(CurrentItemMesh);
+			UE_LOG(LogTemp, Warning, TEXT("ItemPreviewController: Removed item mesh from ShowOnlyComponents, keeping background meshes"));
 		}
 
 		// Clear the mesh

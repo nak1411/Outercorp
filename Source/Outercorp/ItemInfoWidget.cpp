@@ -19,7 +19,7 @@ void UItemInfoWidget::NativeConstruct()
 		CloseButton->OnClicked.AddDynamic(this, &UItemInfoWidget::OnCloseButtonClicked);
 	}
 
-	// Find preview controller in world
+	// Spawn or find preview controller
 	FindPreviewController();
 
 	// If ItemPreviewImage widget is bound, forward its preview controller reference
@@ -39,6 +39,14 @@ void UItemInfoWidget::NativeDestruct()
 	if (bIsDragging)
 	{
 		bIsDragging = false;
+	}
+
+	// Destroy the spawned preview controller actor
+	if (PreviewController && PreviewController->IsValidLowLevel())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ItemInfoWidget: Destroying preview controller actor"));
+		PreviewController->Destroy();
+		PreviewController = nullptr;
 	}
 
 	Super::NativeDestruct();
@@ -80,9 +88,6 @@ void UItemInfoWidget::FindPreviewController()
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("ItemInfoWidget: Searching for ItemPreviewController in world..."));
-
-	// Find ItemPreviewController in the world
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -90,18 +95,41 @@ void UItemInfoWidget::FindPreviewController()
 		return;
 	}
 
+	// First, try to find an existing controller in the world (for backwards compatibility)
+	UE_LOG(LogTemp, Warning, TEXT("ItemInfoWidget: Searching for ItemPreviewController in world..."));
+
 	int32 Count = 0;
 	for (TActorIterator<AItemPreviewController> It(World); It; ++It)
 	{
 		Count++;
 		PreviewController = *It;
-		UE_LOG(LogTemp, Warning, TEXT("ItemInfoWidget: Found ItemPreviewController: %s"), *It->GetName());
-		break;
+		UE_LOG(LogTemp, Warning, TEXT("ItemInfoWidget: Found existing ItemPreviewController: %s"), *It->GetName());
+		return;
 	}
 
-	if (Count == 0)
+	// If not found and we have a class set, spawn a new one
+	if (PreviewControllerClass)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ItemInfoWidget: No ItemPreviewController actors found in world!"));
+		UE_LOG(LogTemp, Warning, TEXT("ItemInfoWidget: No existing controller found, spawning new one at location: %s"), *PreviewSpawnLocation.ToString());
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Name = FName(TEXT("ItemPreviewController_Spawned"));
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		PreviewController = World->SpawnActor<AItemPreviewController>(PreviewControllerClass, PreviewSpawnLocation, FRotator::ZeroRotator, SpawnParams);
+
+		if (PreviewController)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ItemInfoWidget: Successfully spawned ItemPreviewController"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("ItemInfoWidget: Failed to spawn ItemPreviewController!"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("ItemInfoWidget: No ItemPreviewController found in world and no PreviewControllerClass set! Please set PreviewControllerClass in the widget Blueprint."));
 	}
 }
 
