@@ -45,33 +45,17 @@ public:
 
 	// === Rotation Settings ===
 
-	/** Rotation sensitivity (degrees per pixel of mouse movement) */
+	/** Rotation sensitivity (multiplier for mouse movement) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview|Rotation")
-	float RotationSensitivity = 0.5f;
+	float RotationSensitivity = 1.0f;
 
 	/** Enable/disable rotation */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview|Rotation")
 	bool bEnableRotation = true;
 
-	/** Rotation axis constraints */
+	/** Use arcball/trackball rotation (more intuitive) vs simple euler angle rotation */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview|Rotation")
-	bool bAllowYawRotation = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview|Rotation")
-	bool bAllowPitchRotation = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview|Rotation")
-	bool bAllowRollRotation = false;
-
-	/** Invert rotation axes */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview|Rotation")
-	bool bInvertYaw = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview|Rotation")
-	bool bInvertPitch = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview|Rotation")
-	bool bInvertRoll = false;
+	bool bUseArcballRotation = true;
 
 	/** Smooth rotation interpolation speed */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview|Rotation")
@@ -144,11 +128,11 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Preview")
 	FInventoryItem CurrentItem;
 
-	/** Target rotation (interpolated to) */
-	FRotator TargetRotation;
+	/** Target rotation quaternion (for arcball rotation) */
+	FQuat TargetRotationQuat;
 
-	/** Current rotation (smoothly interpolated) */
-	FRotator CurrentRotation;
+	/** Current rotation quaternion (smoothly interpolated) */
+	FQuat CurrentRotationQuat;
 
 	/** Target zoom distance */
 	float TargetZoomDistance;

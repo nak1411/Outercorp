@@ -15,8 +15,8 @@ AItemPreviewController::AItemPreviewController()
 	RootComponent = PreviewRoot;
 
 	// Initialize defaults
-	TargetRotation = FRotator::ZeroRotator;
-	CurrentRotation = FRotator::ZeroRotator;
+	TargetRotationQuat = FQuat::Identity;
+	CurrentRotationQuat = FQuat::Identity;
 	TargetZoomDistance = DefaultZoomDistance;
 	CurrentZoomDistance = DefaultZoomDistance;
 	CurrentItemMinZoom = MinZoomDistance;
@@ -89,15 +89,16 @@ void AItemPreviewController::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Smooth rotation interpolation
-	if (!CurrentRotation.Equals(TargetRotation, 0.1f))
+	// Smooth rotation interpolation using quaternion slerp
+	if (!CurrentRotationQuat.Equals(TargetRotationQuat, 0.001f))
 	{
-		CurrentRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, RotationInterpolationSpeed);
+		CurrentRotationQuat = FQuat::Slerp(CurrentRotationQuat, TargetRotationQuat, FMath::Clamp(DeltaTime * RotationInterpolationSpeed, 0.0f, 1.0f));
+		CurrentRotationQuat.Normalize();
 
 		// Apply rotation to the item mesh if it exists
 		if (CurrentItemMesh)
 		{
-			CurrentItemMesh->SetRelativeRotation(CurrentRotation);
+			CurrentItemMesh->SetRelativeRotation(CurrentRotationQuat.Rotator());
 		}
 	}
 
@@ -114,28 +115,43 @@ void AItemPreviewController::AddRotationInput(float DeltaX, float DeltaY)
 	if (!bEnableRotation)
 		return;
 
-	FRotator DeltaRotation = FRotator::ZeroRotator;
-
-	if (bAllowYawRotation)
+	if (bUseArcballRotation)
 	{
-		float YawMultiplier = bInvertYaw ? -1.0f : 1.0f;
-		DeltaRotation.Yaw = DeltaX * RotationSensitivity * YawMultiplier;
-	}
+		// Arcball/trackball rotation - rotate around camera-space axes
+		// This creates intuitive rotation that follows the mouse cursor
 
-	if (bAllowPitchRotation)
+		// Scale input by sensitivity and a base multiplier for good feel
+		float ScaledDeltaX = DeltaX * RotationSensitivity * 0.3f;
+		float ScaledDeltaY = DeltaY * RotationSensitivity * 0.3f;
+
+		// Create rotation quaternions around camera-relative axes
+		// Horizontal mouse movement rotates around the world up axis (Z)
+		FQuat YawRotation = FQuat(FVector::UpVector, FMath::DegreesToRadians(-ScaledDeltaX));
+
+		// Vertical mouse movement rotates around the camera's right axis (Y in our coordinate system)
+		FQuat PitchRotation = FQuat(FVector::RightVector, FMath::DegreesToRadians(-ScaledDeltaY));
+
+		// Combine rotations: apply pitch first (in object space), then yaw (in world space)
+		// This order gives natural trackball-like behavior
+		FQuat DeltaRotation = YawRotation * PitchRotation;
+
+		// Apply the delta rotation to the current target
+		TargetRotationQuat = DeltaRotation * TargetRotationQuat;
+		TargetRotationQuat.Normalize();
+	}
+	else
 	{
-		float PitchMultiplier = bInvertPitch ? 1.0f : -1.0f;
-		DeltaRotation.Pitch = DeltaY * RotationSensitivity * PitchMultiplier;
-	}
+		// Simple euler angle rotation (legacy mode)
+		FRotator CurrentRotator = TargetRotationQuat.Rotator();
+		FRotator DeltaRotation = FRotator::ZeroRotator;
 
-	if (bAllowRollRotation)
-	{
-		float RollMultiplier = bInvertRoll ? -1.0f : 1.0f;
-		DeltaRotation.Roll = DeltaX * RotationSensitivity * RollMultiplier;
-	}
+		DeltaRotation.Yaw = DeltaX * RotationSensitivity * 0.5f;
+		DeltaRotation.Pitch = -DeltaY * RotationSensitivity * 0.5f;
 
-	TargetRotation += DeltaRotation;
-	TargetRotation.Normalize();
+		CurrentRotator += DeltaRotation;
+		CurrentRotator.Normalize();
+		TargetRotationQuat = FQuat(CurrentRotator);
+	}
 }
 
 void AItemPreviewController::AddZoomInput(float Delta)
@@ -150,8 +166,8 @@ void AItemPreviewController::AddZoomInput(float Delta)
 
 void AItemPreviewController::ResetView()
 {
-	TargetRotation = FRotator::ZeroRotator;
-	CurrentRotation = FRotator::ZeroRotator;
+	TargetRotationQuat = FQuat::Identity;
+	CurrentRotationQuat = FQuat::Identity;
 
 	// Reset to the item's initial calculated zoom distance (not the default)
 	TargetZoomDistance = CurrentItemInitialZoom;
@@ -223,8 +239,8 @@ void AItemPreviewController::SetPreviewItem(const FInventoryItem& Item)
 	if (Item.ItemData && LoadedMesh && CurrentItemMesh)
 	{
 		CurrentItemMesh->SetRelativeRotation(Item.ItemData->DefaultPreviewRotation);
-		TargetRotation = Item.ItemData->DefaultPreviewRotation;
-		CurrentRotation = Item.ItemData->DefaultPreviewRotation;
+		TargetRotationQuat = FQuat(Item.ItemData->DefaultPreviewRotation);
+		CurrentRotationQuat = FQuat(Item.ItemData->DefaultPreviewRotation);
 
 		// Update bounds with the rotation applied
 		CurrentItemMesh->UpdateBounds();

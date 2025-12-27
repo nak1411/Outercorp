@@ -69,11 +69,24 @@ void UInventorySlotWidget::NativeDestruct()
 	// Clear hover state when widget is destroyed
 	bIsHovered = false;
 
-	// Hide and destroy tooltip if active
-	HideTooltip();
+	// Hide and destroy tooltip if active (with safety check for hot reload)
+	if (ActiveTooltip)
+	{
+		if (IsValid(ActiveTooltip))
+		{
+			ActiveTooltip->RemoveFromParent();
+		}
+		ActiveTooltip = nullptr;
+	}
+
+	// Close any context menu this slot may have opened
+	if (CurrentOpenContextMenu.IsValid() && CurrentOpenContextMenu.Get() == GetCurrentContextMenu())
+	{
+		CloseCurrentContextMenu();
+	}
 
 	// Unregister from the registry
-	if (InventoryComponent)
+	if (InventoryComponent && IsValid(InventoryComponent))
 	{
 		TArray<TWeakObjectPtr<UInventorySlotWidget>> *Slots = SlotWidgetRegistry.Find(InventoryComponent);
 		if (Slots)
@@ -1167,10 +1180,15 @@ void UInventorySlotWidget::ShowTooltip()
 
 void UInventorySlotWidget::HideTooltip()
 {
-	if (ActiveTooltip)
+	if (ActiveTooltip && IsValid(ActiveTooltip))
 	{
 		ActiveTooltip->Hide();
 		ActiveTooltip->RemoveFromParent();
+		ActiveTooltip = nullptr;
+	}
+	else if (ActiveTooltip)
+	{
+		// Tooltip pointer exists but is invalid, clear it
 		ActiveTooltip = nullptr;
 	}
 }

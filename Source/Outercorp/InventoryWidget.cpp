@@ -174,15 +174,18 @@ void UInventoryWidget::NativeConstruct()
 
 void UInventoryWidget::NativeDestruct()
 {
-	// Clean up timers
+	// Clean up timers (with safety check for hot reload)
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().ClearTimer(SetupTimerHandle);
-		World->GetTimerManager().ClearTimer(ReflowDebounceTimerHandle);
-		World->GetTimerManager().ClearTimer(ListViewRefreshTimerHandle);
+		if (IsValid(World))
+		{
+			World->GetTimerManager().ClearTimer(SetupTimerHandle);
+			World->GetTimerManager().ClearTimer(ReflowDebounceTimerHandle);
+			World->GetTimerManager().ClearTimer(ListViewRefreshTimerHandle);
+		}
 	}
 
-	// Remove input processor
+	// Remove input processor (with safety check)
 	if (InputProcessor.IsValid() && FSlateApplication::IsInitialized())
 	{
 		FSlateApplication::Get().UnregisterInputPreProcessor(InputProcessor);

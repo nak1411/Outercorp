@@ -60,6 +60,7 @@
 			"Module_Limit_Size_None.cpp.obj",
 			"Module_Limit_Size_Universal.cpp.obj",
 			"Module_Move_All_Universal.cpp.obj",
+			"Module_Move_None.cpp.obj",
 			"Module_Move_OneAxis_Universal.cpp.obj",
 			"Module_Move_X_Line.cpp.obj",
 			"Module_Move_X_Point.cpp.obj",
@@ -71,17 +72,16 @@
 			"Module_Size_Down_Point.cpp.obj",
 			"Module_Size_Left_Line.cpp.obj",
 			"Module_Size_Left_Point.cpp.obj",
+			"Module_Size_None.cpp.obj",
 			"Module_Size_Right_Line.cpp.obj",
 			"Module_Size_Right_Point.cpp.obj",
 			"Module_Size_Up_Line.cpp.obj",
 			"Module_Size_Up_Point.cpp.obj",
 			"NX_ModularWindow.cpp.obj",
+			"Window.cpp.obj",
 			"Window_Module.cpp.obj",
 			"Window_Template_0.cpp.obj",
-			"Window_Timer_Event.cpp.obj",
-			"Module_Move_None.cpp.obj",
-			"Module_Size_None.cpp.obj",
-			"Window.cpp.obj"
+			"Window_Timer_Event.cpp.obj"
 		]
 	}
 }
