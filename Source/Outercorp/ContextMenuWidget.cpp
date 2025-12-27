@@ -54,7 +54,6 @@ public:
 				// If clicked outside, close the menu - call public function
 				if (!bClickedInside)
 				{
-					UE_LOG(LogTemp, Log, TEXT("Click detected outside context menu, closing..."));
 					ContextMenu->RequestClose();
 				}
 			}
@@ -110,7 +109,6 @@ void UContextMenuWidget::NativeDestruct()
 FReply UContextMenuWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	// Handle clicks on the menu itself - don't close
-	UE_LOG(LogTemp, Log, TEXT("Click on context menu itself - keeping open"));
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
@@ -128,8 +126,6 @@ void UContextMenuWidget::SetupClickCapture()
 		InputProcessor = MakeShared<FContextMenuInputProcessor>(this);
 		FSlateApplication::Get().RegisterInputPreProcessor(InputProcessor, 999);
 		bIsClickCaptureActive = true;
-
-		UE_LOG(LogTemp, Log, TEXT("Context menu click capture activated"));
 	}
 }
 
@@ -144,8 +140,6 @@ void UContextMenuWidget::CloseMenu()
 	{
 		return;
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Closing context menu"));
 
 	// CRITICAL: Remove input processor FIRST before doing anything else
 	// This ensures we don't interfere with subsequent clicks

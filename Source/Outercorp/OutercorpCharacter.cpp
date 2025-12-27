@@ -17,6 +17,7 @@
 #include "InventoryComponent.h"
 #include "InventoryWidget.h"
 #include "CharacterWidget.h"
+#include "ItemInfoWidget.h"
 #include "Outercorp.h"
 #include "Window.h"
 #include "OutercorpSaveGame.h"
@@ -1064,6 +1065,21 @@ void AOutercorpCharacter::OpenItemInfo(const FInventoryItem &Item)
 		// Show the window first
 		ItemInfoWindow->SetVisibility(ESlateVisibility::Visible);
 		UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Showing item info window"));
+
+		// Call SetItemInfo on the widget if it's a UItemInfoWidget
+		if (ItemInfoWidget)
+		{
+			UItemInfoWidget* InfoWidget = Cast<UItemInfoWidget>(ItemInfoWidget);
+			if (InfoWidget)
+			{
+				UE_LOG(LogOutercorp, Log, TEXT("OpenItemInfo: Calling SetItemInfo on ItemInfoWidget"));
+				InfoWidget->SetItemInfo(Item);
+			}
+			else
+			{
+				UE_LOG(LogOutercorp, Warning, TEXT("OpenItemInfo: ItemInfoWidget is not a UItemInfoWidget, calling Blueprint event instead"));
+			}
+		}
 
 		// Call Blueprint event to update the display with the item data
 		UpdateItemInfoDisplay();

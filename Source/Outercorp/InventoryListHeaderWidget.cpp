@@ -178,7 +178,7 @@ void UInventoryListHeaderWidget::UpdateSortIndicators()
 	}
 }
 
-void UInventoryListHeaderWidget::SetColumnSettings(UInventoryColumnSettings* InColumnSettings)
+void UInventoryListHeaderWidget::SetColumnSettings(UInventoryColumnSettings *InColumnSettings)
 {
 	ColumnSettings = InColumnSettings;
 

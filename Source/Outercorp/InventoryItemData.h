@@ -100,6 +100,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
 	TMap<FName, FString> Metadata;
 
+	/** Default camera distance for 3D preview (optional override) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item Preview")
+	float PreviewCameraDistance = 150.0f;
+
+	/** Default rotation for 3D preview (optional override) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item Preview")
+	FRotator DefaultPreviewRotation = FRotator(0.0f, 45.0f, 0.0f);
+
 	/** Get color based on rarity */
 	UFUNCTION(BlueprintCallable, Category = "Item")
 	FLinearColor GetRarityColor() const;

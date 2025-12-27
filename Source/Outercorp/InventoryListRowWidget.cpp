@@ -18,7 +18,7 @@
 #include "Blueprint/WidgetBlueprintLibrary.h"
 
 // Initialize static members
-TSet<UInventoryListRowWidget*> UInventoryListRowWidget::SelectedRows;
+TSet<UInventoryListRowWidget *> UInventoryListRowWidget::SelectedRows;
 TWeakObjectPtr<UUserWidget> UInventoryListRowWidget::CurrentContextMenu;
 TWeakObjectPtr<UInventoryListRowWidget> UInventoryListRowWidget::LastClickedRow;
 
@@ -74,7 +74,7 @@ void UInventoryListRowWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UInventoryListRowWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
+void UInventoryListRowWidget::NativeOnListItemObjectSet(UObject *ListItemObject)
 {
 	ItemData = Cast<UInventoryListItemData>(ListItemObject);
 
@@ -105,18 +105,25 @@ void UInventoryListRowWidget::RefreshDisplay()
 	if (!ItemData || !ItemData->Item.IsValid())
 	{
 		// Empty row - clear all fields
-		if (ItemNameText) ItemNameText->SetText(FText::FromString(TEXT("-")));
-		if (QuantityText) QuantityText->SetText(FText::FromString(TEXT("-")));
-		if (WeightText) WeightText->SetText(FText::FromString(TEXT("-")));
-		if (ValueText) ValueText->SetText(FText::FromString(TEXT("-")));
-		if (RarityText) RarityText->SetText(FText::FromString(TEXT("-")));
-		if (CategoryText) CategoryText->SetText(FText::FromString(TEXT("-")));
-		if (ItemIcon) ItemIcon->SetVisibility(ESlateVisibility::Hidden);
+		if (ItemNameText)
+			ItemNameText->SetText(FText::FromString(TEXT("-")));
+		if (QuantityText)
+			QuantityText->SetText(FText::FromString(TEXT("-")));
+		if (WeightText)
+			WeightText->SetText(FText::FromString(TEXT("-")));
+		if (ValueText)
+			ValueText->SetText(FText::FromString(TEXT("-")));
+		if (RarityText)
+			RarityText->SetText(FText::FromString(TEXT("-")));
+		if (CategoryText)
+			CategoryText->SetText(FText::FromString(TEXT("-")));
+		if (ItemIcon)
+			ItemIcon->SetVisibility(ESlateVisibility::Hidden);
 		return;
 	}
 
-	const FInventoryItem& Item = ItemData->Item;
-	UInventoryItemData* ItemDataAsset = Item.ItemData;
+	const FInventoryItem &Item = ItemData->Item;
+	UInventoryItemData *ItemDataAsset = Item.ItemData;
 
 	if (!ItemDataAsset)
 	{
@@ -178,7 +185,7 @@ void UInventoryListRowWidget::RefreshDisplay()
 	{
 		if (!ItemDataAsset->ItemIcon.IsNull())
 		{
-			if (UTexture2D* IconTexture = ItemDataAsset->ItemIcon.LoadSynchronous())
+			if (UTexture2D *IconTexture = ItemDataAsset->ItemIcon.LoadSynchronous())
 			{
 				ItemIcon->SetBrushFromTexture(IconTexture);
 				ItemIcon->SetVisibility(ESlateVisibility::Visible);
@@ -191,7 +198,7 @@ void UInventoryListRowWidget::RefreshDisplay()
 	}
 }
 
-const FInventoryItem& UInventoryListRowWidget::GetItem() const
+const FInventoryItem &UInventoryListRowWidget::GetItem() const
 {
 	static FInventoryItem EmptyItem;
 	return ItemData ? ItemData->Item : EmptyItem;
@@ -205,13 +212,13 @@ void UInventoryListRowWidget::SetRowIndex(int32 Index)
 	UpdateSelectionVisual();
 }
 
-FReply UInventoryListRowWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+FReply UInventoryListRowWidget::NativeOnMouseButtonDown(const FGeometry &InGeometry, const FPointerEvent &InMouseEvent)
 {
 	// Handle right-click for context menu (both empty and occupied rows)
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
 		// Get mouse position in viewport pixel coordinates
-		APlayerController* PC = GetOwningPlayer();
+		APlayerController *PC = GetOwningPlayer();
 		if (PC)
 		{
 			float MouseX, MouseY;
@@ -256,7 +263,7 @@ FReply UInventoryListRowWidget::NativeOnMouseButtonDown(const FGeometry& InGeome
 	return FReply::Unhandled();
 }
 
-FReply UInventoryListRowWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+FReply UInventoryListRowWidget::NativeOnMouseButtonUp(const FGeometry &InGeometry, const FPointerEvent &InMouseEvent)
 {
 	// If left mouse button released and we didn't start a drag
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && !bDragStarted)
@@ -370,9 +377,9 @@ void UInventoryListRowWidget::ToggleSelection(bool bAddToSelection)
 void UInventoryListRowWidget::ClearAllRowSelections()
 {
 	// Create a copy of the set to iterate over, since we'll be modifying the original
-	TSet<UInventoryListRowWidget*> RowsToDeselect = SelectedRows;
+	TSet<UInventoryListRowWidget *> RowsToDeselect = SelectedRows;
 
-	for (UInventoryListRowWidget* Row : RowsToDeselect)
+	for (UInventoryListRowWidget *Row : RowsToDeselect)
 	{
 		if (Row && Row->IsValidLowLevel())
 		{
@@ -429,7 +436,7 @@ void UInventoryListRowWidget::UpdateSelectionVisual()
 	BackgroundBorder->SetBrushColor(BackgroundColor);
 }
 
-void UInventoryListRowWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+void UInventoryListRowWidget::NativeOnMouseEnter(const FGeometry &InGeometry, const FPointerEvent &InMouseEvent)
 {
 	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
 
@@ -445,7 +452,7 @@ void UInventoryListRowWidget::NativeOnMouseEnter(const FGeometry& InGeometry, co
 	}
 }
 
-void UInventoryListRowWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
+void UInventoryListRowWidget::NativeOnMouseLeave(const FPointerEvent &InMouseEvent)
 {
 	Super::NativeOnMouseLeave(InMouseEvent);
 
@@ -461,7 +468,7 @@ void UInventoryListRowWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEve
 	}
 }
 
-void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
+void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry &InGeometry, const FPointerEvent &InMouseEvent, UDragDropOperation *&OutOperation)
 {
 	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
 
@@ -483,13 +490,15 @@ void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, 
 	UInventorySlotWidget::ClearAllSelectionsForInventory(ItemData->InventoryComponent);
 
 	// Create drag-drop operation
-	UInventoryDragDropOperation* DragDropOp = NewObject<UInventoryDragDropOperation>();
+	UInventoryDragDropOperation *DragDropOp = NewObject<UInventoryDragDropOperation>();
 	DragDropOp->SourceSlotIndex = ItemData->SlotIndex;
 	DragDropOp->DraggedItem = ItemData->Item;
 	DragDropOp->InventoryComponent = ItemData->InventoryComponent;
 
 	// Check if shift is held for split operation
-	DragDropOp->bIsSplitOperation = InMouseEvent.IsShiftDown() && ItemData->Item.Quantity > 1;
+	bool bShiftHeld = InMouseEvent.IsShiftDown();
+	bool bCanSplit = ItemData->Item.Quantity > 1;
+	DragDropOp->bIsSplitOperation = bShiftHeld && bCanSplit;
 
 	// Create visual widget for dragging
 	// Use the DragVisualClass if set in Blueprint, otherwise try to find the BP widget
@@ -497,7 +506,7 @@ void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, 
 
 	if (WidgetClass)
 	{
-		UInventorySlotWidget* DragVisual = CreateWidget<UInventorySlotWidget>(GetOwningPlayer(), WidgetClass);
+		UInventorySlotWidget *DragVisual = CreateWidget<UInventorySlotWidget>(GetOwningPlayer(), WidgetClass);
 		if (DragVisual)
 		{
 			DragVisual->SetInventoryComponent(ItemData->InventoryComponent);
@@ -513,11 +522,11 @@ void UInventoryListRowWidget::NativeOnDragDetected(const FGeometry& InGeometry, 
 	OutOperation = DragDropOp;
 }
 
-bool UInventoryListRowWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
+bool UInventoryListRowWidget::NativeOnDrop(const FGeometry &InGeometry, const FDragDropEvent &InDragDropEvent, UDragDropOperation *InOperation)
 {
 	Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
 
-	UInventoryDragDropOperation* DragDropOp = Cast<UInventoryDragDropOperation>(InOperation);
+	UInventoryDragDropOperation *DragDropOp = Cast<UInventoryDragDropOperation>(InOperation);
 	if (!DragDropOp || !ItemData || !ItemData->InventoryComponent)
 	{
 		// Reset drag flag even if drop fails
@@ -542,7 +551,15 @@ bool UInventoryListRowWidget::NativeOnDrop(const FGeometry& InGeometry, const FD
 		int32 SplitAmount = DragDropOp->DraggedItem.Quantity / 2;
 		if (SplitAmount > 0)
 		{
-			ItemData->InventoryComponent->SplitStack(DragDropOp->SourceSlotIndex, ItemData->SlotIndex, SplitAmount);
+			// Find first empty slot for the split (SplitStack requires target to be empty)
+			int32 EmptySlot = ItemData->InventoryComponent->FindEmptySlot();
+			if (EmptySlot == -1)
+			{
+				bDragStarted = false;
+				return false;
+			}
+
+			ItemData->InventoryComponent->SplitStack(DragDropOp->SourceSlotIndex, EmptySlot, SplitAmount);
 		}
 		bDragStarted = false;
 		return true;
@@ -571,7 +588,7 @@ bool UInventoryListRowWidget::NativeOnDrop(const FGeometry& InGeometry, const FD
 	return true;
 }
 
-void UInventoryListRowWidget::NativeOnDragEnter(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
+void UInventoryListRowWidget::NativeOnDragEnter(const FGeometry &InGeometry, const FDragDropEvent &InDragDropEvent, UDragDropOperation *InOperation)
 {
 	Super::NativeOnDragEnter(InGeometry, InDragDropEvent, InOperation);
 
@@ -579,7 +596,7 @@ void UInventoryListRowWidget::NativeOnDragEnter(const FGeometry& InGeometry, con
 	UpdateDragVisual(true);
 }
 
-void UInventoryListRowWidget::NativeOnDragLeave(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
+void UInventoryListRowWidget::NativeOnDragLeave(const FDragDropEvent &InDragDropEvent, UDragDropOperation *InOperation)
 {
 	Super::NativeOnDragLeave(InDragDropEvent, InOperation);
 
@@ -613,18 +630,18 @@ FLinearColor UInventoryListRowWidget::GetRarityColor(EItemRarity Rarity) const
 {
 	switch (Rarity)
 	{
-		case EItemRarity::Common:
-			return FLinearColor(0.7f, 0.7f, 0.7f, 1.0f); // Gray
-		case EItemRarity::Uncommon:
-			return FLinearColor(0.0f, 1.0f, 0.0f, 1.0f); // Green
-		case EItemRarity::Rare:
-			return FLinearColor(0.0f, 0.5f, 1.0f, 1.0f); // Blue
-		case EItemRarity::Epic:
-			return FLinearColor(0.7f, 0.0f, 1.0f, 1.0f); // Purple
-		case EItemRarity::Legendary:
-			return FLinearColor(1.0f, 0.5f, 0.0f, 1.0f); // Orange
-		default:
-			return FLinearColor::White;
+	case EItemRarity::Common:
+		return FLinearColor(0.7f, 0.7f, 0.7f, 1.0f); // Gray
+	case EItemRarity::Uncommon:
+		return FLinearColor(0.0f, 1.0f, 0.0f, 1.0f); // Green
+	case EItemRarity::Rare:
+		return FLinearColor(0.0f, 0.5f, 1.0f, 1.0f); // Blue
+	case EItemRarity::Epic:
+		return FLinearColor(0.7f, 0.0f, 1.0f, 1.0f); // Purple
+	case EItemRarity::Legendary:
+		return FLinearColor(1.0f, 0.5f, 0.0f, 1.0f); // Orange
+	default:
+		return FLinearColor::White;
 	}
 }
 
@@ -632,18 +649,18 @@ FText UInventoryListRowWidget::GetRarityText(EItemRarity Rarity) const
 {
 	switch (Rarity)
 	{
-		case EItemRarity::Common:
-			return FText::FromString(TEXT("Common"));
-		case EItemRarity::Uncommon:
-			return FText::FromString(TEXT("Uncommon"));
-		case EItemRarity::Rare:
-			return FText::FromString(TEXT("Rare"));
-		case EItemRarity::Epic:
-			return FText::FromString(TEXT("Epic"));
-		case EItemRarity::Legendary:
-			return FText::FromString(TEXT("Legendary"));
-		default:
-			return FText::FromString(TEXT("Unknown"));
+	case EItemRarity::Common:
+		return FText::FromString(TEXT("Common"));
+	case EItemRarity::Uncommon:
+		return FText::FromString(TEXT("Uncommon"));
+	case EItemRarity::Rare:
+		return FText::FromString(TEXT("Rare"));
+	case EItemRarity::Epic:
+		return FText::FromString(TEXT("Epic"));
+	case EItemRarity::Legendary:
+		return FText::FromString(TEXT("Legendary"));
+	default:
+		return FText::FromString(TEXT("Unknown"));
 	}
 }
 
@@ -651,26 +668,26 @@ FText UInventoryListRowWidget::GetCategoryText(EItemCategory Category) const
 {
 	switch (Category)
 	{
-		case EItemCategory::Weapon:
-			return FText::FromString(TEXT("Weapon"));
-		case EItemCategory::Armor:
-			return FText::FromString(TEXT("Armor"));
-		case EItemCategory::Consumable:
-			return FText::FromString(TEXT("Consumable"));
-		case EItemCategory::Resource:
-			return FText::FromString(TEXT("Resource"));
-		case EItemCategory::Module:
-			return FText::FromString(TEXT("Module"));
-		case EItemCategory::Ammunition:
-			return FText::FromString(TEXT("Ammunition"));
-		case EItemCategory::Misc:
-			return FText::FromString(TEXT("Miscellaneous"));
-		default:
-			return FText::FromString(TEXT("Unknown"));
+	case EItemCategory::Weapon:
+		return FText::FromString(TEXT("Weapon"));
+	case EItemCategory::Armor:
+		return FText::FromString(TEXT("Armor"));
+	case EItemCategory::Consumable:
+		return FText::FromString(TEXT("Consumable"));
+	case EItemCategory::Resource:
+		return FText::FromString(TEXT("Resource"));
+	case EItemCategory::Module:
+		return FText::FromString(TEXT("Module"));
+	case EItemCategory::Ammunition:
+		return FText::FromString(TEXT("Ammunition"));
+	case EItemCategory::Misc:
+		return FText::FromString(TEXT("Miscellaneous"));
+	default:
+		return FText::FromString(TEXT("Unknown"));
 	}
 }
 
-void UInventoryListRowWidget::SetColumnSettings(UInventoryColumnSettings* InColumnSettings)
+void UInventoryListRowWidget::SetColumnSettings(UInventoryColumnSettings *InColumnSettings)
 {
 	ColumnSettings = InColumnSettings;
 
@@ -788,26 +805,76 @@ void UInventoryListRowWidget::HandleContextMenuAction_Implementation(FName Actio
 
 void UInventoryListRowWidget::HandleSplitItem()
 {
-	if (!ItemData || !ItemData->Item.IsValid() || !ItemData->InventoryComponent)
+	if (!ItemData || !ItemData->InventoryComponent)
 	{
 		return;
 	}
 
-	if (ItemData->Item.Quantity <= 1)
-	{
-		return;
-	}
+	// Get all selected rows
+	const TSet<UInventoryListRowWidget *> &SelectedRowSet = GetSelectedRows();
 
-	// Find first empty slot
-	int32 EmptySlot = ItemData->InventoryComponent->FindEmptySlot();
-	if (EmptySlot == -1)
+	// If there are selected rows, split all of them
+	if (SelectedRowSet.Num() > 0)
 	{
-		return;
-	}
+		// Begin batch update to reduce UI refreshes
+		ItemData->InventoryComponent->BeginBatchUpdate();
 
-	// Split stack in half
-	int32 SplitAmount = ItemData->Item.Quantity / 2;
-	ItemData->InventoryComponent->SplitStack(ItemData->SlotIndex, EmptySlot, SplitAmount);
+		for (UInventoryListRowWidget *SelectedRow : SelectedRowSet)
+		{
+			if (!SelectedRow || !SelectedRow->ItemData || !SelectedRow->ItemData->Item.IsValid())
+			{
+				continue;
+			}
+
+			// Get fresh item data for this row
+			FInventoryItem Item = SelectedRow->ItemData->InventoryComponent->GetItemAtSlot(SelectedRow->ItemData->SlotIndex);
+
+			// Skip if item is invalid or quantity is 1 or less
+			if (!Item.IsValid() || Item.Quantity <= 1)
+			{
+				continue;
+			}
+
+			// Find first empty slot
+			int32 EmptySlot = ItemData->InventoryComponent->FindEmptySlot();
+			if (EmptySlot == -1)
+			{
+				// No more empty slots - stop splitting
+				break;
+			}
+
+			// Split stack in half
+			int32 SplitAmount = Item.Quantity / 2;
+			SelectedRow->ItemData->InventoryComponent->SplitStack(SelectedRow->ItemData->SlotIndex, EmptySlot, SplitAmount);
+		}
+
+		// End batch update - this will trigger UI refresh automatically
+		ItemData->InventoryComponent->EndBatchUpdate();
+	}
+	else
+	{
+		// No selection - split just the current item (right-clicked item)
+		if (!ItemData->Item.IsValid())
+		{
+			return;
+		}
+
+		if (ItemData->Item.Quantity <= 1)
+		{
+			return;
+		}
+
+		// Find first empty slot
+		int32 EmptySlot = ItemData->InventoryComponent->FindEmptySlot();
+		if (EmptySlot == -1)
+		{
+			return;
+		}
+
+		// Split stack in half
+		int32 SplitAmount = ItemData->Item.Quantity / 2;
+		ItemData->InventoryComponent->SplitStack(ItemData->SlotIndex, EmptySlot, SplitAmount);
+	}
 }
 
 void UInventoryListRowWidget::HandleDestroyItem()
@@ -821,18 +888,17 @@ void UInventoryListRowWidget::HandleDestroyItem()
 	int32 CachedSlotIndex = ItemData->SlotIndex;
 	int32 CachedQuantity = ItemData->Item.Quantity;
 	FString ItemName = ItemData->Item.ItemData->ItemName.ToString();
-	UInventoryComponent* CachedInventoryComponent = ItemData->InventoryComponent;
+	UInventoryComponent *CachedInventoryComponent = ItemData->InventoryComponent;
 
 	// Defer the actual item removal until the next frame
-	if (UWorld* World = GetWorld())
+	if (UWorld *World = GetWorld())
 	{
 		World->GetTimerManager().SetTimerForNextTick([CachedInventoryComponent, CachedSlotIndex, CachedQuantity, ItemName]()
-		{
+													 {
 			if (IsValid(CachedInventoryComponent))
 			{
 				CachedInventoryComponent->RemoveItemAtSlot(CachedSlotIndex, CachedQuantity);
-			}
-		});
+			} });
 	}
 }
 
@@ -951,9 +1017,9 @@ void UInventoryListRowWidget::HandleStackAllEmpty()
 	}
 
 	// For each group, try to stack them together
-	for (const auto& Group : ItemGroups)
+	for (const auto &Group : ItemGroups)
 	{
-		const TArray<int32>& SlotIndices = Group.Value;
+		const TArray<int32> &SlotIndices = Group.Value;
 		if (SlotIndices.Num() > 1)
 		{
 			// Try to merge all items in this group into the first slot
@@ -968,7 +1034,7 @@ void UInventoryListRowWidget::HandleStackAllEmpty()
 void UInventoryListRowWidget::HandleSelectAll()
 {
 	// Select all rows
-	for (UInventoryListRowWidget* Row : SelectedRows)
+	for (UInventoryListRowWidget *Row : SelectedRows)
 	{
 		if (Row && Row->IsValidLowLevel())
 		{
@@ -989,7 +1055,7 @@ void UInventoryListRowWidget::HandleInvertSelection()
 void UInventoryListRowWidget::SelectRange()
 {
 	// Get the last clicked row
-	UInventoryListRowWidget* StartRow = LastClickedRow.Get();
+	UInventoryListRowWidget *StartRow = LastClickedRow.Get();
 	if (!StartRow || !StartRow->IsValidLowLevel())
 	{
 		// No previous selection, just select this row
@@ -998,7 +1064,7 @@ void UInventoryListRowWidget::SelectRange()
 	}
 
 	// Get all rows in the list
-	TArray<UInventoryListRowWidget*> AllRows = GetAllRowsInList();
+	TArray<UInventoryListRowWidget *> AllRows = GetAllRowsInList();
 	if (AllRows.Num() == 0)
 	{
 		// Fallback to simple selection
@@ -1044,7 +1110,7 @@ void UInventoryListRowWidget::SelectRange()
 	{
 		if (AllRows.IsValidIndex(i) && AllRows[i] && AllRows[i]->IsValidLowLevel())
 		{
-			UInventoryListRowWidget* Row = AllRows[i];
+			UInventoryListRowWidget *Row = AllRows[i];
 			if (Row->ItemData && Row->ItemData->Item.IsValid())
 			{
 				Row->bIsSelected = true;
@@ -1055,22 +1121,22 @@ void UInventoryListRowWidget::SelectRange()
 	}
 }
 
-TArray<UInventoryListRowWidget*> UInventoryListRowWidget::GetAllRowsInList() const
+TArray<UInventoryListRowWidget *> UInventoryListRowWidget::GetAllRowsInList() const
 {
-	TArray<UInventoryListRowWidget*> AllRows;
+	TArray<UInventoryListRowWidget *> AllRows;
 
 	// Try to get the parent VerticalBox or ListView container
-	UWidget* Parent = GetParent();
+	UWidget *Parent = GetParent();
 	while (Parent)
 	{
 		// Check if parent is a VerticalBox (for table view)
-		if (UVerticalBox* VerticalBox = Cast<UVerticalBox>(Parent))
+		if (UVerticalBox *VerticalBox = Cast<UVerticalBox>(Parent))
 		{
 			// Get all children of the vertical box
-			TArray<UWidget*> Children = VerticalBox->GetAllChildren();
-			for (UWidget* Child : Children)
+			TArray<UWidget *> Children = VerticalBox->GetAllChildren();
+			for (UWidget *Child : Children)
 			{
-				if (UInventoryListRowWidget* RowWidget = Cast<UInventoryListRowWidget>(Child))
+				if (UInventoryListRowWidget *RowWidget = Cast<UInventoryListRowWidget>(Child))
 				{
 					AllRows.Add(RowWidget);
 				}
@@ -1083,14 +1149,13 @@ TArray<UInventoryListRowWidget*> UInventoryListRowWidget::GetAllRowsInList() con
 	}
 
 	// Sort by slot index to ensure correct order
-	AllRows.Sort([](const UInventoryListRowWidget& A, const UInventoryListRowWidget& B) -> bool
-	{
+	AllRows.Sort([](const UInventoryListRowWidget &A, const UInventoryListRowWidget &B) -> bool
+				 {
 		if (!A.ItemData || !B.ItemData)
 		{
 			return false;
 		}
-		return A.ItemData->SlotIndex < B.ItemData->SlotIndex;
-	});
+		return A.ItemData->SlotIndex < B.ItemData->SlotIndex; });
 
 	return AllRows;
 }
@@ -1104,7 +1169,7 @@ void UInventoryListRowWidget::CloseCurrentContextMenu()
 	}
 }
 
-void UInventoryListRowWidget::SetCurrentContextMenu(UUserWidget* ContextMenu)
+void UInventoryListRowWidget::SetCurrentContextMenu(UUserWidget *ContextMenu)
 {
 	// Close any existing menu first
 	CloseCurrentContextMenu();
@@ -1115,7 +1180,7 @@ void UInventoryListRowWidget::SetCurrentContextMenu(UUserWidget* ContextMenu)
 	}
 }
 
-UUserWidget* UInventoryListRowWidget::GetCurrentContextMenu()
+UUserWidget *UInventoryListRowWidget::GetCurrentContextMenu()
 {
 	return CurrentContextMenu.Get();
 }
@@ -1147,15 +1212,14 @@ void UInventoryListRowWidget::ShowTooltip()
 			ActiveTooltip->AddToViewport(TooltipConfig.ZOrder);
 
 			// Defer Show() to next tick so the slot is available
-			if (UWorld* World = GetWorld())
+			if (UWorld *World = GetWorld())
 			{
 				World->GetTimerManager().SetTimerForNextTick([this]()
-				{
+															 {
 					if (ActiveTooltip)
 					{
 						ActiveTooltip->Show();
-					}
-				});
+					} });
 			}
 		}
 	}

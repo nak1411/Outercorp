@@ -431,26 +431,71 @@ void UInventorySlotWidget::HandleContextMenuAction_Implementation(FName ActionID
 
 void UInventorySlotWidget::HandleSplitItem()
 {
-	if (!CurrentItem.IsValid() || !InventoryComponent)
+	if (!InventoryComponent)
 	{
 		return;
 	}
 
-	if (CurrentItem.Quantity <= 1)
-	{
-		return;
-	}
+	// Get all selected slots
+	TArray<int32> SelectedSlots = GetSelectedSlots();
 
-	// Find first empty slot
-	int32 EmptySlot = InventoryComponent->FindEmptySlot();
-	if (EmptySlot == -1)
+	// If there are selected items, split all of them
+	if (SelectedSlots.Num() > 0)
 	{
-		return;
-	}
+		// Begin batch update to reduce UI refreshes
+		InventoryComponent->BeginBatchUpdate();
 
-	// Split stack in half
-	int32 SplitAmount = CurrentItem.Quantity / 2;
-	InventoryComponent->SplitStack(SlotIndex, EmptySlot, SplitAmount);
+		for (int32 SelectedSlot : SelectedSlots)
+		{
+			// Get fresh item data for this slot
+			FInventoryItem Item = InventoryComponent->GetItemAtSlot(SelectedSlot);
+
+			// Skip if item is invalid or quantity is 1 or less
+			if (!Item.IsValid() || Item.Quantity <= 1)
+			{
+				continue;
+			}
+
+			// Find first empty slot
+			int32 EmptySlot = InventoryComponent->FindEmptySlot();
+			if (EmptySlot == -1)
+			{
+				// No more empty slots - stop splitting
+				break;
+			}
+
+			// Split stack in half
+			int32 SplitAmount = Item.Quantity / 2;
+			InventoryComponent->SplitStack(SelectedSlot, EmptySlot, SplitAmount);
+		}
+
+		// End batch update - this will trigger UI refresh automatically
+		InventoryComponent->EndBatchUpdate();
+	}
+	else
+	{
+		// No selection - split just the current item (right-clicked item)
+		if (!CurrentItem.IsValid())
+		{
+			return;
+		}
+
+		if (CurrentItem.Quantity <= 1)
+		{
+			return;
+		}
+
+		// Find first empty slot
+		int32 EmptySlot = InventoryComponent->FindEmptySlot();
+		if (EmptySlot == -1)
+		{
+			return;
+		}
+
+		// Split stack in half
+		int32 SplitAmount = CurrentItem.Quantity / 2;
+		InventoryComponent->SplitStack(SlotIndex, EmptySlot, SplitAmount);
+	}
 
 	// No need to reflow/compress - the split operation already places the item in a valid slot
 	// The inventory update broadcast will handle UI refresh automatically
@@ -491,8 +536,26 @@ void UInventorySlotWidget::HandleShowInfo()
 		return;
 	}
 
-	// Call Blueprint event to show UI
+	// Call Blueprint event (for modular window creation)
 	ShowItemInfoUI(CurrentItem);
+
+	// If ItemInfoWidgetClass is set, also auto-create and show the widget
+	if (ItemInfoWidgetClass)
+	{
+		// Close existing window if open
+		if (ActiveItemInfoWindow)
+		{
+			ActiveItemInfoWindow->RemoveFromParent();
+			ActiveItemInfoWindow = nullptr;
+		}
+
+		// Create and show the item info window
+		ActiveItemInfoWindow = CreateWidget<UUserWidget>(GetOwningPlayer(), ItemInfoWidgetClass);
+		if (ActiveItemInfoWindow)
+		{
+			ActiveItemInfoWindow->AddToViewport(999); // High Z-order so it's on top
+		}
+	}
 }
 
 void UInventorySlotWidget::HandleStackAll()

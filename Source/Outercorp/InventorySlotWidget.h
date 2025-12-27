@@ -167,6 +167,14 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Tooltip")
 	TObjectPtr<UTooltipWidget> ActiveTooltip;
 
+	/** Item info window widget class to spawn (optional, if not using Blueprint event) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|ItemInfo")
+	TSubclassOf<UUserWidget> ItemInfoWidgetClass;
+
+	/** Reference to currently open item info window */
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|ItemInfo")
+	TObjectPtr<UUserWidget> ActiveItemInfoWindow;
+
 public:
 	/** Set the item for this slot */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")

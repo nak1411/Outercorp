@@ -22,6 +22,7 @@
 #include "Widgets/Layout/SScrollBox.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/Application/IInputProcessor.h"
+#include "Blueprint/DragDropOperation.h"
 
 /**
  * Input processor that captures clicks outside the inventory widget
@@ -314,6 +315,41 @@ FReply UInventoryWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, co
 	}
 
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+bool UInventoryWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
+{
+	Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
+
+	// Only handle drops when in list view mode
+	if (!bIsListView || !InventoryComponent)
+	{
+		return false;
+	}
+
+	UInventoryDragDropOperation* DragDropOp = Cast<UInventoryDragDropOperation>(InOperation);
+	if (!DragDropOp)
+	{
+		return false;
+	}
+
+	// Handle split operation when dropping on empty area in list view
+	if (DragDropOp->bIsSplitOperation)
+	{
+		int32 SplitAmount = DragDropOp->DraggedItem.Quantity / 2;
+		if (SplitAmount > 0)
+		{
+			// Find first empty slot for the split (SplitStack requires target to be empty)
+			int32 EmptySlot = InventoryComponent->FindEmptySlot();
+			if (EmptySlot == -1)
+			{
+				return false;
+			}
+		}
+	}
+
+	// Don't handle other drag operations on empty area - let them fall through
+	return false;
 }
 
 void UInventoryWidget::InitializeInventory(UInventoryComponent *InInventoryComponent)
