@@ -644,6 +644,12 @@ void UInventorySlotWidget::HandleStackAll()
 
 	// End batch update - this will trigger a single UI refresh
 	InventoryComponent->EndBatchUpdate();
+
+	// Clear all selections after stacking since items have moved and many slots are now empty
+	ClearAllSelections();
+
+	// Also clear list view selections to keep both views in sync
+	UInventoryListRowWidget::ClearAllRowSelections();
 }
 
 void UInventorySlotWidget::HandleStackAllItems()
@@ -686,6 +692,12 @@ void UInventorySlotWidget::HandleStackAllItems()
 
 	// End batch update - this will trigger a single UI refresh
 	InventoryComponent->EndBatchUpdate();
+
+	// Clear all selections after stacking since items have moved and many slots are now empty
+	ClearAllSelections();
+
+	// Also clear list view selections to keep both views in sync
+	UInventoryListRowWidget::ClearAllRowSelections();
 }
 
 void UInventorySlotWidget::HandleSelectAll()
@@ -703,7 +715,9 @@ void UInventorySlotWidget::HandleSelectAll()
 
 	for (int32 i = 0; i < AllItems.Num(); i++)
 	{
-		if (AllItems[i].IsValid())
+		// Re-fetch the current item to ensure it's still valid after stacking
+		FInventoryItem ItemAtSlot = InventoryComponent->GetItemAtSlot(i);
+		if (ItemAtSlot.IsValid())
 		{
 			SelectionSet.Add(i);
 		}

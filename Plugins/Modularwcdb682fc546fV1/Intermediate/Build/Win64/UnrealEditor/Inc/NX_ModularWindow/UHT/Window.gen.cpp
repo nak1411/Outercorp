@@ -1538,6 +1538,63 @@ DEFINE_FUNCTION(UWindow::execSetCanResize)
 }
 // ********** End Class UWindow Function SetCanResize **********************************************
 
+// ********** Begin Class UWindow Function SetDragging *********************************************
+struct Z_Construct_UFunction_UWindow_SetDragging_Statics
+{
+	struct Window_eventSetDragging_Parms
+	{
+		bool bInDragging;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function SetDragging constinit property declarations ***************************
+	static void NewProp_bInDragging_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bInDragging;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function SetDragging constinit property declarations *****************************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function SetDragging Property Definitions **************************************
+void Z_Construct_UFunction_UWindow_SetDragging_Statics::NewProp_bInDragging_SetBit(void* Obj)
+{
+	((Window_eventSetDragging_Parms*)Obj)->bInDragging = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_SetDragging_Statics::NewProp_bInDragging = { "bInDragging", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventSetDragging_Parms), &Z_Construct_UFunction_UWindow_SetDragging_Statics::NewProp_bInDragging_SetBit, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_SetDragging_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_SetDragging_Statics::NewProp_bInDragging,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetDragging_Statics::PropPointers) < 2048);
+// ********** End Function SetDragging Property Definitions ****************************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_SetDragging_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "SetDragging", 	Z_Construct_UFunction_UWindow_SetDragging_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetDragging_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_SetDragging_Statics::Window_eventSetDragging_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetDragging_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_SetDragging_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_SetDragging_Statics::Window_eventSetDragging_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_SetDragging()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_SetDragging_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execSetDragging)
+{
+	P_GET_UBOOL(Z_Param_bInDragging);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->SetDragging(Z_Param_bInDragging);
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function SetDragging ***********************************************
+
 // ********** Begin Class UWindow Function SetPosition *********************************************
 struct Z_Construct_UFunction_UWindow_SetPosition_Statics
 {
@@ -1595,6 +1652,64 @@ DEFINE_FUNCTION(UWindow::execSetPosition)
 	P_NATIVE_END;
 }
 // ********** End Class UWindow Function SetPosition ***********************************************
+
+// ********** Begin Class UWindow Function SetPositionDirect ***************************************
+struct Z_Construct_UFunction_UWindow_SetPositionDirect_Statics
+{
+	struct Window_eventSetPositionDirect_Parms
+	{
+		FVector2D NewPosition;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window" },
+#if !UE_BUILD_SHIPPING
+		{ "Comment", "// Fast path for direct position updates (bypasses delegates for performance)\n" },
+#endif
+		{ "ModuleRelativePath", "Public/Window.h" },
+#if !UE_BUILD_SHIPPING
+		{ "ToolTip", "Fast path for direct position updates (bypasses delegates for performance)" },
+#endif
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function SetPositionDirect constinit property declarations *********************
+	static const UECodeGen_Private::FStructPropertyParams NewProp_NewPosition;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function SetPositionDirect constinit property declarations ***********************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function SetPositionDirect Property Definitions ********************************
+const UECodeGen_Private::FStructPropertyParams Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::NewProp_NewPosition = { "NewPosition", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Struct, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(Window_eventSetPositionDirect_Parms, NewPosition), Z_Construct_UScriptStruct_FVector2D, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::NewProp_NewPosition,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::PropPointers) < 2048);
+// ********** End Function SetPositionDirect Property Definitions **********************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "SetPositionDirect", 	Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::Window_eventSetPositionDirect_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04820401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::Window_eventSetPositionDirect_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_SetPositionDirect()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_SetPositionDirect_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execSetPositionDirect)
+{
+	P_GET_STRUCT(FVector2D,Z_Param_NewPosition);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->SetPositionDirect(Z_Param_NewPosition);
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function SetPositionDirect *****************************************
 
 // ********** Begin Class UWindow Function SetPositionX ********************************************
 struct Z_Construct_UFunction_UWindow_SetPositionX_Statics
@@ -1699,6 +1814,63 @@ DEFINE_FUNCTION(UWindow::execSetPositionY)
 	P_NATIVE_END;
 }
 // ********** End Class UWindow Function SetPositionY **********************************************
+
+// ********** Begin Class UWindow Function SetResizing *********************************************
+struct Z_Construct_UFunction_UWindow_SetResizing_Statics
+{
+	struct Window_eventSetResizing_Parms
+	{
+		bool bInResizing;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+		{ "Category", "Window" },
+		{ "ModuleRelativePath", "Public/Window.h" },
+	};
+#endif // WITH_METADATA
+
+// ********** Begin Function SetResizing constinit property declarations ***************************
+	static void NewProp_bInResizing_SetBit(void* Obj);
+	static const UECodeGen_Private::FBoolPropertyParams NewProp_bInResizing;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+// ********** End Function SetResizing constinit property declarations *****************************
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+
+// ********** Begin Function SetResizing Property Definitions **************************************
+void Z_Construct_UFunction_UWindow_SetResizing_Statics::NewProp_bInResizing_SetBit(void* Obj)
+{
+	((Window_eventSetResizing_Parms*)Obj)->bInResizing = 1;
+}
+const UECodeGen_Private::FBoolPropertyParams Z_Construct_UFunction_UWindow_SetResizing_Statics::NewProp_bInResizing = { "bInResizing", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Bool | UECodeGen_Private::EPropertyGenFlags::NativeBool, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, sizeof(bool), sizeof(Window_eventSetResizing_Parms), &Z_Construct_UFunction_UWindow_SetResizing_Statics::NewProp_bInResizing_SetBit, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_UWindow_SetResizing_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_UWindow_SetResizing_Statics::NewProp_bInResizing,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetResizing_Statics::PropPointers) < 2048);
+// ********** End Function SetResizing Property Definitions ****************************************
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_UWindow_SetResizing_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_UWindow, nullptr, "SetResizing", 	Z_Construct_UFunction_UWindow_SetResizing_Statics::PropPointers, 
+	UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetResizing_Statics::PropPointers), 
+sizeof(Z_Construct_UFunction_UWindow_SetResizing_Statics::Window_eventSetResizing_Parms),
+RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x04020401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_UWindow_SetResizing_Statics::Function_MetaDataParams), Z_Construct_UFunction_UWindow_SetResizing_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_UWindow_SetResizing_Statics::Window_eventSetResizing_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_UWindow_SetResizing()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_UWindow_SetResizing_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(UWindow::execSetResizing)
+{
+	P_GET_UBOOL(Z_Param_bInResizing);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->SetResizing(Z_Param_bInResizing);
+	P_NATIVE_END;
+}
+// ********** End Class UWindow Function SetResizing ***********************************************
 
 // ********** Begin Class UWindow Function SetSize *************************************************
 struct Z_Construct_UFunction_UWindow_SetSize_Statics
@@ -2209,9 +2381,12 @@ struct Z_Construct_UClass_UWindow_Statics
 		{ .NameUTF8 = UTF8TEXT("SetCanFullscreen"), .Pointer = &UWindow::execSetCanFullscreen },
 		{ .NameUTF8 = UTF8TEXT("SetCanMove"), .Pointer = &UWindow::execSetCanMove },
 		{ .NameUTF8 = UTF8TEXT("SetCanResize"), .Pointer = &UWindow::execSetCanResize },
+		{ .NameUTF8 = UTF8TEXT("SetDragging"), .Pointer = &UWindow::execSetDragging },
 		{ .NameUTF8 = UTF8TEXT("SetPosition"), .Pointer = &UWindow::execSetPosition },
+		{ .NameUTF8 = UTF8TEXT("SetPositionDirect"), .Pointer = &UWindow::execSetPositionDirect },
 		{ .NameUTF8 = UTF8TEXT("SetPositionX"), .Pointer = &UWindow::execSetPositionX },
 		{ .NameUTF8 = UTF8TEXT("SetPositionY"), .Pointer = &UWindow::execSetPositionY },
+		{ .NameUTF8 = UTF8TEXT("SetResizing"), .Pointer = &UWindow::execSetResizing },
 		{ .NameUTF8 = UTF8TEXT("SetSize"), .Pointer = &UWindow::execSetSize },
 		{ .NameUTF8 = UTF8TEXT("SetSizeX"), .Pointer = &UWindow::execSetSizeX },
 		{ .NameUTF8 = UTF8TEXT("SetSizeY"), .Pointer = &UWindow::execSetSizeY },
@@ -2252,9 +2427,12 @@ struct Z_Construct_UClass_UWindow_Statics
 		{ &Z_Construct_UFunction_UWindow_SetCanFullscreen, "SetCanFullscreen" }, // 4232169470
 		{ &Z_Construct_UFunction_UWindow_SetCanMove, "SetCanMove" }, // 1817983582
 		{ &Z_Construct_UFunction_UWindow_SetCanResize, "SetCanResize" }, // 706102308
+		{ &Z_Construct_UFunction_UWindow_SetDragging, "SetDragging" }, // 2875122868
 		{ &Z_Construct_UFunction_UWindow_SetPosition, "SetPosition" }, // 864881297
+		{ &Z_Construct_UFunction_UWindow_SetPositionDirect, "SetPositionDirect" }, // 2550130594
 		{ &Z_Construct_UFunction_UWindow_SetPositionX, "SetPositionX" }, // 616258176
 		{ &Z_Construct_UFunction_UWindow_SetPositionY, "SetPositionY" }, // 1548024486
+		{ &Z_Construct_UFunction_UWindow_SetResizing, "SetResizing" }, // 2250809616
 		{ &Z_Construct_UFunction_UWindow_SetSize, "SetSize" }, // 3939956260
 		{ &Z_Construct_UFunction_UWindow_SetSizeX, "SetSizeX" }, // 1354722972
 		{ &Z_Construct_UFunction_UWindow_SetSizeY, "SetSizeY" }, // 2188207627
@@ -2361,10 +2539,10 @@ UWindow::~UWindow() {}
 struct Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_Statics
 {
 	static constexpr FClassRegisterCompiledInInfo ClassInfo[] = {
-		{ Z_Construct_UClass_UWindow, UWindow::StaticClass, TEXT("UWindow"), &Z_Registration_Info_UClass_UWindow, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(UWindow), 1981169440U) },
+		{ Z_Construct_UClass_UWindow, UWindow::StaticClass, TEXT("UWindow"), &Z_Registration_Info_UClass_UWindow, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(UWindow), 502992361U) },
 	};
 }; // Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_Statics 
-static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_3568844695{
+static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_304346936{
 	TEXT("/Script/NX_ModularWindow"),
 	Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_Statics::ClassInfo, UE_ARRAY_COUNT(Z_CompiledInDeferFile_FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h__Script_NX_ModularWindow_Statics::ClassInfo),
 	nullptr, 0,

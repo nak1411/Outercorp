@@ -12,14 +12,35 @@ void UModule_Move_None::Action()
 		return; // Don't allow move action
 	}
 
-    Super::Action();
-    Prepare(Window);
+	Super::Action();
+	Prepare(Window);
+	bIsActivelyMoving = true;
+
+	// Set dragging flag for performance optimization
+	if (Window)
+	{
+		Window->SetDragging(true);
+	}
+
+	// Use a slower tick rate for the timer fallback
 	Window->GetWorld()->GetTimerManager().
-		SetTimer(TimerHandle, this, &UModule_Move_None::MoveAuto, 0.01f, true);
+		SetTimer(TimerHandle, this, &UModule_Move_None::MoveAuto, 0.016f, true);
 }
+
 void UModule_Move_None::Deaction()
 {
 	Super::Deaction();
+	bIsActivelyMoving = false;
+
+	// Clear dragging flag
+	if (Window)
+	{
+		Window->SetDragging(false);
+
+		// Fire final position update with delegates to ensure everything is in sync
+		Window->SetPosition(Window->GetPosition());
+	}
+
 	Window->GetWorld()->GetTimerManager().ClearTimer(TimerHandle);
 }
 
@@ -27,12 +48,22 @@ void UModule_Move_None::Deaction()
 void UModule_Move_None::Prepare(UWindow* InWindow)
 {
 }
+
 void UModule_Move_None::Move(UWindow* InWindow)
 {
 }
+
 void UModule_Move_None::MoveAuto()
 {
 	Move(Window);
+}
+
+void UModule_Move_None::TickMove(float DeltaTime)
+{
+	if (bIsActivelyMoving && Window)
+	{
+		Move(Window);
+	}
 }
 
 

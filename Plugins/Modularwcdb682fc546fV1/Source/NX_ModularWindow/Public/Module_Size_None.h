@@ -12,7 +12,7 @@ class NX_MODULARWINDOW_API UModule_Size_None : public UWindow_Module
 	GENERATED_BODY()
 	
 //Logic//
-public:	
+public:
 	virtual void Action() override;
 	virtual void Deaction() override;
 
@@ -21,8 +21,15 @@ public:
 	virtual void PrepareAuto();
 	virtual void MoveAuto();
 
+	// Tick-based resizing for better performance
+	virtual void TickMove(float DeltaTime);
+
 
 //Data//
+protected:
+	// Track if we're actively resizing
+	bool bIsActivelyResizing = false;
+
 private:
 	UPROPERTY()
 	FTimerHandle TimerHandle;

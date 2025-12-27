@@ -37,7 +37,7 @@ static_assert(!UE_WITH_CONSTINIT_UOBJECT, "This generated code can only be compi
 			SingletonFuncArray,
 			UE_ARRAY_COUNT(SingletonFuncArray),
 			PKG_CompiledIn | 0x00000000,
-			0x7879FAF6,
+			0xF240109F,
 			0xB6E53087,
 			METADATA_PARAMS(0, nullptr)
 		};
@@ -45,5 +45,5 @@ static_assert(!UE_WITH_CONSTINIT_UOBJECT, "This generated code can only be compi
 	}
 	return Z_Registration_Info_UPackage__Script_NX_ModularWindow.OuterSingleton;
 }
-static FRegisterCompiledInInfo Z_CompiledInDeferPackage_UPackage__Script_NX_ModularWindow(Z_Construct_UPackage__Script_NX_ModularWindow, TEXT("/Script/NX_ModularWindow"), Z_Registration_Info_UPackage__Script_NX_ModularWindow, CONSTRUCT_RELOAD_VERSION_INFO(FPackageReloadVersionInfo, 0x7879FAF6, 0xB6E53087));
+static FRegisterCompiledInInfo Z_CompiledInDeferPackage_UPackage__Script_NX_ModularWindow(Z_Construct_UPackage__Script_NX_ModularWindow, TEXT("/Script/NX_ModularWindow"), Z_Registration_Info_UPackage__Script_NX_ModularWindow, CONSTRUCT_RELOAD_VERSION_INFO(FPackageReloadVersionInfo, 0xF240109F, 0xB6E53087));
 PRAGMA_ENABLE_DEPRECATION_WARNINGS

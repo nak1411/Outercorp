@@ -10,6 +10,8 @@
 #include "Module_Limit_Size_Universal.h"
 #include "Module_Fullscreen_None.h"
 #include "Module_Size_All_Universal.h"
+#include "Module_Move_None.h"
+#include "Module_Size_None.h"
 #include "Blueprint/WidgetTree.h"
 
 
@@ -38,6 +40,22 @@ void UWindow::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	{
 		UpdateUIForCapabilities();
 		bCapabilitiesApplied = true;
+	}
+
+	// Tick all move/size modules for smooth dragging and resizing
+	if (bIsDragging || bIsResizing)
+	{
+		for (UWindow_Module* Module : Modules)
+		{
+			if (UModule_Move_None* MoveModule = Cast<UModule_Move_None>(Module))
+			{
+				MoveModule->TickMove(InDeltaTime);
+			}
+			else if (UModule_Size_None* SizeModule = Cast<UModule_Size_None>(Module))
+			{
+				SizeModule->TickMove(InDeltaTime);
+			}
+		}
 	}
 }
 
@@ -225,16 +243,42 @@ void UWindow::SetByParameterSize(TArray<FName> InNames, TArray<float> InValues)
 //Position
 void UWindow::SetPosition(FVector2D NewPosition)
 {
+	// Use fast path during dragging to avoid delegate overhead
+	if (bIsDragging)
+	{
+		SetPositionDirect(NewPosition);
+		return;
+	}
+
 	CanvasSlot->SetPosition(NewPosition);
 	SetByParameterPosition(
-		TArray<FName>{"Position_X", "Position_Y"}, 
+		TArray<FName>{"Position_X", "Position_Y"},
 		TArray<float>{
 			static_cast<float>(
-			NewPosition.X), 
+			NewPosition.X),
 			static_cast<float>(
 			NewPosition.Y)
 		}
 	);
+}
+
+void UWindow::SetPositionDirect(FVector2D NewPosition)
+{
+	// Fast path - only update canvas slot without triggering delegates
+	if (CanvasSlot)
+	{
+		CanvasSlot->SetPosition(NewPosition);
+	}
+}
+
+void UWindow::SetDragging(bool bInDragging)
+{
+	bIsDragging = bInDragging;
+}
+
+void UWindow::SetResizing(bool bInResizing)
+{
+	bIsResizing = bInResizing;
 }
 
 void UWindow::SetPositionX(float NewPosition)

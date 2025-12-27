@@ -345,6 +345,10 @@ bool UInventoryWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDrop
 			{
 				return false;
 			}
+
+			// Execute the split operation
+			InventoryComponent->SplitStack(DragDropOp->SourceSlotIndex, EmptySlot, SplitAmount);
+			return true;
 		}
 	}
 
@@ -1698,6 +1702,15 @@ void UInventoryWidget::HandleStackAllItems()
 
 	// End batch update - this will trigger debounced UI refresh automatically
 	InventoryComponent->EndBatchUpdate();
+
+	// Clear all selections after stacking since items have moved and many slots are now empty
+	if (SlotWidgets.Num() > 0 && SlotWidgets[0])
+	{
+		SlotWidgets[0]->ClearAllSelections();
+	}
+
+	// Also clear list view selections to keep both views in sync
+	UInventoryListRowWidget::ClearAllRowSelections();
 }
 
 void UInventoryWidget::HandleSelectAll()

@@ -12,10 +12,10 @@ class NX_MODULARWINDOW_API UModule_Move_None : public UWindow_Module
 	GENERATED_BODY()
 
 //Logic//
-public:	
+public:
 	virtual void Action() override;
 	virtual void Deaction() override;
-	
+
 	UFUNCTION(BlueprintCallable, Category = "Window")
 	virtual void SetXWorking(bool bValue);
 
@@ -32,12 +32,19 @@ public:
 	virtual void Move(UWindow* InWindow);
 	virtual void MoveAuto();
 
+	// Tick-based movement for better performance
+	virtual void TickMove(float DeltaTime);
+
 //Data//
 protected:
 	UPROPERTY();
 	bool bXWorking = true;
 	UPROPERTY();
 	bool bYWorking = true;
+
+	// Track if we're actively moving
+	bool bIsActivelyMoving = false;
+
 private:
 	UPROPERTY();
 	FTimerHandle TimerHandle;

@@ -62,6 +62,10 @@ protected:
 
 	bool bCapabilitiesApplied = false;
 
+	// Performance optimization: skip delegates during active drag/resize
+	bool bIsDragging = false;
+	bool bIsResizing = false;
+
 	
 
 
@@ -137,6 +141,16 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Window")
 	void SetByParameterSize(TArray<FName> InNames, TArray<float> InValues);
+
+	// Fast path for direct position updates (bypasses delegates for performance)
+	UFUNCTION(BlueprintCallable, Category="Window")
+	void SetPositionDirect(FVector2D NewPosition);
+
+	UFUNCTION(BlueprintCallable, Category="Window")
+	void SetDragging(bool bInDragging);
+
+	UFUNCTION(BlueprintCallable, Category="Window")
+	void SetResizing(bool bInResizing);
 
 
 	
