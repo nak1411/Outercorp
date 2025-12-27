@@ -8,5 +8,6 @@
 /NODEFAULTLIB
 "D:/NakDev/Outercorp/Intermediate/Build/Win64/x64/OutercorpEditor/Development/UnrealEd/SharedPCH.UnrealEd.Project.ValApi.ValExpApi.Cpp20.h.obj"
 "D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Module.NX_ModularWindow.cpp.obj"
+"D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Window.cpp.obj"
 "D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/Default.rc2.res"
 /OUT:"D:/NakDev/Outercorp/Plugins/Modularwcdb682fc546fV1/Intermediate/Build/Win64/x64/UnrealEditor/Development/NX_ModularWindow/UnrealEditor-NX_ModularWindow.lib"

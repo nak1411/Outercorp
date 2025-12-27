@@ -17,60 +17,68 @@
 PRAGMA_DISABLE_DEPRECATION_WARNINGS
 class UCanvasPanelSlot;
 class UUserWidget;
+class UWindow;
 class UWindow_Module;
 struct FWindowCapabilities;
 
+// ********** Begin Delegate FED_WindowClicked *****************************************************
+#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_213_DELEGATE \
+static void FED_WindowClicked_DelegateWrapper(const FMulticastScriptDelegate& ED_WindowClicked, UWindow* ClickedWindow);
+
+
+// ********** End Delegate FED_WindowClicked *******************************************************
+
 // ********** Begin Delegate FED_InteractStart *****************************************************
-#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_202_DELEGATE \
+#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_218_DELEGATE \
 static void FED_InteractStart_DelegateWrapper(const FMulticastScriptDelegate& ED_InteractStart);
 
 
 // ********** End Delegate FED_InteractStart *******************************************************
 
 // ********** Begin Delegate FED_InteractEnd *******************************************************
-#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_206_DELEGATE \
+#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_222_DELEGATE \
 static void FED_InteractEnd_DelegateWrapper(const FMulticastScriptDelegate& ED_InteractEnd);
 
 
 // ********** End Delegate FED_InteractEnd *********************************************************
 
 // ********** Begin Delegate FED_PositionStart *****************************************************
-#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_213_DELEGATE \
+#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_229_DELEGATE \
 static void FED_PositionStart_DelegateWrapper(const FMulticastScriptDelegate& ED_PositionStart);
 
 
 // ********** End Delegate FED_PositionStart *******************************************************
 
 // ********** Begin Delegate FED_PositionChanged ***************************************************
-#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_217_DELEGATE \
+#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_233_DELEGATE \
 static void FED_PositionChanged_DelegateWrapper(const FMulticastScriptDelegate& ED_PositionChanged);
 
 
 // ********** End Delegate FED_PositionChanged *****************************************************
 
 // ********** Begin Delegate FED_PositionEnd *******************************************************
-#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_221_DELEGATE \
+#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_237_DELEGATE \
 static void FED_PositionEnd_DelegateWrapper(const FMulticastScriptDelegate& ED_PositionEnd);
 
 
 // ********** End Delegate FED_PositionEnd *********************************************************
 
 // ********** Begin Delegate FED_SizeStart *********************************************************
-#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_228_DELEGATE \
+#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_244_DELEGATE \
 static void FED_SizeStart_DelegateWrapper(const FMulticastScriptDelegate& ED_SizeStart);
 
 
 // ********** End Delegate FED_SizeStart ***********************************************************
 
 // ********** Begin Delegate FED_SizeChanged *******************************************************
-#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_232_DELEGATE \
+#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_248_DELEGATE \
 static void FED_SizeChanged_DelegateWrapper(const FMulticastScriptDelegate& ED_SizeChanged);
 
 
 // ********** End Delegate FED_SizeChanged *********************************************************
 
 // ********** Begin Delegate FED_SizeEnd ***********************************************************
-#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_236_DELEGATE \
+#define FID_Outercorp_Plugins_Modularwcdb682fc546fV1_Source_NX_ModularWindow_Public_Window_h_252_DELEGATE \
 static void FED_SizeEnd_DelegateWrapper(const FMulticastScriptDelegate& ED_SizeEnd);
 
 
@@ -102,6 +110,9 @@ static void FED_SizeEnd_DelegateWrapper(const FMulticastScriptDelegate& ED_SizeE
 	DECLARE_FUNCTION(execSetPositionX); \
 	DECLARE_FUNCTION(execSetPosition); \
 	DECLARE_FUNCTION(execGetPosition); \
+	DECLARE_FUNCTION(execSetZOrder); \
+	DECLARE_FUNCTION(execGetZOrder); \
+	DECLARE_FUNCTION(execBringToFront); \
 	DECLARE_FUNCTION(execGetCanvasSlot); \
 	DECLARE_FUNCTION(execUninit); \
 	DECLARE_FUNCTION(execInit);

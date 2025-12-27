@@ -79,6 +79,13 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "UI")
 	FInventoryItem CurrentDisplayedItem;
 
+	/** Array tracking all managed windows for Z-order management */
+	UPROPERTY()
+	TArray<UUserWidget*> ManagedWindows;
+
+	/** Current base Z-order value for windows */
+	int32 CurrentWindowZOrder = 100;
+
 	/** Crosshair widget class */
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> CrosshairWidgetClass;
@@ -286,6 +293,29 @@ protected:
 	/** Called when a window is moved or resized */
 	UFUNCTION()
 	void OnWindowLayoutChanged();
+
+	/** Called when a window is clicked */
+	UFUNCTION()
+	void OnWindowClicked(UWindow* ClickedWindow);
+
+	/** Called when inventory window interaction starts */
+	UFUNCTION()
+	void OnInventoryWindowInteractStart();
+
+	/** Called when character window interaction starts */
+	UFUNCTION()
+	void OnCharacterWindowInteractStart();
+
+	/** Called when item info window interaction starts */
+	UFUNCTION()
+	void OnItemInfoWindowInteractStart();
+
+	/** Bring a window to the front of all other windows */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void BringWindowToFront(UUserWidget* Window);
+
+	/** Register a window for Z-order management */
+	void RegisterWindow(UUserWidget* Window);
 
 	/** Check if a window is currently maximized/fullscreened */
 	bool IsWindowMaximized(UUserWidget* Window) const;

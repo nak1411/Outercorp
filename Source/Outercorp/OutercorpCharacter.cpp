@@ -107,7 +107,13 @@ void AOutercorpCharacter::BeginPlay()
 							// Bind to position and size end events for auto-save
 							Window->ED_PositionEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
 							Window->ED_SizeEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
+
+							// Bind to interact start event to bring window to front when dragging starts
+							Window->ED_InteractStart.AddDynamic(this, &AOutercorpCharacter::OnInventoryWindowInteractStart);
 						}
+
+						// Register window for Z-order management
+						RegisterWindow(InventoryWindow);
 
 						// Pre-create the inventory widget to avoid first-open delay
 						SetupInventoryWidgetInWindow(InventoryWindow);
@@ -140,7 +146,13 @@ void AOutercorpCharacter::BeginPlay()
 							// Bind to position and size end events for auto-save
 							Window->ED_PositionEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
 							Window->ED_SizeEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
+
+							// Bind to interact start event to bring window to front when dragging starts
+							Window->ED_InteractStart.AddDynamic(this, &AOutercorpCharacter::OnCharacterWindowInteractStart);
 						}
+
+						// Register window for Z-order management
+						RegisterWindow(CharacterWindow);
 
 						CharacterWindow->SetVisibility(ESlateVisibility::Hidden);
 					}
@@ -170,7 +182,13 @@ void AOutercorpCharacter::BeginPlay()
 							// Bind to position and size end events for auto-save
 							Window->ED_PositionEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
 							Window->ED_SizeEnd.AddDynamic(this, &AOutercorpCharacter::OnWindowLayoutChanged);
+
+							// Bind to interact start event to bring window to front when dragging starts
+							Window->ED_InteractStart.AddDynamic(this, &AOutercorpCharacter::OnItemInfoWindowInteractStart);
 						}
+
+						// Register window for Z-order management
+						RegisterWindow(ItemInfoWindow);
 
 						ItemInfoWindow->SetVisibility(ESlateVisibility::Hidden);
 					}
@@ -200,6 +218,15 @@ void AOutercorpCharacter::BeginPlay()
 			{
 				CrosshairWidget->AddToViewport(1); // Above HUD
 			}
+		}
+
+		// Set initial input mode to game-only (no UI, no cursor)
+		APlayerController *PC = Cast<APlayerController>(GetController());
+		if (PC)
+		{
+			FInputModeGameOnly InputMode;
+			PC->SetInputMode(InputMode);
+			PC->SetShowMouseCursor(false);
 		}
 	}
 }
@@ -383,6 +410,9 @@ void AOutercorpCharacter::OpenInventory_Implementation()
 	if (InventoryWindow)
 	{
 		InventoryWindow->SetVisibility(ESlateVisibility::Visible);
+
+		// Bring the window to front when opened
+		BringWindowToFront(InventoryWindow);
 	}
 	else
 	{
@@ -513,6 +543,9 @@ void AOutercorpCharacter::OpenCharacter_Implementation()
 		}
 
 		CharacterWindow->SetVisibility(ESlateVisibility::Visible);
+
+		// Bring the window to front when opened
+		BringWindowToFront(CharacterWindow);
 	}
 
 	APlayerController *PC = Cast<APlayerController>(GetController());
@@ -914,6 +947,9 @@ void AOutercorpCharacter::OpenItemInfo(const FInventoryItem &Item)
 
 		// Show the window first
 		ItemInfoWindow->SetVisibility(ESlateVisibility::Visible);
+
+		// Bring the window to front when opened
+		BringWindowToFront(ItemInfoWindow);
 
 		// Call SetItemInfo on the widget if it's a UItemInfoWidget
 		if (ItemInfoWidget)
@@ -1387,4 +1423,81 @@ void AOutercorpCharacter::OnWindowLayoutChanged()
 
 	// Auto-save whenever a window is moved or resized (when not maximized)
 	SaveUILayout();
+}
+
+void AOutercorpCharacter::OnWindowClicked(UWindow* ClickedWindow)
+{
+	if (ClickedWindow)
+	{
+		BringWindowToFront(ClickedWindow);
+	}
+}
+
+void AOutercorpCharacter::OnInventoryWindowInteractStart()
+{
+	BringWindowToFront(InventoryWindow);
+}
+
+void AOutercorpCharacter::OnCharacterWindowInteractStart()
+{
+	BringWindowToFront(CharacterWindow);
+}
+
+void AOutercorpCharacter::OnItemInfoWindowInteractStart()
+{
+	BringWindowToFront(ItemInfoWindow);
+}
+
+void AOutercorpCharacter::BringWindowToFront(UUserWidget* Window)
+{
+	if (!Window)
+	{
+		return;
+	}
+
+	UWindow* WindowObj = Cast<UWindow>(Window);
+	if (!WindowObj)
+	{
+		return;
+	}
+
+	// Find the highest Z-order among all managed windows
+	int32 HighestZOrder = 0;
+	for (UUserWidget* ManagedWindow : ManagedWindows)
+	{
+		if (ManagedWindow && ManagedWindow != Window)
+		{
+			UWindow* ManagedWindowObj = Cast<UWindow>(ManagedWindow);
+			if (ManagedWindowObj)
+			{
+				int32 ZOrder = ManagedWindowObj->GetZOrder();
+				if (ZOrder > HighestZOrder)
+				{
+					HighestZOrder = ZOrder;
+				}
+			}
+		}
+	}
+
+	// Set the clicked window to be one level higher than the highest
+	WindowObj->SetZOrder(HighestZOrder + 1);
+}
+
+void AOutercorpCharacter::RegisterWindow(UUserWidget* Window)
+{
+	if (Window && !ManagedWindows.Contains(Window))
+	{
+		ManagedWindows.Add(Window);
+
+		// Bind to the window clicked event
+		UWindow* WindowObj = Cast<UWindow>(Window);
+		if (WindowObj)
+		{
+			// Create a lambda to capture the window pointer
+			WindowObj->ED_WindowClicked.AddDynamic(this, &AOutercorpCharacter::OnWindowClicked);
+
+			// Set initial Z-order
+			WindowObj->SetZOrder(CurrentWindowZOrder++);
+		}
+	}
 }

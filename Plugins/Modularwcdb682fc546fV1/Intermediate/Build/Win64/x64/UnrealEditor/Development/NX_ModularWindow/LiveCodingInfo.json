@@ -78,10 +78,10 @@
 			"Module_Size_Up_Line.cpp.obj",
 			"Module_Size_Up_Point.cpp.obj",
 			"NX_ModularWindow.cpp.obj",
-			"Window.cpp.obj",
 			"Window_Module.cpp.obj",
 			"Window_Template_0.cpp.obj",
-			"Window_Timer_Event.cpp.obj"
+			"Window_Timer_Event.cpp.obj",
+			"Window.cpp.obj"
 		]
 	}
 }

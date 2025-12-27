@@ -41,6 +41,25 @@ void UWindow::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	}
 }
 
+FReply UWindow::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// Bring window to front when clicked
+	BringToFront();
+
+	// Allow the event to continue propagating to child widgets
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply UWindow::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// This is called before child widgets get the event
+	// Bring window to front when clicked anywhere on it
+	BringToFront();
+
+	// Return unhandled so the event continues to child widgets
+	return FReply::Unhandled();
+}
+
 
 
 bool UWindow::Init()
@@ -66,6 +85,32 @@ void UWindow::Uninit()
 UCanvasPanelSlot* UWindow::GetCanvasSlot()
 {
 	return Cast<UCanvasPanelSlot>(Slot);
+}
+
+void UWindow::BringToFront()
+{
+	if (CanvasSlot)
+	{
+		// Broadcast the event so the window manager can handle Z-ordering
+		ED_WindowClicked.Broadcast(this);
+	}
+}
+
+int32 UWindow::GetZOrder() const
+{
+	if (CanvasSlot)
+	{
+		return CanvasSlot->GetZOrder();
+	}
+	return 0;
+}
+
+void UWindow::SetZOrder(int32 NewZOrder)
+{
+	if (CanvasSlot)
+	{
+		CanvasSlot->SetZOrder(NewZOrder);
+	}
 }
 
 

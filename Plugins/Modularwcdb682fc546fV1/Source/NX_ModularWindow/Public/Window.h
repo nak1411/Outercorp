@@ -70,6 +70,8 @@ protected:
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 public:
 	UFUNCTION(BlueprintCallable, Category = "Window")
 	bool Init();
@@ -79,6 +81,15 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Window")
 	UCanvasPanelSlot* GetCanvasSlot();
+
+	UFUNCTION(BlueprintCallable, Category = "Window")
+	void BringToFront();
+
+	UFUNCTION(BlueprintCallable, Category = "Window")
+	int32 GetZOrder() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Window")
+	void SetZOrder(int32 NewZOrder);
 
 
 
@@ -198,6 +209,11 @@ public:
 
 //EventDispatchers//
 public:
+	//Clicked
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FED_WindowClicked, UWindow*, ClickedWindow);
+	UPROPERTY(BlueprintAssignable, Category = "Events")
+	FED_WindowClicked ED_WindowClicked;
+
 	//Interact
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE(FED_InteractStart);
 	UPROPERTY(BlueprintAssignable, Category = "Events")
