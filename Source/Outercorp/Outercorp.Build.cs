@@ -26,13 +26,7 @@ public class Outercorp : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
 		PublicIncludePaths.AddRange(new string[] {
-			"Outercorp",
-			"Outercorp/Variant_Horror",
-			"Outercorp/Variant_Horror/UI",
-			"Outercorp/Variant_Shooter",
-			"Outercorp/Variant_Shooter/AI",
-			"Outercorp/Variant_Shooter/UI",
-			"Outercorp/Variant_Shooter/Weapons"
+			"Outercorp"
 		});
 
 		// Uncomment if you are using Slate UI

@@ -283,6 +283,56 @@ FReply UInventoryWidget::NativeOnKeyDown(const FGeometry &InGeometry, const FKey
 		return FReply::Handled();
 	}
 
+	// Handle Delete key to destroy selected items
+	if (InKeyEvent.GetKey() == EKeys::Delete || InKeyEvent.GetKey() == EKeys::BackSpace)
+	{
+		if (InventoryComponent)
+		{
+			// Get selected slots from grid view
+			TArray<int32> SelectedSlots;
+			if (SlotWidgets.Num() > 0 && SlotWidgets[0])
+			{
+				SelectedSlots = SlotWidgets[0]->GetSelectedSlots();
+			}
+
+			// If no grid selections, check list view selections
+			if (SelectedSlots.Num() == 0 && bIsListView)
+			{
+				const TSet<UInventoryListRowWidget*>& SelectedRows = UInventoryListRowWidget::GetSelectedRows();
+				for (UInventoryListRowWidget* Row : SelectedRows)
+				{
+					if (Row && Row->GetSlotIndex() >= 0)
+					{
+						SelectedSlots.Add(Row->GetSlotIndex());
+					}
+				}
+			}
+
+			// Destroy selected items
+			if (SelectedSlots.Num() > 0)
+			{
+				// Find the first selected slot widget
+				UInventorySlotWidget* FirstSlot = nullptr;
+				for (UInventorySlotWidget* SlotWidget : SlotWidgets)
+				{
+					if (SlotWidget && SlotWidget->GetSlotIndex() == SelectedSlots[0])
+					{
+						FirstSlot = SlotWidget;
+						break;
+					}
+				}
+
+				if (FirstSlot)
+				{
+					// Call the slot's destroy handler which will show the dialog
+					FirstSlot->HandleDestroyItem();
+				}
+
+				return FReply::Handled();
+			}
+		}
+	}
+
 	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
 
@@ -324,16 +374,37 @@ bool UInventoryWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDrop
 {
 	Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
 
-	// Only handle drops when in list view mode
-	if (!bIsListView || !InventoryComponent)
-	{
-		return false;
-	}
-
 	UInventoryDragDropOperation* DragDropOp = Cast<UInventoryDragDropOperation>(InOperation);
 	if (!DragDropOp)
 	{
 		return false;
+	}
+
+	// Check if the mouse pointer is actually within this widget's bounds
+	FVector2D LocalMousePosition = InGeometry.AbsoluteToLocal(InDragDropEvent.GetScreenSpacePosition());
+	FVector2D LocalSize = InGeometry.GetLocalSize();
+
+	UE_LOG(LogTemp, Log, TEXT("InventoryWidget::NativeOnDrop - LocalPos: (%.2f, %.2f), LocalSize: (%.2f, %.2f)"),
+		LocalMousePosition.X, LocalMousePosition.Y, LocalSize.X, LocalSize.Y);
+
+	// If the mouse is outside the widget bounds, don't claim the drop
+	if (LocalMousePosition.X < 0 || LocalMousePosition.Y < 0 ||
+		LocalMousePosition.X > LocalSize.X || LocalMousePosition.Y > LocalSize.Y)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Mouse outside inventory bounds - not claiming drop"));
+		// Mouse is outside the inventory widget - let drop-to-world handle it
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Mouse inside inventory bounds - claiming drop"));
+	// CRITICAL: Mark that the item was dropped within the inventory window
+	// This prevents the drop-to-world logic from triggering when items are dropped on empty areas
+	DragDropOp->bWasDroppedOnValidTarget = true;
+
+	// Only handle drops when in list view mode
+	if (!bIsListView || !InventoryComponent)
+	{
+		return true; // Return true because we claimed the drop (item stays in original slot)
 	}
 
 	// Handle split operation when dropping on empty area in list view
@@ -346,7 +417,7 @@ bool UInventoryWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDrop
 			int32 EmptySlot = InventoryComponent->FindEmptySlot();
 			if (EmptySlot == -1)
 			{
-				return false;
+				return true; // Return true because we claimed the drop (item stays in original slot)
 			}
 
 			// Execute the split operation
@@ -355,8 +426,8 @@ bool UInventoryWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDrop
 		}
 	}
 
-	// Don't handle other drag operations on empty area - let them fall through
-	return false;
+	// Item dropped on empty area - do nothing, item stays in original slot
+	return true; // Return true because we claimed the drop
 }
 
 void UInventoryWidget::InitializeInventory(UInventoryComponent *InInventoryComponent)

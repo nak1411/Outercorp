@@ -18,6 +18,8 @@
 #include "InventoryWidget.h"
 #include "CharacterWidget.h"
 #include "ItemInfoWidget.h"
+#include "InteractionPromptWidget.h"
+#include "InteractionManagerComponent.h"
 #include "Outercorp.h"
 #include "Window.h"
 #include "OutercorpSaveGame.h"
@@ -62,6 +64,9 @@ AOutercorpCharacter::AOutercorpCharacter()
 
 	// Create inventory component
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("Inventory Component"));
+
+	// Create interaction manager component
+	InteractionManagerComponent = CreateDefaultSubobject<UInteractionManagerComponent>(TEXT("Interaction Manager"));
 }
 
 void AOutercorpCharacter::BeginPlay()
@@ -220,6 +225,29 @@ void AOutercorpCharacter::BeginPlay()
 			}
 		}
 
+		// Create and display the interaction prompt widget
+		if (InteractionPromptWidgetClass)
+		{
+			UE_LOG(LogTemp, Log, TEXT("OutercorpCharacter: Creating interaction prompt widget..."));
+			InteractionPromptWidget = CreateWidget<UInteractionPromptWidget>(GetWorld(), InteractionPromptWidgetClass);
+			if (InteractionPromptWidget)
+			{
+				UE_LOG(LogTemp, Log, TEXT("OutercorpCharacter: Interaction prompt widget created successfully, adding to viewport"));
+				InteractionPromptWidget->AddToViewport(2); // Above crosshair
+
+				// Manually initialize the interaction system
+				InteractionPromptWidget->InitializeInteraction();
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("OutercorpCharacter: Failed to create interaction prompt widget!"));
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("OutercorpCharacter: InteractionPromptWidgetClass is not set!"));
+		}
+
 		// Set initial input mode to game-only (no UI, no cursor)
 		APlayerController *PC = Cast<APlayerController>(GetController());
 		if (PC)
@@ -305,6 +333,9 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 
 		// Character
 		EnhancedInputComponent->BindAction(CharacterAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleCharacter);
+
+		// Interact
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AOutercorpCharacter::Interact);
 	}
 	else
 	{
@@ -384,6 +415,21 @@ void AOutercorpCharacter::DoJumpEnd()
 
 	// pass StopJumping to the character
 	StopJumping();
+}
+
+void AOutercorpCharacter::Interact()
+{
+	// Don't process interact input if any UI widget is open
+	if (IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// Call interact on the interaction manager component
+	if (InteractionManagerComponent)
+	{
+		InteractionManagerComponent->Interact();
+	}
 }
 
 void AOutercorpCharacter::ToggleInventory()

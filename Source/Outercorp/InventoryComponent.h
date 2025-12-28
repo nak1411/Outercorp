@@ -136,6 +136,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void EndBatchUpdate();
 
+	/** Drop item from slot into the world */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool DropItem(int32 SlotIndex, int32 Quantity, FVector DropLocation, FRotator DropRotation);
+
+	/** Drop item with automatic positioning in front of owner */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool DropItemInFront(int32 SlotIndex, int32 Quantity, float DropDistance = 200.0f);
+
+	/** Class to spawn when dropping items */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Drop")
+	TSubclassOf<class APickupableItem> PickupableItemClass;
+
+	/** How much force to apply when dropping items */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Drop")
+	float DropImpulseStrength;
+
 protected:
 	/** Try to stack item with existing items */
 	bool TryStackItem(UInventoryItemData* ItemData, int32& Quantity, int32& OutSlotIndex);

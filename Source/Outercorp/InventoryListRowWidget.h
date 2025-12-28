@@ -170,6 +170,14 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Tooltip")
 	TObjectPtr<UTooltipWidget> ActiveTooltip;
 
+	/** Quantity input dialog widget class to spawn when dropping/destroying/splitting items */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Drop")
+	TSubclassOf<class UQuantityInputDialog> QuantityDialogClass;
+
+	/** Reference to currently open quantity dialog */
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Drop")
+	TObjectPtr<class UQuantityInputDialog> ActiveQuantityDialog;
+
 	/** Static set of all selected rows across all inventory widgets */
 	static TSet<UInventoryListRowWidget*> SelectedRows;
 
@@ -238,6 +246,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	bool IsRowSelected() const { return bIsSelected; }
 
+	/** Whether the mouse is currently hovering over this row (for drag preview and Delete key) */
+	bool bIsHovered = false;
+
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
@@ -254,9 +265,6 @@ protected:
 
 	/** Update visual state based on selection */
 	void UpdateSelectionVisual();
-
-	/** Whether the mouse is currently hovering over this row (for drag preview) */
-	bool bIsHovered = false;
 
 	/** Track if we started a drag operation */
 	bool bDragStarted = false;
@@ -308,8 +316,20 @@ private:
 	/** Handle split item action */
 	void HandleSplitItem();
 
+	/** Handle split item confirmation after quantity dialog */
+	void HandleSplitItemConfirmed(int32 Quantity);
+
 	/** Handle destroy item action */
 	void HandleDestroyItem();
+
+	/** Handle destroy item confirmation after quantity dialog */
+	void HandleDestroyItemConfirmed(int32 Quantity);
+
+	/** Handle drop item action */
+	void HandleDropItem();
+
+	/** Handle drop item confirmation after quantity dialog */
+	void HandleDropItemConfirmed(int32 Quantity);
 
 	/** Handle show info action */
 	void HandleShowInfo();

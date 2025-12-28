@@ -18,6 +18,8 @@ class UInventoryWidget;
 class UCharacterWidget;
 class UOutercorpSaveGame;
 class UWindow;
+class UInteractionPromptWidget;
+class UInteractionManagerComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -42,6 +44,10 @@ class AOutercorpCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UInventoryComponent *InventoryComponent;
 
+	/** Interaction manager component */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UInteractionManagerComponent *InteractionManagerComponent;
+
 	/** Crosshair widget */
 	UPROPERTY()
 	UUserWidget *CrosshairWidget;
@@ -49,6 +55,10 @@ class AOutercorpCharacter : public ACharacter
 	/** Base HUD widget (contains canvas for modular windows) */
 	UPROPERTY(BlueprintReadOnly, Category = "UI", meta = (AllowPrivateAccess = "true"))
 	UUserWidget *BaseHUDWidget;
+
+	/** Interaction prompt widget */
+	UPROPERTY()
+	UInteractionPromptWidget *InteractionPromptWidget;
 
 protected:
 	/** Inventory widget (the actual content widget) */
@@ -110,6 +120,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> ModularWindowClass;
 
+	/** Interaction prompt widget class */
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UInteractionPromptWidget> InteractionPromptWidgetClass;
+
 	/** Inventory window capabilities */
 	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
 	bool bInventoryCanMove = true;
@@ -158,6 +172,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *CharacterAction;
 
+	/** Interact Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *InteractAction;
+
 public:
 	AOutercorpCharacter();
 
@@ -189,6 +207,10 @@ protected:
 	/** Handles jump end inputs from either controls or UI interfaces */
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoJumpEnd();
+
+	/** Interact with the currently looked at object */
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	virtual void Interact();
 
 	/** Toggle inventory display */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")

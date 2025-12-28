@@ -1,10 +1,14 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "InventoryComponent.h"
+#include "PickupableItem.h"
+#include "GameFramework/Character.h"
+#include "Camera/CameraComponent.h"
 
 UInventoryComponent::UInventoryComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	DropImpulseStrength = 500.0f;
 }
 
 void UInventoryComponent::BeginPlay()
@@ -34,13 +38,23 @@ bool UInventoryComponent::AddItem(UInventoryItemData* ItemData, int32 Quantity, 
 	// Try to stack with existing items first
 	if (ItemData->MaxStackSize > 1)
 	{
+		UE_LOG(LogTemp, Log, TEXT("Item '%s' is stackable (MaxStackSize: %d), attempting to stack %d items"),
+			*ItemData->ItemName.ToString(), ItemData->MaxStackSize, Quantity);
+
 		if (TryStackItem(ItemData, RemainingQuantity, OutSlotIndex))
 		{
 			if (RemainingQuantity <= 0)
 			{
+				UE_LOG(LogTemp, Log, TEXT("Successfully stacked all items into existing stacks"));
 				return true;
 			}
+			UE_LOG(LogTemp, Log, TEXT("Partially stacked, %d items remaining to add to new slots"), RemainingQuantity);
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Item '%s' is NOT stackable (MaxStackSize: %d) - will create separate slots"),
+			*ItemData->ItemName.ToString(), ItemData->MaxStackSize);
 	}
 
 	// Add to empty slots
@@ -483,11 +497,13 @@ void UInventoryComponent::SortInventoryCustom(TFunction<bool(const FInventoryIte
 bool UInventoryComponent::TryStackItem(UInventoryItemData* ItemData, int32& Quantity, int32& OutSlotIndex)
 {
 	bool bStackedAny = false;
+	int32 MatchingStacksFound = 0;
 
 	for (int32 i = 0; i < Items.Num() && Quantity > 0; ++i)
 	{
 		if (Items[i].IsValid() && Items[i].ItemData == ItemData)
 		{
+			MatchingStacksFound++;
 			int32 SpaceInStack = ItemData->MaxStackSize - Items[i].Quantity;
 			if (SpaceInStack > 0)
 			{
@@ -497,9 +513,22 @@ bool UInventoryComponent::TryStackItem(UInventoryItemData* ItemData, int32& Quan
 				OutSlotIndex = i;
 				bStackedAny = true;
 
+				UE_LOG(LogTemp, Log, TEXT("Stacked %d items into slot %d (now has %d/%d)"),
+					QuantityToAdd, i, Items[i].Quantity, ItemData->MaxStackSize);
+
 				OnInventoryUpdated.Broadcast(i, Items[i]);
 			}
+			else
+			{
+				UE_LOG(LogTemp, Log, TEXT("Found matching stack at slot %d but it's full (%d/%d)"),
+					i, Items[i].Quantity, ItemData->MaxStackSize);
+			}
 		}
+	}
+
+	if (MatchingStacksFound == 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("No existing stacks found for item '%s'"), *ItemData->ItemName.ToString());
 	}
 
 	return bStackedAny;
@@ -550,4 +579,145 @@ void UInventoryComponent::EndBatchUpdate()
 	}
 
 	PendingUpdateSlots.Empty();
+}
+
+bool UInventoryComponent::DropItem(int32 SlotIndex, int32 Quantity, FVector DropLocation, FRotator DropRotation)
+{
+	// Validate inputs
+	if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].IsValid())
+	{
+		return false;
+	}
+
+	if (Quantity <= 0 || Quantity > Items[SlotIndex].Quantity)
+	{
+		return false;
+	}
+
+	if (!PickupableItemClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PickupableItemClass not set on InventoryComponent!"));
+		return false;
+	}
+
+	// Get item data
+	FInventoryItem ItemToDrop = Items[SlotIndex];
+
+	// Spawn parameters
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	// Spawn individual items for each quantity
+	int32 SuccessfulDrops = 0;
+	for (int32 i = 0; i < Quantity; i++)
+	{
+		// Calculate spawn location with slight offset for each item
+		FVector CurrentDropLocation = DropLocation;
+		if (i > 0)
+		{
+			// Add small random offset to spread items out slightly
+			// Keep them close together (max ~20 units from center)
+			float RandomAngle = FMath::RandRange(0.0f, 360.0f);
+			float RandomDistance = FMath::RandRange(5.0f, 20.0f);
+			FVector Offset = FVector(
+				FMath::Cos(FMath::DegreesToRadians(RandomAngle)) * RandomDistance,
+				FMath::Sin(FMath::DegreesToRadians(RandomAngle)) * RandomDistance,
+				FMath::RandRange(-5.0f, 5.0f)
+			);
+			CurrentDropLocation += Offset;
+		}
+
+		// Spawn the pickup actor
+		APickupableItem* DroppedItem = GetWorld()->SpawnActor<APickupableItem>(
+			PickupableItemClass,
+			CurrentDropLocation,
+			DropRotation,
+			SpawnParams
+		);
+
+		if (!DroppedItem)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Failed to spawn dropped item %d!"), i);
+			continue;
+		}
+
+		// Initialize the dropped item with quantity 1
+		DroppedItem->InitializeItem(ItemToDrop.ItemData, 1);
+
+		// Start drop cooldown to prevent immediate re-pickup
+		DroppedItem->StartDropCooldown();
+
+		// Enable physics simulation on the dropped item
+		if (DroppedItem->ItemMesh)
+		{
+			// Enable physics simulation and gravity
+			DroppedItem->ItemMesh->SetSimulatePhysics(true);
+			DroppedItem->ItemMesh->SetEnableGravity(true);
+
+			// Set collision to block all dynamic objects
+			DroppedItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			DroppedItem->ItemMesh->SetCollisionResponseToAllChannels(ECR_Block);
+			DroppedItem->ItemMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+
+			// Apply impulse to throw the item forward with slight variation
+			FVector ImpulseDirection = DropRotation.Vector();
+			// Add slight randomness to impulse for spreading
+			FVector RandomSpread = FVector(
+				FMath::RandRange(-0.2f, 0.2f),
+				FMath::RandRange(-0.2f, 0.2f),
+				FMath::RandRange(0.0f, 0.3f)
+			);
+			FVector FinalImpulse = (ImpulseDirection + RandomSpread) * DropImpulseStrength;
+			DroppedItem->ItemMesh->AddImpulse(FinalImpulse, NAME_None, true);
+		}
+
+		SuccessfulDrops++;
+	}
+
+	if (SuccessfulDrops > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Dropped %d x '%s' as individual items"), SuccessfulDrops, *ItemToDrop.ItemData->ItemName.ToString());
+
+		// Remove items from inventory
+		RemoveItemAtSlot(SlotIndex, SuccessfulDrops);
+		return true;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to drop any items!"));
+		return false;
+	}
+}
+
+bool UInventoryComponent::DropItemInFront(int32 SlotIndex, int32 Quantity, float DropDistance)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return false;
+	}
+
+	// Try to get the camera for more accurate drop position
+	UCameraComponent* Camera = Owner->FindComponentByClass<UCameraComponent>();
+
+	FVector DropLocation;
+	FRotator DropRotation;
+
+	if (Camera)
+	{
+		// Drop in front of camera
+		DropLocation = Camera->GetComponentLocation() + (Camera->GetForwardVector() * DropDistance);
+		DropRotation = Camera->GetComponentRotation();
+	}
+	else
+	{
+		// Fall back to actor's forward vector
+		DropLocation = Owner->GetActorLocation() + (Owner->GetActorForwardVector() * DropDistance);
+		DropRotation = Owner->GetActorRotation();
+	}
+
+	// Adjust drop location slightly downward so item doesn't spawn in player's face
+	DropLocation.Z -= 50.0f;
+
+	return DropItem(SlotIndex, Quantity, DropLocation, DropRotation);
 }

@@ -45,6 +45,20 @@ public:
 	/** Is this a split operation (shift-drag) */
 	UPROPERTY(BlueprintReadWrite, Category = "Inventory")
 	bool bIsSplitOperation = false;
+
+	/** Track if the item was successfully dropped on a valid target */
+	UPROPERTY(BlueprintReadWrite, Category = "Inventory")
+	bool bWasDroppedOnValidTarget = false;
+
+	/** Override Drop to track if dropped on valid target */
+	virtual void Drop_Implementation(const FPointerEvent& PointerEvent) override;
+
+	/** Override DragCancelled to handle dropping outside inventory */
+	virtual void DragCancelled_Implementation(const FPointerEvent& PointerEvent) override;
+
+private:
+	/** Handle dropping the item into the world */
+	void HandleDropToWorld();
 };
 
 /**
@@ -167,6 +181,7 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Tooltip")
 	TObjectPtr<UTooltipWidget> ActiveTooltip;
 
+public:
 	/** Item info window widget class to spawn (optional, if not using Blueprint event) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|ItemInfo")
 	TSubclassOf<UUserWidget> ItemInfoWidgetClass;
@@ -175,7 +190,14 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory|ItemInfo")
 	TObjectPtr<UUserWidget> ActiveItemInfoWindow;
 
-public:
+	/** Quantity input dialog widget class to spawn when dropping items */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Drop")
+	TSubclassOf<class UQuantityInputDialog> QuantityDialogClass;
+
+	/** Reference to currently open quantity dialog */
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Drop")
+	TObjectPtr<class UQuantityInputDialog> ActiveQuantityDialog;
+
 	/** Set the item for this slot */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void SetItem(const FInventoryItem &Item);
@@ -235,12 +257,24 @@ public:
 	/** Blueprint-callable function to handle context menu actions */
 	virtual void HandleContextMenuAction_Implementation(FName ActionID) override;
 
+	/** Handle destroy item action (public for Delete key) */
+	void HandleDestroyItem();
+
 protected:
 	/** Handle split item action */
 	void HandleSplitItem();
 
-	/** Handle destroy item action */
-	void HandleDestroyItem();
+	/** Handle split item confirmation after quantity dialog */
+	void HandleSplitItemConfirmed(int32 Quantity);
+
+	/** Handle drop item action */
+	void HandleDropItem();
+
+	/** Handle drop item confirmation after quantity dialog */
+	void HandleDropItemConfirmed(int32 Quantity);
+
+	/** Handle destroy item confirmation after quantity dialog */
+	void HandleDestroyItemConfirmed(int32 Quantity);
 
 	/** Handle show info action */
 	void HandleShowInfo();
@@ -306,6 +340,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory|Selection")
 	bool HasAnySelection() const;
 
+	/** Registry of all slot widgets by inventory component (public for drag drop access) */
+	static TMap<UInventoryComponent *, TArray<TWeakObjectPtr<UInventorySlotWidget>>> SlotWidgetRegistry;
+
 protected:
 	/** Selection state for this slot */
 	UPROPERTY(BlueprintReadOnly, Category = "Inventory|Selection")
@@ -314,7 +351,4 @@ protected:
 private:
 	/** Shared selection state across all slots in the same inventory */
 	static TMap<UInventoryComponent *, TSet<int32>> InventorySelections;
-
-	/** Registry of all slot widgets by inventory component */
-	static TMap<UInventoryComponent *, TArray<TWeakObjectPtr<UInventorySlotWidget>>> SlotWidgetRegistry;
 };

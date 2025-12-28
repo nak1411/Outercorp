@@ -12,6 +12,7 @@
 #include "Components/VerticalBox.h"
 #include "InventoryItemData.h"
 #include "InventorySlotWidget.h"
+#include "QuantityInputDialog.h"
 #include "Engine/Texture2D.h"
 #include "Input/Reply.h"
 #include "GameFramework/PlayerController.h"
@@ -545,6 +546,9 @@ bool UInventoryListRowWidget::NativeOnDrop(const FGeometry &InGeometry, const FD
 		return false;
 	}
 
+	// Mark that the item was dropped on a valid target
+	DragDropOp->bWasDroppedOnValidTarget = true;
+
 	// Handle split operation
 	if (DragDropOp->bIsSplitOperation)
 	{
@@ -781,6 +785,10 @@ void UInventoryListRowWidget::HandleContextMenuAction_Implementation(FName Actio
 	{
 		HandleDestroyItem();
 	}
+	else if (ActionID == "Drop")
+	{
+		HandleDropItem();
+	}
 	else if (ActionID == "ShowInfo")
 	{
 		HandleShowInfo();
@@ -805,76 +813,65 @@ void UInventoryListRowWidget::HandleContextMenuAction_Implementation(FName Actio
 
 void UInventoryListRowWidget::HandleSplitItem()
 {
+	if (!ItemData || !ItemData->Item.IsValid() || !ItemData->InventoryComponent)
+	{
+		return;
+	}
+
+	// Can't split if quantity is 1 or less
+	if (ItemData->Item.Quantity <= 1)
+	{
+		return;
+	}
+
+	// Show quantity dialog to ask how many items to split
+	if (QuantityDialogClass)
+	{
+		ActiveQuantityDialog = CreateWidget<UQuantityInputDialog>(GetOwningPlayer(), QuantityDialogClass);
+		if (ActiveQuantityDialog)
+		{
+			// Max split amount is Quantity - 1 (can't split all items)
+			int32 MaxSplitAmount = ItemData->Item.Quantity - 1;
+
+			FText Title = FText::FromString(TEXT("Split Items"));
+			FText Description = FText::Format(
+				FText::FromString(TEXT("How many {0} do you want to split off?")),
+				ItemData->Item.ItemData->ItemName);
+			FText ConfirmText = FText::FromString(TEXT("Split"));
+
+			ActiveQuantityDialog->SetupDialog(MaxSplitAmount, Title, Description, ConfirmText);
+
+			// Bind delegate
+			TWeakObjectPtr<UInventoryListRowWidget> WeakThis = this;
+			ActiveQuantityDialog->OnQuantityConfirmedDelegate.BindLambda([WeakThis](int32 Quantity)
+			{
+				if (WeakThis.IsValid())
+				{
+					WeakThis->HandleSplitItemConfirmed(Quantity);
+				}
+			});
+
+			ActiveQuantityDialog->AddToViewport(1000);
+		}
+	}
+}
+
+void UInventoryListRowWidget::HandleSplitItemConfirmed(int32 Quantity)
+{
 	if (!ItemData || !ItemData->InventoryComponent)
 	{
 		return;
 	}
 
-	// Get all selected rows
-	const TSet<UInventoryListRowWidget *> &SelectedRowSet = GetSelectedRows();
-
-	// If there are selected rows, split all of them
-	if (SelectedRowSet.Num() > 0)
+	// Find first empty slot
+	int32 EmptySlot = ItemData->InventoryComponent->FindEmptySlot();
+	if (EmptySlot == -1)
 	{
-		// Begin batch update to reduce UI refreshes
-		ItemData->InventoryComponent->BeginBatchUpdate();
-
-		for (UInventoryListRowWidget *SelectedRow : SelectedRowSet)
-		{
-			if (!SelectedRow || !SelectedRow->ItemData || !SelectedRow->ItemData->Item.IsValid())
-			{
-				continue;
-			}
-
-			// Get fresh item data for this row
-			FInventoryItem Item = SelectedRow->ItemData->InventoryComponent->GetItemAtSlot(SelectedRow->ItemData->SlotIndex);
-
-			// Skip if item is invalid or quantity is 1 or less
-			if (!Item.IsValid() || Item.Quantity <= 1)
-			{
-				continue;
-			}
-
-			// Find first empty slot
-			int32 EmptySlot = ItemData->InventoryComponent->FindEmptySlot();
-			if (EmptySlot == -1)
-			{
-				// No more empty slots - stop splitting
-				break;
-			}
-
-			// Split stack in half
-			int32 SplitAmount = Item.Quantity / 2;
-			SelectedRow->ItemData->InventoryComponent->SplitStack(SelectedRow->ItemData->SlotIndex, EmptySlot, SplitAmount);
-		}
-
-		// End batch update - this will trigger UI refresh automatically
-		ItemData->InventoryComponent->EndBatchUpdate();
+		return;
 	}
-	else
-	{
-		// No selection - split just the current item (right-clicked item)
-		if (!ItemData->Item.IsValid())
-		{
-			return;
-		}
 
-		if (ItemData->Item.Quantity <= 1)
-		{
-			return;
-		}
-
-		// Find first empty slot
-		int32 EmptySlot = ItemData->InventoryComponent->FindEmptySlot();
-		if (EmptySlot == -1)
-		{
-			return;
-		}
-
-		// Split stack in half
-		int32 SplitAmount = ItemData->Item.Quantity / 2;
-		ItemData->InventoryComponent->SplitStack(ItemData->SlotIndex, EmptySlot, SplitAmount);
-	}
+	// Split stack with the specified quantity
+	ItemData->InventoryComponent->SplitStack(ItemData->SlotIndex, EmptySlot, Quantity);
 }
 
 void UInventoryListRowWidget::HandleDestroyItem()
@@ -884,21 +881,136 @@ void UInventoryListRowWidget::HandleDestroyItem()
 		return;
 	}
 
+	// If only one item, destroy immediately
+	if (ItemData->Item.Quantity <= 1)
+	{
+		HandleDestroyItemConfirmed(1);
+		return;
+	}
+
+	// Show quantity dialog to ask how many items to destroy
+	if (QuantityDialogClass)
+	{
+		ActiveQuantityDialog = CreateWidget<UQuantityInputDialog>(GetOwningPlayer(), QuantityDialogClass);
+		if (ActiveQuantityDialog)
+		{
+			FText Title = FText::FromString(TEXT("Destroy Items"));
+			FText Description = FText::Format(
+				FText::FromString(TEXT("How many {0} do you want to destroy?")),
+				ItemData->Item.ItemData->ItemName);
+			FText ConfirmText = FText::FromString(TEXT("Destroy"));
+
+			ActiveQuantityDialog->SetupDialog(ItemData->Item.Quantity, Title, Description, ConfirmText);
+
+			// Bind delegate
+			TWeakObjectPtr<UInventoryListRowWidget> WeakThis = this;
+			ActiveQuantityDialog->OnQuantityConfirmedDelegate.BindLambda([WeakThis](int32 Quantity)
+			{
+				if (WeakThis.IsValid())
+				{
+					WeakThis->HandleDestroyItemConfirmed(Quantity);
+				}
+			});
+
+			ActiveQuantityDialog->AddToViewport(1000);
+		}
+	}
+}
+
+void UInventoryListRowWidget::HandleDestroyItemConfirmed(int32 Quantity)
+{
+	if (!ItemData || !ItemData->InventoryComponent)
+	{
+		return;
+	}
+
 	// Cache the values we need before any widgets are destroyed
 	int32 CachedSlotIndex = ItemData->SlotIndex;
-	int32 CachedQuantity = ItemData->Item.Quantity;
-	FString ItemName = ItemData->Item.ItemData->ItemName.ToString();
 	UInventoryComponent *CachedInventoryComponent = ItemData->InventoryComponent;
 
 	// Defer the actual item removal until the next frame
 	if (UWorld *World = GetWorld())
 	{
-		World->GetTimerManager().SetTimerForNextTick([CachedInventoryComponent, CachedSlotIndex, CachedQuantity, ItemName]()
-													 {
+		World->GetTimerManager().SetTimerForNextTick([CachedInventoryComponent, CachedSlotIndex, Quantity]()
+		{
 			if (IsValid(CachedInventoryComponent))
 			{
-				CachedInventoryComponent->RemoveItemAtSlot(CachedSlotIndex, CachedQuantity);
-			} });
+				CachedInventoryComponent->RemoveItemAtSlot(CachedSlotIndex, Quantity);
+			}
+		});
+	}
+}
+
+void UInventoryListRowWidget::HandleDropItem()
+{
+	if (!ItemData || !ItemData->Item.IsValid() || !ItemData->InventoryComponent)
+	{
+		return;
+	}
+
+	// If only one item, drop immediately
+	if (ItemData->Item.Quantity <= 1)
+	{
+		HandleDropItemConfirmed(1);
+		return;
+	}
+
+	// Show quantity dialog to ask how many items to drop
+	if (QuantityDialogClass)
+	{
+		ActiveQuantityDialog = CreateWidget<UQuantityInputDialog>(GetOwningPlayer(), QuantityDialogClass);
+		if (ActiveQuantityDialog)
+		{
+			FText Title = FText::FromString(TEXT("Drop Items"));
+			FText Description = FText::Format(
+				FText::FromString(TEXT("How many {0} do you want to drop?")),
+				ItemData->Item.ItemData->ItemName);
+			FText ConfirmText = FText::FromString(TEXT("Drop"));
+
+			ActiveQuantityDialog->SetupDialog(ItemData->Item.Quantity, Title, Description, ConfirmText);
+
+			// Bind delegate
+			TWeakObjectPtr<UInventoryListRowWidget> WeakThis = this;
+			ActiveQuantityDialog->OnQuantityConfirmedDelegate.BindLambda([WeakThis](int32 Quantity)
+			{
+				if (WeakThis.IsValid())
+				{
+					WeakThis->HandleDropItemConfirmed(Quantity);
+				}
+			});
+
+			ActiveQuantityDialog->AddToViewport(1000);
+		}
+	}
+}
+
+void UInventoryListRowWidget::HandleDropItemConfirmed(int32 Quantity)
+{
+	if (!ItemData || !ItemData->InventoryComponent)
+	{
+		return;
+	}
+
+	// Cache the values we need
+	int32 CachedSlotIndex = ItemData->SlotIndex;
+	UInventoryComponent *CachedInventoryComponent = ItemData->InventoryComponent;
+
+	// Defer the drop operation until the next frame
+	if (UWorld *World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick([CachedInventoryComponent, CachedSlotIndex, Quantity]()
+		{
+			if (IsValid(CachedInventoryComponent))
+			{
+				// Drop the item in front of the owner (uses default drop distance)
+				bool bSuccess = CachedInventoryComponent->DropItemInFront(CachedSlotIndex, Quantity);
+
+				if (!bSuccess)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Failed to drop item from slot %d"), CachedSlotIndex);
+				}
+			}
+		});
 	}
 }
 
