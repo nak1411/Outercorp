@@ -176,6 +176,56 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *InteractAction;
 
+	/** Time player must hold interact key before picking up item */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+	float InteractHoldDelay = 0.5f;
+
+	/** Maximum distance to place items */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+	float MaxPlacementDistance = 300.0f;
+
+	/** Material for valid placement ghost (assign in Blueprint - should be blue/green) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+	class UMaterialInterface* ValidPlacementMaterial;
+
+	/** Material for invalid placement ghost (assign in Blueprint - should be red) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+	class UMaterialInterface* InvalidPlacementMaterial;
+
+protected:
+	/** Ghost/preview mesh for placement */
+	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+	class UStaticMeshComponent* PlacementGhost;
+
+	/** Dynamic material instance for the ghost */
+	UPROPERTY()
+	class UMaterialInstanceDynamic* GhostMaterialInstance;
+
+	/** Current valid placement location */
+	FVector PlacementLocation;
+
+	/** Whether current placement location is valid */
+	bool bHasValidPlacement;
+
+	/** Stored item data from picked up item (for spawning new item) */
+	UPROPERTY()
+	class UInventoryItemData* HeldItemData;
+
+	/** Stored quantity from picked up item */
+	int32 HeldItemQuantity;
+
+	/** Stored scale from original picked up item */
+	FVector HeldItemScale;
+
+	/** Stored location where item was originally picked up (for restore on invalid placement) */
+	FVector OriginalItemLocation;
+
+	/** Whether interact key is currently being held */
+	bool bIsHoldingInteract;
+
+	/** Timer handle for interact hold */
+	FTimerHandle InteractHoldTimerHandle;
+
 public:
 	AOutercorpCharacter();
 
@@ -184,6 +234,9 @@ public:
 
 	/** Called when the actor is being destroyed */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** Called every frame */
+	virtual void Tick(float DeltaTime) override;
 
 protected:
 	/** Called from Input Actions for movement input */
@@ -211,6 +264,25 @@ protected:
 	/** Interact with the currently looked at object */
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	virtual void Interact();
+
+	/** Called when interact key is pressed */
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	virtual void InteractPressed();
+
+	/** Called when interact key is released */
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	virtual void InteractReleased();
+
+	/** Pick up and hold the current interactable item */
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	void PickupAndHoldItem();
+
+	/** Drop the currently held item */
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	void DropHeldItem();
+
+	/** Update the placement preview ghost */
+	void UpdatePlacementPreview();
 
 	/** Toggle inventory display */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")

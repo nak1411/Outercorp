@@ -20,6 +20,7 @@
 #include "ItemInfoWidget.h"
 #include "InteractionPromptWidget.h"
 #include "InteractionManagerComponent.h"
+#include "PickupableItem.h"
 #include "Outercorp.h"
 #include "Window.h"
 #include "OutercorpSaveGame.h"
@@ -67,6 +68,35 @@ AOutercorpCharacter::AOutercorpCharacter()
 
 	// Create interaction manager component
 	InteractionManagerComponent = CreateDefaultSubobject<UInteractionManagerComponent>(TEXT("Interaction Manager"));
+
+	// Create placement ghost component
+	PlacementGhost = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Placement Ghost"));
+	PlacementGhost->SetupAttachment(RootComponent);
+	PlacementGhost->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PlacementGhost->SetVisibility(false);
+	PlacementGhost->SetCastShadow(false);
+
+	// Initialize interaction hold variables
+	HeldItemData = nullptr;
+	HeldItemQuantity = 0;
+	HeldItemScale = FVector::OneVector;
+	OriginalItemLocation = FVector::ZeroVector;
+	bIsHoldingInteract = false;
+	bHasValidPlacement = false;
+	ValidPlacementMaterial = nullptr;
+	InvalidPlacementMaterial = nullptr;
+	GhostMaterialInstance = nullptr;
+}
+
+void AOutercorpCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	// Update placement preview if holding an item (checking HeldItemData instead of HeldItem)
+	if (HeldItemData && FirstPersonCameraComponent)
+	{
+		UpdatePlacementPreview();
+	}
 }
 
 void AOutercorpCharacter::BeginPlay()
@@ -334,8 +364,9 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 		// Character
 		EnhancedInputComponent->BindAction(CharacterAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleCharacter);
 
-		// Interact
-		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AOutercorpCharacter::Interact);
+		// Interact - bind both press and release
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AOutercorpCharacter::InteractPressed);
+		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::InteractReleased);
 	}
 	else
 	{
@@ -429,6 +460,443 @@ void AOutercorpCharacter::Interact()
 	if (InteractionManagerComponent)
 	{
 		InteractionManagerComponent->Interact();
+	}
+}
+
+void AOutercorpCharacter::InteractPressed()
+{
+	// Don't process interact input if any UI widget is open
+	if (IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// If already holding an item, place it
+	if (HeldItemData)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Already holding item - placing it"));
+		DropHeldItem();
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Interact key pressed - starting hold timer for %.2f seconds"), InteractHoldDelay);
+
+	// Set the flag that we're holding interact
+	bIsHoldingInteract = true;
+
+	// Start a timer to check when we've held long enough to pick up the item
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			InteractHoldTimerHandle,
+			this,
+			&AOutercorpCharacter::PickupAndHoldItem,
+			InteractHoldDelay,
+			false
+		);
+	}
+}
+
+void AOutercorpCharacter::InteractReleased()
+{
+	// If we were holding the interact key, handle the release
+	if (bIsHoldingInteract)
+	{
+		bIsHoldingInteract = false;
+
+		UE_LOG(LogTemp, Log, TEXT("Interact key released - HeldItemData is %s"), HeldItemData ? TEXT("Valid") : TEXT("Null"));
+
+		// If no held item and timer hasn't fired, do instant interact
+		if (!HeldItemData)
+		{
+			// Timer hasn't fired yet (quick tap), do instant interact
+			UE_LOG(LogTemp, Log, TEXT("Quick tap detected - performing instant interact"));
+			if (GetWorld())
+			{
+				GetWorld()->GetTimerManager().ClearTimer(InteractHoldTimerHandle);
+			}
+			Interact();
+		}
+		// If we have held item data, just keep holding it (don't drop)
+		// Next interact press will place it
+	}
+}
+
+void AOutercorpCharacter::PickupAndHoldItem()
+{
+	// Make sure we're still holding the interact key
+	if (!bIsHoldingInteract)
+	{
+		return;
+	}
+
+	// Don't process if UI is open
+	if (IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// Get the current interactable from the interaction manager
+	if (!InteractionManagerComponent)
+	{
+		return;
+	}
+
+	AActor* InteractableActor = InteractionManagerComponent->GetCurrentInteractableActor();
+	if (!InteractableActor)
+	{
+		return;
+	}
+
+	// Check if it's a pickupable item
+	APickupableItem* PickupItem = Cast<APickupableItem>(InteractableActor);
+	if (!PickupItem)
+	{
+		return;
+	}
+
+	// Check if we can interact with it
+	if (!PickupItem->Execute_CanInteract(PickupItem, this))
+	{
+		return;
+	}
+
+	// Store the item data and quantity before destroying
+	if (!PickupItem->ItemData)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Item has no ItemData - cannot pick up"));
+		return;
+	}
+
+	// IMMEDIATELY disable physics, collision, and hide the item to prevent any flicker/movement
+	if (PickupItem->ItemMesh)
+	{
+		PickupItem->ItemMesh->SetSimulatePhysics(false);
+		PickupItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PickupItem->ItemMesh->SetEnableGravity(false);
+		PickupItem->ItemMesh->SetVisibility(false);
+	}
+	PickupItem->SetActorEnableCollision(false);
+	PickupItem->SetActorHiddenInGame(true);
+
+	HeldItemData = PickupItem->ItemData;
+	HeldItemQuantity = PickupItem->Quantity;
+	OriginalItemLocation = PickupItem->GetActorLocation();
+
+	UE_LOG(LogTemp, Log, TEXT("Picking up item: %s (Quantity: %d) at location: %s"),
+		*HeldItemData->ItemName.ToString(), HeldItemQuantity, *OriginalItemLocation.ToString());
+
+	// Copy the item's mesh to the ghost for preview BEFORE destroying the item
+	if (PickupItem->ItemMesh && PlacementGhost)
+	{
+		// Store the original scale
+		HeldItemScale = PickupItem->ItemMesh->GetComponentScale();
+
+		PlacementGhost->SetStaticMesh(PickupItem->ItemMesh->GetStaticMesh());
+		PlacementGhost->SetWorldScale3D(HeldItemScale);
+
+		// Position ghost at camera forward BEFORE making it visible to prevent flicker
+		if (FirstPersonCameraComponent)
+		{
+			FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+			FVector CameraForward = FirstPersonCameraComponent->GetForwardVector();
+			FVector InitialGhostPosition = CameraLocation + (CameraForward * 150.0f); // Middle distance
+			PlacementGhost->SetWorldLocation(InitialGhostPosition);
+			PlacementGhost->SetWorldRotation(FRotator::ZeroRotator);
+		}
+
+		// Apply the valid placement material
+		if (ValidPlacementMaterial)
+		{
+			int32 NumMaterials = PlacementGhost->GetNumMaterials();
+			for (int32 i = 0; i < NumMaterials; i++)
+			{
+				PlacementGhost->SetMaterial(i, ValidPlacementMaterial);
+			}
+			UE_LOG(LogTemp, Log, TEXT("Applied valid placement material to %d slots"), NumMaterials);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ValidPlacementMaterial not set! Assign materials in Blueprint."));
+		}
+
+		// NOW make it visible after positioning
+		PlacementGhost->SetVisibility(true);
+		UE_LOG(LogTemp, Log, TEXT("Stored item scale: %s"), *HeldItemScale.ToString());
+	}
+
+	// DESTROY the original item (already hidden, so no flicker)
+	PickupItem->Destroy();
+	UE_LOG(LogTemp, Log, TEXT("Original item destroyed - ghost preview active"));
+}
+
+void AOutercorpCharacter::DropHeldItem()
+{
+	if (!HeldItemData)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No held item data to place"));
+		return;
+	}
+
+	if (!bHasValidPlacement)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No valid placement location - restoring item at original location"));
+
+		// Spawn the item back at the original pickup location
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+		APickupableItem* RestoredItem = GetWorld()->SpawnActor<APickupableItem>(
+			APickupableItem::StaticClass(),
+			OriginalItemLocation,
+			FRotator::ZeroRotator,
+			SpawnParams
+		);
+
+		if (RestoredItem)
+		{
+			// Initialize with the stored data
+			RestoredItem->InitializeItem(HeldItemData, HeldItemQuantity);
+
+			// Restore the original scale
+			if (RestoredItem->ItemMesh)
+			{
+				RestoredItem->ItemMesh->SetWorldScale3D(HeldItemScale);
+			}
+
+			// Enable physics after a delay
+			if (RestoredItem->ItemMesh)
+			{
+				RestoredItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+				RestoredItem->ItemMesh->SetEnableGravity(true);
+
+				FTimerHandle PhysicsEnableTimer;
+				FTimerDelegate PhysicsDelegate;
+				PhysicsDelegate.BindLambda([CapturedMesh = RestoredItem->ItemMesh]()
+				{
+					if (CapturedMesh && CapturedMesh->IsValidLowLevel())
+					{
+						CapturedMesh->SetSimulatePhysics(true);
+					}
+				});
+				GetWorld()->GetTimerManager().SetTimer(PhysicsEnableTimer, PhysicsDelegate, 0.1f, false);
+			}
+
+			RestoredItem->StartDropCooldown();
+			UE_LOG(LogTemp, Log, TEXT("Item restored at original location: %s"), *OriginalItemLocation.ToString());
+		}
+
+		// Hide the ghost
+		if (PlacementGhost)
+		{
+			PlacementGhost->SetVisibility(false);
+		}
+
+		// Clear the held item data
+		HeldItemData = nullptr;
+		HeldItemQuantity = 0;
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Placing item at: %s"), *PlacementLocation.ToString());
+
+	// HIDE the ghost BEFORE spawning the new item to prevent flicker
+	if (PlacementGhost)
+	{
+		PlacementGhost->SetVisibility(false);
+	}
+
+	// Spawn a new item at the ghost location
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	APickupableItem* NewItem = GetWorld()->SpawnActor<APickupableItem>(
+		APickupableItem::StaticClass(),
+		PlacementLocation,
+		FRotator::ZeroRotator,
+		SpawnParams
+	);
+
+	if (NewItem)
+	{
+		// Initialize the new item with the stored data
+		NewItem->InitializeItem(HeldItemData, HeldItemQuantity);
+
+		// Apply the stored scale to match the original item
+		if (NewItem->ItemMesh)
+		{
+			NewItem->ItemMesh->SetWorldScale3D(HeldItemScale);
+			UE_LOG(LogTemp, Log, TEXT("Applied stored scale: %s"), *HeldItemScale.ToString());
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("New item spawned at ghost location: %s"), *NewItem->GetActorLocation().ToString());
+
+		// Check if physics should be enabled based on item data and placement type
+		bool bShouldEnablePhysics = false;
+		if (HeldItemData->bCanFreePlacement)
+		{
+			// For free placement items, use the bEnablePhysicsOnPlacement setting
+			bShouldEnablePhysics = HeldItemData->bEnablePhysicsOnPlacement;
+			UE_LOG(LogTemp, Log, TEXT("Free placement item - Physics: %s"), bShouldEnablePhysics ? TEXT("Enabled") : TEXT("Disabled"));
+		}
+		else
+		{
+			// For surface-placed items, always enable physics after a delay
+			bShouldEnablePhysics = true;
+			UE_LOG(LogTemp, Log, TEXT("Surface placement item - Physics will be enabled after delay"));
+		}
+
+		// Handle physics setup
+		if (NewItem->ItemMesh)
+		{
+			if (bShouldEnablePhysics)
+			{
+				// Enable physics after a small delay to ensure position is stable
+				NewItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+				NewItem->ItemMesh->SetEnableGravity(true);
+
+				FTimerHandle PhysicsEnableTimer;
+				FTimerDelegate PhysicsDelegate;
+				PhysicsDelegate.BindLambda([CapturedMesh = NewItem->ItemMesh]()
+				{
+					if (CapturedMesh && CapturedMesh->IsValidLowLevel())
+					{
+						CapturedMesh->SetSimulatePhysics(true);
+						UE_LOG(LogTemp, Log, TEXT("Physics enabled after delay"));
+					}
+				});
+				GetWorld()->GetTimerManager().SetTimer(PhysicsEnableTimer, PhysicsDelegate, 0.1f, false);
+			}
+			else
+			{
+				// Disable physics - item will be static in mid-air
+				NewItem->ItemMesh->SetSimulatePhysics(false);
+				NewItem->ItemMesh->SetEnableGravity(false);
+				NewItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+				UE_LOG(LogTemp, Log, TEXT("Item placed as static (no physics)"));
+			}
+		}
+
+		// Start drop cooldown so player can't immediately pick it up again
+		NewItem->StartDropCooldown();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to spawn new item"));
+	}
+
+	// Clear the held item data (ghost already hidden above before spawning)
+	HeldItemData = nullptr;
+	HeldItemQuantity = 0;
+	bHasValidPlacement = false;
+}
+
+void AOutercorpCharacter::UpdatePlacementPreview()
+{
+	if (!PlacementGhost || !FirstPersonCameraComponent || !HeldItemData)
+	{
+		return;
+	}
+
+	// Check if this item can be freely placed anywhere
+	bool bCanFreePlacement = HeldItemData->bCanFreePlacement;
+
+	// Perform trace from camera forward
+	FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+	FVector CameraForward = FirstPersonCameraComponent->GetForwardVector();
+	FVector TraceEnd = CameraLocation + (CameraForward * MaxPlacementDistance);
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+
+	// Trace for placement surface
+	bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		CameraLocation,
+		TraceEnd,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	if (bHit)
+	{
+		// Valid placement location found - offset up by item bounds so it sits on surface
+		FVector BottomOffset = FVector::ZeroVector;
+		if (PlacementGhost && PlacementGhost->GetStaticMesh())
+		{
+			// Get the unscaled bounds
+			FBox ItemBounds = PlacementGhost->GetStaticMesh()->GetBoundingBox();
+
+			// Apply the scale to the bounds to get the actual scaled bounds
+			FVector ScaledMin = ItemBounds.Min * HeldItemScale;
+			FVector ScaledMax = ItemBounds.Max * HeldItemScale;
+
+			// Offset by the scaled bottom of the mesh so it sits on the surface
+			BottomOffset = FVector(0, 0, -ScaledMin.Z);
+
+			UE_LOG(LogTemp, Log, TEXT("Bounds - Unscaled Min.Z: %.2f, Scaled Min.Z: %.2f, Offset: %.2f"),
+				ItemBounds.Min.Z, ScaledMin.Z, BottomOffset.Z);
+		}
+
+		PlacementLocation = HitResult.Location + BottomOffset;
+		bHasValidPlacement = true;
+
+		// Position ghost at hit location
+		PlacementGhost->SetWorldLocation(PlacementLocation);
+		PlacementGhost->SetWorldRotation(FRotator::ZeroRotator);
+
+		// Apply valid (blue/green) material
+		if (ValidPlacementMaterial)
+		{
+			int32 NumMaterials = PlacementGhost->GetNumMaterials();
+			for (int32 i = 0; i < NumMaterials; i++)
+			{
+				PlacementGhost->SetMaterial(i, ValidPlacementMaterial);
+			}
+		}
+	}
+	else
+	{
+		// No surface hit
+		if (bCanFreePlacement)
+		{
+			// Free placement allowed - can place anywhere within max distance
+			PlacementLocation = TraceEnd;
+			bHasValidPlacement = true;  // Valid because free placement is allowed
+
+			PlacementGhost->SetWorldLocation(PlacementLocation);
+			PlacementGhost->SetWorldRotation(FRotator::ZeroRotator);
+
+			// Apply valid (blue/green) material - free placement is valid
+			if (ValidPlacementMaterial)
+			{
+				int32 NumMaterials = PlacementGhost->GetNumMaterials();
+				for (int32 i = 0; i < NumMaterials; i++)
+				{
+					PlacementGhost->SetMaterial(i, ValidPlacementMaterial);
+				}
+			}
+		}
+		else
+		{
+			// No valid placement - item requires surface and none found
+			PlacementLocation = TraceEnd;
+			bHasValidPlacement = false;
+
+			PlacementGhost->SetWorldLocation(PlacementLocation);
+			PlacementGhost->SetWorldRotation(FRotator::ZeroRotator);
+
+			// Apply invalid (red) material
+			if (InvalidPlacementMaterial)
+			{
+				int32 NumMaterials = PlacementGhost->GetNumMaterials();
+				for (int32 i = 0; i < NumMaterials; i++)
+				{
+					PlacementGhost->SetMaterial(i, InvalidPlacementMaterial);
+				}
+			}
+		}
 	}
 }
 

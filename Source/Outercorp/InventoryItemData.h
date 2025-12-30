@@ -96,6 +96,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
 	bool bIsDroppable = true;
 
+	/** Can this item be placed freely anywhere (thrown) or must it be placed on surfaces */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Placement")
+	bool bCanFreePlacement = false;
+
+	/** Should this item have physics enabled when placed (only applies to free placement items) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Placement", meta = (EditCondition = "bCanFreePlacement"))
+	bool bEnablePhysicsOnPlacement = true;
+
 	/** Item metadata (for custom properties) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
 	TMap<FName, FString> Metadata;
