@@ -773,8 +773,8 @@ void UInventorySlotWidget::HandleDestroyItemConfirmed(int32 Quantity)
 		{
 			if (IsValid(CachedInventoryComponent))
 			{
-				// Now it's safe to remove the item and trigger the inventory update
-				CachedInventoryComponent->RemoveItemAtSlot(CachedSlotIndex, CachedQuantity);
+				// Use DestroyItem instead of RemoveItemAtSlot to trigger notification
+				CachedInventoryComponent->DestroyItem(CachedSlotIndex, CachedQuantity);
 			}
 		});
 	}

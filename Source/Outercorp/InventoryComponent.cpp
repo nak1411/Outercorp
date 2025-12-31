@@ -2,8 +2,10 @@
 
 #include "InventoryComponent.h"
 #include "PickupableItem.h"
+#include "NotificationComponent.h"
 #include "GameFramework/Character.h"
 #include "Camera/CameraComponent.h"
+#include "OutercorpCharacter.h"
 
 UInventoryComponent::UInventoryComponent()
 {
@@ -29,11 +31,20 @@ bool UInventoryComponent::AddItem(UInventoryItemData* ItemData, int32 Quantity, 
 
 	if (!CanAddItem(ItemData, Quantity))
 	{
+		// Show notification that there's not enough room
+		if (AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(GetOwner()))
+		{
+			if (UNotificationComponent* NotificationComp = Character->GetNotificationComponent())
+			{
+				NotificationComp->ShowNotEnoughRoomWarning(ItemData->ItemName);
+			}
+		}
 		OutSlotIndex = -1;
 		return false;
 	}
 
 	int32 RemainingQuantity = Quantity;
+	int32 OriginalQuantity = Quantity;
 
 	// Try to stack with existing items first
 	if (ItemData->MaxStackSize > 1)
@@ -46,6 +57,24 @@ bool UInventoryComponent::AddItem(UInventoryItemData* ItemData, int32 Quantity, 
 			if (RemainingQuantity <= 0)
 			{
 				UE_LOG(LogTemp, Log, TEXT("Successfully stacked all items into existing stacks"));
+
+				// Show notification for successful add (unless suppressed or canvas not ready)
+				if (!bSuppressNotifications)
+				{
+					if (AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(GetOwner()))
+					{
+						if (UNotificationComponent* NotificationComp = Character->GetNotificationComponent())
+						{
+							// Only show if canvas is set up (prevents notifications during initial load)
+							if (NotificationComp->NotificationCanvas)
+							{
+								UTexture2D* ItemIcon = ItemData->ItemIcon.LoadSynchronous();
+								NotificationComp->ShowItemPickupNotification(ItemData->ItemName, OriginalQuantity, ItemIcon);
+							}
+						}
+					}
+				}
+
 				return true;
 			}
 			UE_LOG(LogTemp, Log, TEXT("Partially stacked, %d items remaining to add to new slots"), RemainingQuantity);
@@ -78,6 +107,23 @@ bool UInventoryComponent::AddItem(UInventoryItemData* ItemData, int32 Quantity, 
 		OnInventoryUpdated.Broadcast(EmptySlot, NewItem);
 	}
 
+	// Show notification for successful add (unless suppressed or canvas not ready)
+	if (!bSuppressNotifications)
+	{
+		if (AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(GetOwner()))
+		{
+			if (UNotificationComponent* NotificationComp = Character->GetNotificationComponent())
+			{
+				// Only show if canvas is set up (prevents notifications during initial load)
+				if (NotificationComp->NotificationCanvas)
+				{
+					UTexture2D* ItemIcon = ItemData->ItemIcon.LoadSynchronous();
+					NotificationComp->ShowItemPickupNotification(ItemData->ItemName, OriginalQuantity, ItemIcon);
+				}
+			}
+		}
+	}
+
 	return true;
 }
 
@@ -92,6 +138,10 @@ bool UInventoryComponent::RemoveItemAtSlot(int32 SlotIndex, int32 Quantity)
 	{
 		return false;
 	}
+
+	// Store item info before removing for notification
+	FInventoryItem RemovedItem = Items[SlotIndex];
+	int32 RemovedQuantity = Quantity;
 
 	Items[SlotIndex].Quantity -= Quantity;
 
@@ -680,6 +730,32 @@ bool UInventoryComponent::DropItem(int32 SlotIndex, int32 Quantity, FVector Drop
 
 		// Remove items from inventory
 		RemoveItemAtSlot(SlotIndex, SuccessfulDrops);
+
+		// Show notification for dropped items
+		if (AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(GetOwner()))
+		{
+			if (UNotificationComponent* NotificationComp = Character->GetNotificationComponent())
+			{
+				FText DropMessage;
+				if (SuccessfulDrops > 1)
+				{
+					DropMessage = FText::Format(FText::FromString(TEXT("Dropped {0} x{1}")),
+						ItemToDrop.ItemData->ItemName,
+						FText::AsNumber(SuccessfulDrops));
+				}
+				else
+				{
+					DropMessage = FText::Format(FText::FromString(TEXT("Dropped {0}")),
+						ItemToDrop.ItemData->ItemName);
+				}
+
+				// Show notification with icon
+				UTexture2D* ItemIcon = ItemToDrop.ItemData->ItemIcon.LoadSynchronous();
+				FNotificationData NotifData(DropMessage, ENotificationType::Info, 2.0f, ItemIcon);
+				NotificationComp->ShowNotification(NotifData);
+			}
+		}
+
 		return true;
 	}
 	else
@@ -720,4 +796,54 @@ bool UInventoryComponent::DropItemInFront(int32 SlotIndex, int32 Quantity, float
 	DropLocation.Z -= 50.0f;
 
 	return DropItem(SlotIndex, Quantity, DropLocation, DropRotation);
+}
+
+bool UInventoryComponent::DestroyItem(int32 SlotIndex, int32 Quantity)
+{
+	if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].IsValid())
+	{
+		return false;
+	}
+
+	if (Quantity <= 0 || Quantity > Items[SlotIndex].Quantity)
+	{
+		return false;
+	}
+
+	// Store item info for notification before removing
+	FInventoryItem DestroyedItem = Items[SlotIndex];
+	int32 DestroyedQuantity = Quantity;
+
+	// Remove the item
+	bool bSuccess = RemoveItemAtSlot(SlotIndex, Quantity);
+
+	// Show notification if successful
+	if (bSuccess)
+	{
+		if (AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(GetOwner()))
+		{
+			if (UNotificationComponent* NotificationComp = Character->GetNotificationComponent())
+			{
+				FText DestroyMessage;
+				if (DestroyedQuantity > 1)
+				{
+					DestroyMessage = FText::Format(FText::FromString(TEXT("Destroyed {0} x{1}")),
+						DestroyedItem.ItemData->ItemName,
+						FText::AsNumber(DestroyedQuantity));
+				}
+				else
+				{
+					DestroyMessage = FText::Format(FText::FromString(TEXT("Destroyed {0}")),
+						DestroyedItem.ItemData->ItemName);
+				}
+
+				// Show notification with icon
+				UTexture2D* ItemIcon = DestroyedItem.ItemData->ItemIcon.LoadSynchronous();
+				FNotificationData NotifData(DestroyMessage, ENotificationType::Info, 2.0f, ItemIcon);
+				NotificationComp->ShowNotification(NotifData);
+			}
+		}
+	}
+
+	return bSuccess;
 }

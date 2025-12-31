@@ -144,6 +144,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool DropItemInFront(int32 SlotIndex, int32 Quantity, float DropDistance = 200.0f);
 
+	/** Destroy item at slot and show notification */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool DestroyItem(int32 SlotIndex, int32 Quantity);
+
 	/** Class to spawn when dropping items */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Drop")
 	TSubclassOf<class APickupableItem> PickupableItemClass;
@@ -151,6 +155,10 @@ public:
 	/** How much force to apply when dropping items */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Drop")
 	float DropImpulseStrength;
+
+	/** Suppress notifications (useful during initial setup) */
+	UPROPERTY(BlueprintReadWrite, Category = "Inventory")
+	bool bSuppressNotifications = false;
 
 protected:
 	/** Try to stack item with existing items */

@@ -20,6 +20,7 @@ class UOutercorpSaveGame;
 class UWindow;
 class UInteractionPromptWidget;
 class UInteractionManagerComponent;
+class UNotificationComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -47,6 +48,10 @@ class AOutercorpCharacter : public ACharacter
 	/** Interaction manager component */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UInteractionManagerComponent *InteractionManagerComponent;
+
+	/** Notification component */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
+	UNotificationComponent *NotificationComponent;
 
 	/** Crosshair widget */
 	UPROPERTY()
@@ -176,6 +181,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *InteractAction;
 
+	/** Construction Mode Toggle Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ConstructionModeAction;
+
+	/** Construction Place Input Action (left click) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ConstructionPlaceAction;
+
 	/** Time player must hold interact key before picking up item */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	float InteractHoldDelay = 0.5f;
@@ -192,6 +205,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	class UMaterialInterface* InvalidPlacementMaterial;
 
+	/** Test construction part class for placement (temporary - for testing) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
+	TSubclassOf<class AConstructionPart> TestConstructionPartClass;
+
 protected:
 	/** Ghost/preview mesh for placement */
 	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
@@ -206,6 +223,24 @@ protected:
 
 	/** Whether current placement location is valid */
 	bool bHasValidPlacement;
+
+	/** Construction mode state */
+	UPROPERTY(BlueprintReadOnly, Category = "Construction")
+	bool bIsInConstructionMode;
+
+	/** Current construction part ghost (for socket-based placement) */
+	UPROPERTY()
+	class AConstructionPart* ConstructionGhostPart;
+
+	/** Target socket for snapping */
+	FName TargetSocketName;
+
+	/** Target construction part to snap to */
+	UPROPERTY()
+	class AConstructionPart* TargetConstructionPart;
+
+	/** Socket on the ghost part we're using for attachment */
+	FName GhostSocketName;
 
 	/** Stored item data from picked up item (for spawning new item) */
 	UPROPERTY()
@@ -283,6 +318,29 @@ protected:
 
 	/** Update the placement preview ghost */
 	void UpdatePlacementPreview();
+
+	/** Toggle construction mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void ToggleConstructionMode();
+
+	/** Enter construction mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void EnterConstructionMode();
+
+	/** Exit construction mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void ExitConstructionMode();
+
+	/** Update construction part preview with socket snapping */
+	void UpdateConstructionPreview();
+
+	/** Place the construction part */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void PlaceConstructionPart();
+
+	/** Fasten the construction part (called on second interact) */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void FastenConstructionPart();
 
 	/** Toggle inventory display */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -430,4 +488,11 @@ public:
 
 	/** Returns inventory component **/
 	UInventoryComponent *GetInventoryComponent() const { return InventoryComponent; }
+
+	/** Returns notification component **/
+	UNotificationComponent *GetNotificationComponent() const { return NotificationComponent; }
+
+	/** Setup notification canvas to use the HUD canvas */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void SetupNotificationCanvas();
 };

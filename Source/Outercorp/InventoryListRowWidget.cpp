@@ -935,7 +935,8 @@ void UInventoryListRowWidget::HandleDestroyItemConfirmed(int32 Quantity)
 		{
 			if (IsValid(CachedInventoryComponent))
 			{
-				CachedInventoryComponent->RemoveItemAtSlot(CachedSlotIndex, Quantity);
+				// Use DestroyItem instead of RemoveItemAtSlot to trigger notification
+				CachedInventoryComponent->DestroyItem(CachedSlotIndex, Quantity);
 			}
 		});
 	}

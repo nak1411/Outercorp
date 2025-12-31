@@ -20,6 +20,7 @@
 #include "ItemInfoWidget.h"
 #include "InteractionPromptWidget.h"
 #include "InteractionManagerComponent.h"
+#include "NotificationComponent.h"
 #include "PickupableItem.h"
 #include "Outercorp.h"
 #include "Window.h"
@@ -29,6 +30,8 @@
 #include "Module_Fullscreen_Point.h"
 #include "Module_Fullscreen_Line.h"
 #include "Window_Module.h"
+#include "ConstructionPart.h"
+#include "ConstructionPartData.h"
 
 AOutercorpCharacter::AOutercorpCharacter()
 {
@@ -69,6 +72,9 @@ AOutercorpCharacter::AOutercorpCharacter()
 	// Create interaction manager component
 	InteractionManagerComponent = CreateDefaultSubobject<UInteractionManagerComponent>(TEXT("Interaction Manager"));
 
+	// Create notification component
+	NotificationComponent = CreateDefaultSubobject<UNotificationComponent>(TEXT("Notification Component"));
+
 	// Create placement ghost component
 	PlacementGhost = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Placement Ghost"));
 	PlacementGhost->SetupAttachment(RootComponent);
@@ -86,14 +92,26 @@ AOutercorpCharacter::AOutercorpCharacter()
 	ValidPlacementMaterial = nullptr;
 	InvalidPlacementMaterial = nullptr;
 	GhostMaterialInstance = nullptr;
+
+	// Initialize construction mode variables
+	bIsInConstructionMode = false;
+	ConstructionGhostPart = nullptr;
+	TargetConstructionPart = nullptr;
+	TargetSocketName = NAME_None;
+	GhostSocketName = NAME_None;
 }
 
 void AOutercorpCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// Update construction preview if in construction mode
+	if (bIsInConstructionMode && ConstructionGhostPart && FirstPersonCameraComponent)
+	{
+		UpdateConstructionPreview();
+	}
 	// Update placement preview if holding an item (checking HeldItemData instead of HeldItem)
-	if (HeldItemData && FirstPersonCameraComponent)
+	else if (HeldItemData && FirstPersonCameraComponent)
 	{
 		UpdatePlacementPreview();
 	}
@@ -230,17 +248,16 @@ void AOutercorpCharacter::BeginPlay()
 
 					// Load saved UI layout after all windows are created
 					LoadUILayout();
+
+					// Setup notification canvas
+					SetupNotificationCanvas();
 				}
 				else
 				{
 					if (!WindowCanvas)
-					{
-						UE_LOG(LogOutercorp, Error, TEXT("BeginPlay: WindowCanvas not found"));
-					}
+					{					}
 					if (!ModularWindowClass)
-					{
-						UE_LOG(LogOutercorp, Error, TEXT("BeginPlay: ModularWindowClass not set"));
-					}
+					{					}
 				}
 			}
 		}
@@ -257,26 +274,18 @@ void AOutercorpCharacter::BeginPlay()
 
 		// Create and display the interaction prompt widget
 		if (InteractionPromptWidgetClass)
-		{
-			UE_LOG(LogTemp, Log, TEXT("OutercorpCharacter: Creating interaction prompt widget..."));
-			InteractionPromptWidget = CreateWidget<UInteractionPromptWidget>(GetWorld(), InteractionPromptWidgetClass);
+		{			InteractionPromptWidget = CreateWidget<UInteractionPromptWidget>(GetWorld(), InteractionPromptWidgetClass);
 			if (InteractionPromptWidget)
-			{
-				UE_LOG(LogTemp, Log, TEXT("OutercorpCharacter: Interaction prompt widget created successfully, adding to viewport"));
-				InteractionPromptWidget->AddToViewport(2); // Above crosshair
+			{				InteractionPromptWidget->AddToViewport(2); // Above crosshair
 
 				// Manually initialize the interaction system
 				InteractionPromptWidget->InitializeInteraction();
 			}
 			else
-			{
-				UE_LOG(LogTemp, Error, TEXT("OutercorpCharacter: Failed to create interaction prompt widget!"));
-			}
+			{			}
 		}
 		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("OutercorpCharacter: InteractionPromptWidgetClass is not set!"));
-		}
+		{		}
 
 		// Set initial input mode to game-only (no UI, no cursor)
 		APlayerController *PC = Cast<APlayerController>(GetController());
@@ -364,14 +373,18 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 		// Character
 		EnhancedInputComponent->BindAction(CharacterAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleCharacter);
 
+		// Construction Mode
+		EnhancedInputComponent->BindAction(ConstructionModeAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleConstructionMode);
+
+		// Construction Place (left click)
+		EnhancedInputComponent->BindAction(ConstructionPlaceAction, ETriggerEvent::Started, this, &AOutercorpCharacter::PlaceConstructionPart);
+
 		// Interact - bind both press and release
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AOutercorpCharacter::InteractPressed);
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::InteractReleased);
 	}
 	else
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("'%s' Failed to find an Enhanced Input Component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
-	}
+	{	}
 }
 
 void AOutercorpCharacter::MoveInput(const FInputActionValue &Value)
@@ -471,16 +484,17 @@ void AOutercorpCharacter::InteractPressed()
 		return;
 	}
 
-	// If already holding an item, place it
-	if (HeldItemData)
+	// Don't allow interact while in construction mode (use left click instead)
+	if (bIsInConstructionMode)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Already holding item - placing it"));
-		DropHeldItem();
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Interact key pressed - starting hold timer for %.2f seconds"), InteractHoldDelay);
-
+	// If already holding an item, place it
+	if (HeldItemData)
+	{		DropHeldItem();
+		return;
+	}
 	// Set the flag that we're holding interact
 	bIsHoldingInteract = true;
 
@@ -503,15 +517,10 @@ void AOutercorpCharacter::InteractReleased()
 	if (bIsHoldingInteract)
 	{
 		bIsHoldingInteract = false;
-
-		UE_LOG(LogTemp, Log, TEXT("Interact key released - HeldItemData is %s"), HeldItemData ? TEXT("Valid") : TEXT("Null"));
-
 		// If no held item and timer hasn't fired, do instant interact
 		if (!HeldItemData)
 		{
-			// Timer hasn't fired yet (quick tap), do instant interact
-			UE_LOG(LogTemp, Log, TEXT("Quick tap detected - performing instant interact"));
-			if (GetWorld())
+			// Timer hasn't fired yet (quick tap), do instant interact			if (GetWorld())
 			{
 				GetWorld()->GetTimerManager().ClearTimer(InteractHoldTimerHandle);
 			}
@@ -563,9 +572,7 @@ void AOutercorpCharacter::PickupAndHoldItem()
 
 	// Store the item data and quantity before destroying
 	if (!PickupItem->ItemData)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Item has no ItemData - cannot pick up"));
-		return;
+	{		return;
 	}
 
 	// IMMEDIATELY disable physics, collision, and hide the item to prevent any flicker/movement
@@ -582,10 +589,6 @@ void AOutercorpCharacter::PickupAndHoldItem()
 	HeldItemData = PickupItem->ItemData;
 	HeldItemQuantity = PickupItem->Quantity;
 	OriginalItemLocation = PickupItem->GetActorLocation();
-
-	UE_LOG(LogTemp, Log, TEXT("Picking up item: %s (Quantity: %d) at location: %s"),
-		*HeldItemData->ItemName.ToString(), HeldItemQuantity, *OriginalItemLocation.ToString());
-
 	// Copy the item's mesh to the ghost for preview BEFORE destroying the item
 	if (PickupItem->ItemMesh && PlacementGhost)
 	{
@@ -612,36 +615,24 @@ void AOutercorpCharacter::PickupAndHoldItem()
 			for (int32 i = 0; i < NumMaterials; i++)
 			{
 				PlacementGhost->SetMaterial(i, ValidPlacementMaterial);
-			}
-			UE_LOG(LogTemp, Log, TEXT("Applied valid placement material to %d slots"), NumMaterials);
-		}
+			}		}
 		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("ValidPlacementMaterial not set! Assign materials in Blueprint."));
-		}
+		{		}
 
 		// NOW make it visible after positioning
-		PlacementGhost->SetVisibility(true);
-		UE_LOG(LogTemp, Log, TEXT("Stored item scale: %s"), *HeldItemScale.ToString());
-	}
+		PlacementGhost->SetVisibility(true);	}
 
 	// DESTROY the original item (already hidden, so no flicker)
-	PickupItem->Destroy();
-	UE_LOG(LogTemp, Log, TEXT("Original item destroyed - ghost preview active"));
-}
+	PickupItem->Destroy();}
 
 void AOutercorpCharacter::DropHeldItem()
 {
 	if (!HeldItemData)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("No held item data to place"));
-		return;
+	{		return;
 	}
 
 	if (!bHasValidPlacement)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No valid placement location - restoring item at original location"));
-
 		// Spawn the item back at the original pickup location
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
@@ -682,9 +673,7 @@ void AOutercorpCharacter::DropHeldItem()
 				GetWorld()->GetTimerManager().SetTimer(PhysicsEnableTimer, PhysicsDelegate, 0.1f, false);
 			}
 
-			RestoredItem->StartDropCooldown();
-			UE_LOG(LogTemp, Log, TEXT("Item restored at original location: %s"), *OriginalItemLocation.ToString());
-		}
+			RestoredItem->StartDropCooldown();		}
 
 		// Hide the ghost
 		if (PlacementGhost)
@@ -697,9 +686,6 @@ void AOutercorpCharacter::DropHeldItem()
 		HeldItemQuantity = 0;
 		return;
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Placing item at: %s"), *PlacementLocation.ToString());
-
 	// HIDE the ghost BEFORE spawning the new item to prevent flicker
 	if (PlacementGhost)
 	{
@@ -725,26 +711,17 @@ void AOutercorpCharacter::DropHeldItem()
 		// Apply the stored scale to match the original item
 		if (NewItem->ItemMesh)
 		{
-			NewItem->ItemMesh->SetWorldScale3D(HeldItemScale);
-			UE_LOG(LogTemp, Log, TEXT("Applied stored scale: %s"), *HeldItemScale.ToString());
-		}
-
-		UE_LOG(LogTemp, Log, TEXT("New item spawned at ghost location: %s"), *NewItem->GetActorLocation().ToString());
-
+			NewItem->ItemMesh->SetWorldScale3D(HeldItemScale);		}
 		// Check if physics should be enabled based on item data and placement type
 		bool bShouldEnablePhysics = false;
 		if (HeldItemData->bCanFreePlacement)
 		{
 			// For free placement items, use the bEnablePhysicsOnPlacement setting
-			bShouldEnablePhysics = HeldItemData->bEnablePhysicsOnPlacement;
-			UE_LOG(LogTemp, Log, TEXT("Free placement item - Physics: %s"), bShouldEnablePhysics ? TEXT("Enabled") : TEXT("Disabled"));
-		}
+			bShouldEnablePhysics = HeldItemData->bEnablePhysicsOnPlacement;		}
 		else
 		{
 			// For surface-placed items, always enable physics after a delay
-			bShouldEnablePhysics = true;
-			UE_LOG(LogTemp, Log, TEXT("Surface placement item - Physics will be enabled after delay"));
-		}
+			bShouldEnablePhysics = true;		}
 
 		// Handle physics setup
 		if (NewItem->ItemMesh)
@@ -761,9 +738,7 @@ void AOutercorpCharacter::DropHeldItem()
 				{
 					if (CapturedMesh && CapturedMesh->IsValidLowLevel())
 					{
-						CapturedMesh->SetSimulatePhysics(true);
-						UE_LOG(LogTemp, Log, TEXT("Physics enabled after delay"));
-					}
+						CapturedMesh->SetSimulatePhysics(true);					}
 				});
 				GetWorld()->GetTimerManager().SetTimer(PhysicsEnableTimer, PhysicsDelegate, 0.1f, false);
 			}
@@ -772,18 +747,14 @@ void AOutercorpCharacter::DropHeldItem()
 				// Disable physics - item will be static in mid-air
 				NewItem->ItemMesh->SetSimulatePhysics(false);
 				NewItem->ItemMesh->SetEnableGravity(false);
-				NewItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-				UE_LOG(LogTemp, Log, TEXT("Item placed as static (no physics)"));
-			}
+				NewItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);			}
 		}
 
 		// Start drop cooldown so player can't immediately pick it up again
 		NewItem->StartDropCooldown();
 	}
 	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to spawn new item"));
-	}
+	{	}
 
 	// Clear the held item data (ghost already hidden above before spawning)
 	HeldItemData = nullptr;
@@ -833,11 +804,7 @@ void AOutercorpCharacter::UpdatePlacementPreview()
 			FVector ScaledMax = ItemBounds.Max * HeldItemScale;
 
 			// Offset by the scaled bottom of the mesh so it sits on the surface
-			BottomOffset = FVector(0, 0, -ScaledMin.Z);
-
-			UE_LOG(LogTemp, Log, TEXT("Bounds - Unscaled Min.Z: %.2f, Scaled Min.Z: %.2f, Offset: %.2f"),
-				ItemBounds.Min.Z, ScaledMin.Z, BottomOffset.Z);
-		}
+			BottomOffset = FVector(0, 0, -ScaledMin.Z);		}
 
 		PlacementLocation = HitResult.Location + BottomOffset;
 		bHasValidPlacement = true;
@@ -929,9 +896,7 @@ void AOutercorpCharacter::OpenInventory_Implementation()
 		BringWindowToFront(InventoryWindow);
 	}
 	else
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("OpenInventory: InventoryWindow is null!"));
-	}
+	{	}
 
 	APlayerController *PC = Cast<APlayerController>(GetController());
 	if (PC)
@@ -948,15 +913,11 @@ void AOutercorpCharacter::OpenInventory_Implementation()
 void AOutercorpCharacter::BindInventoryEvents()
 {
 	if (!InventoryWidget)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("BindInventoryEvents: InventoryWidget is null!"));
-		return;
+	{		return;
 	}
 
 	if (!InventoryComponent)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("BindInventoryEvents: InventoryComponent is null!"));
-		return;
+	{		return;
 	}
 
 	// Bind to close event
@@ -969,18 +930,14 @@ void AOutercorpCharacter::BindInventoryEvents()
 UCanvasPanel *AOutercorpCharacter::GetHUDCanvas() const
 {
 	if (!BaseHUDWidget)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("GetHUDCanvas: BaseHUDWidget is null!"));
-		return nullptr;
+	{		return nullptr;
 	}
 
 	// Try to get the canvas panel named "WindowCanvas" from the HUD widget
 	UCanvasPanel *Canvas = Cast<UCanvasPanel>(BaseHUDWidget->GetWidgetFromName(FName("WindowCanvas")));
 
 	if (!Canvas)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("GetHUDCanvas: Could not find WindowCanvas in HUD widget"));
-	}
+	{	}
 
 	return Canvas;
 }
@@ -1077,9 +1034,7 @@ void AOutercorpCharacter::OpenCharacter_Implementation()
 void AOutercorpCharacter::BindCharacterEvents()
 {
 	if (!CharacterWidget)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("BindCharacterEvents: CharacterWidget is null!"));
-		return;
+	{		return;
 	}
 
 	// Bind to close event
@@ -1245,9 +1200,7 @@ void AOutercorpCharacter::DebugPrintWidgetType(UUserWidget *Widget) const
 void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindow)
 {
 	if (!ModularWindow)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupCharacterWidgetInWindow: ModularWindow is null"));
-		return;
+	{		return;
 	}
 
 	// Store the modular window reference
@@ -1256,23 +1209,17 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindo
 	// Get the ChildWidgetCanvas from the modular window
 	UCanvasPanel *ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupCharacterWidgetInWindow: Could not find ChildWidgetCanvas in modular window"));
-		return;
+	{		return;
 	}
 
 	// Create the character widget
 	if (!CharacterWidgetClass)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupCharacterWidgetInWindow: CharacterWidgetClass is not set"));
-		return;
+	{		return;
 	}
 
 	CharacterWidget = CreateWidget<UCharacterWidget>(GetWorld(), CharacterWidgetClass);
 	if (!CharacterWidget)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupCharacterWidgetInWindow: Failed to create CharacterWidget"));
-		return;
+	{		return;
 	}
 
 	// Add the character widget to the child canvas
@@ -1318,9 +1265,7 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindo
 void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget *ModularWindow)
 {
 	if (!ModularWindow)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupInventoryWidgetInWindow: ModularWindow is null"));
-		return;
+	{		return;
 	}
 
 	// Store the modular window reference
@@ -1329,23 +1274,17 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget *ModularWindo
 	// Get the ChildWidgetCanvas from the modular window
 	UCanvasPanel *ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupInventoryWidgetInWindow: Could not find ChildWidgetCanvas in modular window"));
-		return;
+	{		return;
 	}
 
 	// Create the inventory widget
 	if (!InventoryWidgetClass)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupInventoryWidgetInWindow: InventoryWidgetClass is not set"));
-		return;
+	{		return;
 	}
 
 	InventoryWidget = CreateWidget<UInventoryWidget>(GetWorld(), InventoryWidgetClass);
 	if (!InventoryWidget)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupInventoryWidgetInWindow: Failed to create InventoryWidget"));
-		return;
+	{		return;
 	}
 
 	// Add the inventory widget to the child canvas
@@ -1391,9 +1330,7 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget *ModularWindo
 void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget *ModularWindow)
 {
 	if (!ModularWindow)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupItemInfoWidgetInWindow: ModularWindow is null"));
-		return;
+	{		return;
 	}
 
 	// Store the modular window reference
@@ -1402,23 +1339,17 @@ void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget *ModularWindow
 	// Get the ChildWidgetCanvas from the modular window
 	UCanvasPanel *ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupItemInfoWidgetInWindow: Could not find ChildWidgetCanvas in modular window"));
-		return;
+	{		return;
 	}
 
 	// Create the item info widget
 	if (!ItemInfoWidgetClass)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupItemInfoWidgetInWindow: ItemInfoWidgetClass is not set"));
-		return;
+	{		return;
 	}
 
 	ItemInfoWidget = CreateWidget<UUserWidget>(GetWorld(), ItemInfoWidgetClass);
 	if (!ItemInfoWidget)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SetupItemInfoWidgetInWindow: Failed to create ItemInfoWidget"));
-		return;
+	{		return;
 	}
 
 	// Add the item info widget to the child canvas
@@ -1479,9 +1410,7 @@ void AOutercorpCharacter::OpenItemInfo(const FInventoryItem &Item)
 		UpdateItemInfoDisplay();
 	}
 	else
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("OpenItemInfo: ItemInfoWindow is null!"));
-	}
+	{	}
 
 	// Ensure UI input mode is enabled
 	APlayerController *PC = Cast<APlayerController>(GetController());
@@ -1597,9 +1526,7 @@ void AOutercorpCharacter::SaveUILayout()
 {
 	UOutercorpSaveGame *SaveGameInstance = Cast<UOutercorpSaveGame>(UGameplayStatics::CreateSaveGameObject(UOutercorpSaveGame::StaticClass()));
 	if (!SaveGameInstance)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("SaveUILayout: Failed to create save game object"));
-		return;
+	{		return;
 	}
 
 	// Minimum valid window size to prevent saving collapsed/invalid states
@@ -1748,9 +1675,7 @@ void AOutercorpCharacter::LoadUILayout()
 
 	UOutercorpSaveGame *LoadedGame = Cast<UOutercorpSaveGame>(UGameplayStatics::LoadGameFromSlot(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex));
 	if (!LoadedGame)
-	{
-		UE_LOG(LogOutercorp, Error, TEXT("LoadUILayout: Failed to load save game"));
-		return;
+	{		return;
 	}
 
 	// Minimum valid window size to prevent loading collapsed/invalid states
@@ -2014,4 +1939,442 @@ void AOutercorpCharacter::RegisterWindow(UUserWidget* Window)
 			WindowObj->SetZOrder(CurrentWindowZOrder++);
 		}
 	}
+}
+
+void AOutercorpCharacter::SetupNotificationCanvas()
+{
+	if (!NotificationComponent)
+	{		return;
+	}
+
+	// Get the HUD canvas to add notifications to
+	UCanvasPanel* HUDCanvas = GetHUDCanvas();
+	if (HUDCanvas)
+	{
+		NotificationComponent->NotificationCanvas = HUDCanvas;	}
+	else
+	{	}
+}
+
+void AOutercorpCharacter::ToggleConstructionMode()
+{
+	if (bIsInConstructionMode)
+	{
+		ExitConstructionMode();
+	}
+	else
+	{
+		EnterConstructionMode();
+	}
+}
+
+void AOutercorpCharacter::EnterConstructionMode()
+{
+	// Can't enter construction mode if UI is open
+	if (IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// Can't enter if holding an item
+	if (HeldItemData)
+	{		return;
+	}
+
+	// Check if we have a test construction part class assigned
+	if (!TestConstructionPartClass)
+	{		if (NotificationComponent)
+		{
+			NotificationComponent->ShowSimpleNotification(FText::FromString("No construction part assigned!"), ENotificationType::Warning, 3.0f);
+		}
+		return;
+	}
+
+	bIsInConstructionMode = true;
+
+	// Spawn the ghost construction part
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	ConstructionGhostPart = GetWorld()->SpawnActor<AConstructionPart>(
+		TestConstructionPartClass,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		SpawnParams
+	);
+
+	if (ConstructionGhostPart)
+	{
+		// Set to ghost preview state
+		ConstructionGhostPart->SetPartState(EConstructionPartState::GhostPreview);
+		if (NotificationComponent)
+		{
+			NotificationComponent->ShowSimpleNotification(FText::FromString("Construction Mode: ON"), ENotificationType::Info, 2.0f);
+		}
+	}
+	else
+	{		bIsInConstructionMode = false;
+	}
+}
+
+void AOutercorpCharacter::ExitConstructionMode()
+{
+	bIsInConstructionMode = false;
+
+	// Destroy the ghost part
+	if (ConstructionGhostPart)
+	{
+		ConstructionGhostPart->Destroy();
+		ConstructionGhostPart = nullptr;
+	}
+
+	// Clear target references
+	TargetConstructionPart = nullptr;
+	TargetSocketName = NAME_None;
+	GhostSocketName = NAME_None;
+	if (NotificationComponent)
+	{
+		NotificationComponent->ShowSimpleNotification(FText::FromString("Construction Mode: OFF"), ENotificationType::Info, 2.0f);
+	}
+}
+
+void AOutercorpCharacter::UpdateConstructionPreview()
+{
+	if (!ConstructionGhostPart || !FirstPersonCameraComponent)
+	{
+		return;
+	}
+
+	FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+	FVector CameraForward = FirstPersonCameraComponent->GetForwardVector();
+	FVector TraceEnd = CameraLocation + (CameraForward * MaxPlacementDistance);
+
+	// Get placement mode from data asset if available, otherwise use deprecated property
+	EPlacementMode Mode = ConstructionGhostPart->PartData
+		? ConstructionGhostPart->PartData->PlacementMode
+		: ConstructionGhostPart->PlacementMode;
+	bool bFoundSnapPoint = false;
+	bool bFoundGroundPoint = false;
+	FVector PlacementPos;
+	FRotator PlacementRot = FRotator::ZeroRotator;
+
+	// Try socket snapping first (if mode allows)
+	if (Mode == EPlacementMode::SocketSnap || Mode == EPlacementMode::Hybrid)
+	{
+		// Find all placed construction parts
+		TArray<AActor*> AllConstructionParts;
+		UGameplayStatics::GetAllActorsOfClass(GetWorld(), AConstructionPart::StaticClass(), AllConstructionParts);
+
+		// Do a raycast to find where we're looking (ignore ghost parts)
+		FHitResult HitResult;
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this);
+		if (ConstructionGhostPart)
+		{
+			QueryParams.AddIgnoredActor(ConstructionGhostPart);
+		}
+
+		// Position ghost at raycast hit or trace end
+		FVector TempGhostPos = TraceEnd;
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, CameraLocation, TraceEnd, ECC_Visibility, QueryParams))
+		{
+			// Hit something - position ghost at hit location
+			TempGhostPos = HitResult.Location;
+		}
+
+		ConstructionGhostPart->SetActorLocation(TempGhostPos);
+		ConstructionGhostPart->SetActorRotation(FRotator::ZeroRotator);
+
+		// Now find the closest socket pair (ghost socket to target socket)
+		float BestDistance = FLT_MAX;
+		FName BestGhostSocket = NAME_None;
+		FName BestTargetSocket = NAME_None;
+		AConstructionPart* BestTargetPart = nullptr;
+		int32 TotalSocketPairsChecked = 0;
+
+		// Check all ghost sockets
+		for (const FAttachmentPoint& GhostAttachPoint : ConstructionGhostPart->AttachmentPoints)
+		{
+			FTransform GhostSocketWorld = ConstructionGhostPart->GetSocketTransformByName(GhostAttachPoint.SocketName);
+
+			// Check against all placed parts
+			for (AActor* PartActor : AllConstructionParts)
+			{
+				AConstructionPart* TargetPart = Cast<AConstructionPart>(PartActor);
+				if (!TargetPart || TargetPart == ConstructionGhostPart ||
+					TargetPart->CurrentState == EConstructionPartState::InInventory ||
+					TargetPart->CurrentState == EConstructionPartState::GhostPreview)
+				{
+					continue;
+				}
+
+				// Check all target sockets
+				for (const FAttachmentPoint& TargetAttachPoint : TargetPart->AttachmentPoints)
+				{
+					FTransform TargetSocketWorld = TargetPart->GetSocketTransformByName(TargetAttachPoint.SocketName);
+
+					// Calculate distance between sockets
+					float Distance = FVector::Dist(GhostSocketWorld.GetLocation(), TargetSocketWorld.GetLocation());
+					TotalSocketPairsChecked++;
+
+					// Use a large search radius to find sockets even if ghost is positioned far away
+					// This is especially important for top/bottom sockets where the ghost might be
+					// positioned on top of the target part, making sockets 100+ units apart initially
+					float SearchRadius = 300.0f; // Large search to find nearby sockets
+					if (Distance < SearchRadius && Distance < BestDistance)
+					{
+						BestDistance = Distance;
+						BestGhostSocket = GhostAttachPoint.SocketName;
+						BestTargetSocket = TargetAttachPoint.SocketName;
+						BestTargetPart = TargetPart;
+						bFoundSnapPoint = true;
+					}
+				}
+			}
+		}
+
+		// If we found a snap point, calculate the offset needed
+		if (bFoundSnapPoint)
+		{
+			// Get the world transforms of the two sockets we want to align
+			FTransform GhostSocketWorld = ConstructionGhostPart->GetSocketTransformByName(BestGhostSocket);
+			FTransform TargetSocketWorld = BestTargetPart->GetSocketTransformByName(BestTargetSocket);
+
+			// Calculate the offset from ghost origin to its socket
+			FVector GhostToSocket = GhostSocketWorld.GetLocation() - ConstructionGhostPart->GetActorLocation();
+
+			// Apply per-socket offset if configured
+			FAttachmentPoint* GhostAttachPoint = ConstructionGhostPart->AttachmentPoints.FindByPredicate([BestGhostSocket](const FAttachmentPoint& Point) {
+				return Point.SocketName == BestGhostSocket;
+			});
+			if (GhostAttachPoint && !GhostAttachPoint->SocketOffset.IsZero())
+			{
+				GhostToSocket += GhostAttachPoint->SocketOffset;
+			}
+
+			// New ghost position = target socket position - offset
+			PlacementPos = TargetSocketWorld.GetLocation() - GhostToSocket;
+			PlacementRot = FRotator::ZeroRotator;
+
+			// Check if this placement would cause significant collision/overlap with the target part
+			bool bWouldOverlap = false;
+			if (ConstructionGhostPart->MeshComponent && BestTargetPart->MeshComponent)
+			{
+				// Get overlap settings from data asset
+				bool bAllowOverlap = ConstructionGhostPart->PartData ? ConstructionGhostPart->PartData->bAllowOverlap : true;
+				float MaxOverlapThreshold = ConstructionGhostPart->PartData ? ConstructionGhostPart->PartData->MaxOverlapThreshold : 0.25f;
+
+				// Check if overlap is allowed for this part
+				if (!bAllowOverlap)
+				{
+					// Overlap not allowed - check for ANY overlap
+					FVector OldGhostPos = ConstructionGhostPart->GetActorLocation();
+					ConstructionGhostPart->SetActorLocation(PlacementPos);
+
+					FBox GhostBounds = ConstructionGhostPart->MeshComponent->Bounds.GetBox();
+					FBox TargetBounds = BestTargetPart->MeshComponent->Bounds.GetBox();
+					FBox Intersection = GhostBounds.Overlap(TargetBounds);
+
+					if (Intersection.IsValid)
+					{
+						// Any overlap detected - reject placement
+						bWouldOverlap = true;
+					}
+
+					ConstructionGhostPart->SetActorLocation(OldGhostPos);
+				}
+				else
+				{
+					// Overlap is allowed - check if it exceeds threshold
+					// Temporarily move ghost to test position
+					FVector OldGhostPos = ConstructionGhostPart->GetActorLocation();
+					ConstructionGhostPart->SetActorLocation(PlacementPos);
+
+					// Check for overlap between ghost bounds and target bounds
+					FBox GhostBounds = ConstructionGhostPart->MeshComponent->Bounds.GetBox();
+					FBox TargetBounds = BestTargetPart->MeshComponent->Bounds.GetBox();
+
+					// Calculate the intersection volume to determine if it's a significant overlap
+					// Parts connecting at sockets are EXPECTED to touch/overlap slightly at the connection point
+					FBox Intersection = GhostBounds.Overlap(TargetBounds);
+
+					if (Intersection.IsValid)
+				{
+					// Get the size of the intersection
+					FVector IntersectionSize = Intersection.GetSize();
+					FVector GhostSize = GhostBounds.GetSize();
+
+					// Calculate what percentage of the ghost's volume is overlapping
+					float OverlapPercentX = IntersectionSize.X / GhostSize.X;
+					float OverlapPercentY = IntersectionSize.Y / GhostSize.Y;
+					float OverlapPercentZ = IntersectionSize.Z / GhostSize.Z;
+
+					// Determine which axis to check based on socket names
+					// For top/bottom connections, only check Z-axis penetration (X/Y overlap is expected)
+					// For side connections, check the perpendicular axes
+					bool bIsTopBottomConnection =
+						(BestGhostSocket.ToString().Contains("Top") || BestGhostSocket.ToString().Contains("Bottom")) &&
+						(BestTargetSocket.ToString().Contains("Top") || BestTargetSocket.ToString().Contains("Bottom"));
+
+					float RelevantOverlapPercent;
+					if (bIsTopBottomConnection)
+					{
+						// Top/bottom stacking - only check Z-axis overlap (parts should align in X/Y)
+						RelevantOverlapPercent = OverlapPercentZ;
+					}
+					else
+					{
+						// Side connection - determine which axis the connection is along
+						bool bIsLeftRight = BestGhostSocket.ToString().Contains("Left") || BestGhostSocket.ToString().Contains("Right") ||
+											BestTargetSocket.ToString().Contains("Left") || BestTargetSocket.ToString().Contains("Right");
+						bool bIsFrontBack = BestGhostSocket.ToString().Contains("Front") || BestGhostSocket.ToString().Contains("Back") ||
+											BestTargetSocket.ToString().Contains("Front") || BestTargetSocket.ToString().Contains("Back");
+
+						if (bIsLeftRight)
+						{
+							// Left/Right connection - check Y/Z overlap (X overlap is expected)
+							RelevantOverlapPercent = FMath::Max(OverlapPercentY, OverlapPercentZ);
+						}
+						else if (bIsFrontBack)
+						{
+							// Front/Back connection - check X/Z overlap (Y overlap is expected)
+							RelevantOverlapPercent = FMath::Max(OverlapPercentX, OverlapPercentZ);
+						}
+						else
+						{
+							// Unknown connection type - check all axes
+							RelevantOverlapPercent = FMath::Max3(OverlapPercentX, OverlapPercentY, OverlapPercentZ);
+						}
+					}
+
+					// Only reject if the relevant axis overlap is significant
+					if (RelevantOverlapPercent > MaxOverlapThreshold)
+					{
+						bWouldOverlap = true;
+					}
+				}
+
+					// Restore ghost to original position
+					ConstructionGhostPart->SetActorLocation(OldGhostPos);
+				}
+			}
+
+			// Only accept this snap point if it doesn't cause significant overlap
+			if (!bWouldOverlap)
+			{
+				TargetConstructionPart = BestTargetPart;
+				TargetSocketName = BestTargetSocket;
+				GhostSocketName = BestGhostSocket;
+			}
+			else
+			{
+				// Significant overlap detected - reject this snap point
+				bFoundSnapPoint = false;
+			}
+		}
+	}
+
+	// Try ground snapping if no socket found (and mode allows)
+	if (!bFoundSnapPoint && (Mode == EPlacementMode::GroundSnap || Mode == EPlacementMode::Hybrid))
+	{
+		FHitResult HitResult;
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this);
+		QueryParams.AddIgnoredActor(ConstructionGhostPart);
+
+		// Trace for ground
+		if (GetWorld()->LineTraceSingleByChannel(HitResult, CameraLocation, TraceEnd, ECC_Visibility, QueryParams))
+		{
+			bFoundGroundPoint = true;
+
+			// Offset up by mesh bounds so it sits on surface
+			FVector BottomOffset = FVector::ZeroVector;
+			if (ConstructionGhostPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
+			{
+				FBox Bounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+				FVector ScaledMin = Bounds.Min * ConstructionGhostPart->GetActorScale3D();
+				BottomOffset = FVector(0, 0, -ScaledMin.Z);
+			}
+
+			PlacementPos = HitResult.Location + BottomOffset;
+			PlacementRot = FRotator::ZeroRotator;
+
+			// Clear socket target
+			TargetConstructionPart = nullptr;
+			TargetSocketName = NAME_None;
+		}
+	}
+
+	// Free placement (if mode allows and nothing else found)
+	if (!bFoundSnapPoint && !bFoundGroundPoint && Mode == EPlacementMode::FreePlace)
+	{
+		PlacementPos = TraceEnd;
+		PlacementRot = FRotator::ZeroRotator;
+		TargetConstructionPart = nullptr;
+		TargetSocketName = NAME_None;
+	}
+
+	// Apply placement
+	if (bFoundSnapPoint || bFoundGroundPoint || Mode == EPlacementMode::FreePlace)
+	{
+		ConstructionGhostPart->SetActorLocation(PlacementPos);
+		ConstructionGhostPart->SetActorRotation(PlacementRot);
+		ConstructionGhostPart->SetGhostPreview(true);
+		bHasValidPlacement = true;
+	}
+	else
+	{
+		// Invalid placement
+		PlacementPos = TraceEnd;
+		ConstructionGhostPart->SetActorLocation(PlacementPos);
+		ConstructionGhostPart->SetActorRotation(FRotator::ZeroRotator);
+		ConstructionGhostPart->SetGhostPreview(false);
+		bHasValidPlacement = false;
+	}
+}
+
+void AOutercorpCharacter::PlaceConstructionPart()
+{
+	if (!bIsInConstructionMode || !ConstructionGhostPart || !bHasValidPlacement)
+	{		return;
+	}
+
+	// Spawn the actual construction part at the ghost location
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	AConstructionPart* NewPart = GetWorld()->SpawnActor<AConstructionPart>(
+		TestConstructionPartClass,
+		ConstructionGhostPart->GetActorLocation(),
+		ConstructionGhostPart->GetActorRotation(),
+		SpawnParams
+	);
+
+	if (NewPart)
+	{
+		// If we have a target to snap to, attach
+		if (TargetConstructionPart && TargetSocketName != NAME_None && GhostSocketName != NAME_None)
+		{
+			NewPart->AttachToPart(TargetConstructionPart, TargetSocketName, GhostSocketName);		}
+		else
+		{
+			// Free placement - just set to Placed state
+			NewPart->SetPartState(EConstructionPartState::Placed);		}
+
+		if (NotificationComponent)
+		{
+			NotificationComponent->ShowSimpleNotification(FText::FromString("Part Placed"), ENotificationType::Success, 1.5f);
+		}
+	}
+	else
+	{	}
+
+	// Keep construction mode active for placing more parts
+	// Ghost stays visible for next placement
+}
+
+void AOutercorpCharacter::FastenConstructionPart()
+{
+	// TODO: Implement fastening logic (for Phase 2)
+	// This will be used to "bolt" or "weld" parts after placement
 }
