@@ -61,6 +61,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part Properties")
 	float SnapAngleTolerance = 15.0f;
 
+	/** Minimum placement distance from camera when using mousewheel adjustment */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part Properties", meta = (ClampMin = "50.0"))
+	float MinPlacementDistance = 100.0f;
+
+	/** Maximum placement distance from camera when using mousewheel adjustment */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part Properties", meta = (ClampMin = "100.0"))
+	float MaxPlacementDistance = 500.0f;
+
+	/** Maximum distance from camera to highlight and delete this part in delete mode */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part Properties", meta = (ClampMin = "100.0"))
+	float MaxDeleteDistance = 500.0f;
+
 	/** Maximum allowed overlap percentage (0.0-1.0) before rejecting snap point */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part Properties", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float MaxOverlapThreshold = 0.25f;

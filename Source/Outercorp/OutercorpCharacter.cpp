@@ -32,6 +32,7 @@
 #include "Window_Module.h"
 #include "ConstructionPart.h"
 #include "ConstructionPartData.h"
+#include "Engine/OverlapResult.h"
 
 AOutercorpCharacter::AOutercorpCharacter()
 {
@@ -89,12 +90,18 @@ AOutercorpCharacter::AOutercorpCharacter()
 	OriginalItemLocation = FVector::ZeroVector;
 	bIsHoldingInteract = false;
 	bHasValidPlacement = false;
+	bPreviousValidPlacement = false;
 	ValidPlacementMaterial = nullptr;
 	InvalidPlacementMaterial = nullptr;
 	GhostMaterialInstance = nullptr;
 
 	// Initialize construction mode variables
 	bIsInConstructionMode = false;
+	bSnapModeEnabled = true; // Default to snapping enabled
+	CurrentPlacementDistance = 300.0f; // Start at max placement distance
+	bIsInDeleteMode = false;
+	HighlightedPartForDeletion = nullptr;
+	DeleteHighlightMaterial = nullptr;
 	ConstructionGhostPart = nullptr;
 	TargetConstructionPart = nullptr;
 	TargetSocketName = NAME_None;
@@ -105,8 +112,13 @@ void AOutercorpCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// Update delete mode highlighting if in delete mode
+	if (bIsInDeleteMode && FirstPersonCameraComponent)
+	{
+		UpdateDeleteModeHighlight();
+	}
 	// Update construction preview if in construction mode
-	if (bIsInConstructionMode && ConstructionGhostPart && FirstPersonCameraComponent)
+	else if (bIsInConstructionMode && ConstructionGhostPart && FirstPersonCameraComponent)
 	{
 		UpdateConstructionPreview();
 	}
@@ -295,6 +307,12 @@ void AOutercorpCharacter::BeginPlay()
 			PC->SetInputMode(InputMode);
 			PC->SetShowMouseCursor(false);
 		}
+
+		// Ensure we start with construction mode and delete mode both OFF
+		bIsInConstructionMode = false;
+		bIsInDeleteMode = false;
+		ConstructionGhostPart = nullptr;
+		HighlightedPartForDeletion = nullptr;
 	}
 }
 
@@ -378,6 +396,27 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 
 		// Construction Place (left click)
 		EnhancedInputComponent->BindAction(ConstructionPlaceAction, ETriggerEvent::Started, this, &AOutercorpCharacter::PlaceConstructionPart);
+
+		// Toggle Snap Mode
+		EnhancedInputComponent->BindAction(ToggleSnapModeAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleSnapMode);
+
+		// Adjust Placement Distance (mousewheel)
+		if (AdjustPlacementDistanceAction)
+		{
+			EnhancedInputComponent->BindAction(AdjustPlacementDistanceAction, ETriggerEvent::Triggered, this, &AOutercorpCharacter::AdjustPlacementDistance);
+		}
+
+		// Delete Mode
+		if (DeleteModeAction)
+		{
+			EnhancedInputComponent->BindAction(DeleteModeAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleDeleteMode);
+		}
+
+		// Delete Item (left click in delete mode)
+		if (DeleteItemAction)
+		{
+			EnhancedInputComponent->BindAction(DeleteItemAction, ETriggerEvent::Started, this, &AOutercorpCharacter::DeleteHighlightedPart);
+		}
 
 		// Interact - bind both press and release
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AOutercorpCharacter::InteractPressed);
@@ -1958,6 +1997,16 @@ void AOutercorpCharacter::SetupNotificationCanvas()
 
 void AOutercorpCharacter::ToggleConstructionMode()
 {
+	// Safety check: if we have a ghost but mode is false, clean up first
+	if (!bIsInConstructionMode && ConstructionGhostPart)
+	{
+		if (ConstructionGhostPart)
+		{
+			ConstructionGhostPart->Destroy();
+			ConstructionGhostPart = nullptr;
+		}
+	}
+
 	if (bIsInConstructionMode)
 	{
 		ExitConstructionMode();
@@ -1979,6 +2028,12 @@ void AOutercorpCharacter::EnterConstructionMode()
 	// Can't enter if holding an item
 	if (HeldItemData)
 	{		return;
+	}
+
+	// If in delete mode, exit it first
+	if (bIsInDeleteMode)
+	{
+		ExitDeleteMode();
 	}
 
 	// Check if we have a test construction part class assigned
@@ -2007,6 +2062,17 @@ void AOutercorpCharacter::EnterConstructionMode()
 	{
 		// Set to ghost preview state
 		ConstructionGhostPart->SetPartState(EConstructionPartState::GhostPreview);
+
+		// Initialize placement distance to the part's max distance (or character default)
+		if (ConstructionGhostPart->PartData)
+		{
+			CurrentPlacementDistance = ConstructionGhostPart->PartData->MaxPlacementDistance;
+		}
+		else
+		{
+			CurrentPlacementDistance = MaxPlacementDistance;
+		}
+
 		if (NotificationComponent)
 		{
 			NotificationComponent->ShowSimpleNotification(FText::FromString("Construction Mode: ON"), ENotificationType::Info, 2.0f);
@@ -2047,19 +2113,42 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 	FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
 	FVector CameraForward = FirstPersonCameraComponent->GetForwardVector();
-	FVector TraceEnd = CameraLocation + (CameraForward * MaxPlacementDistance);
+
+	// Calculate the mesh center offset so distance is measured from visual center, not pivot
+	FVector MeshCenterOffset = FVector::ZeroVector;
+	if (ConstructionGhostPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
+	{
+		FBox MeshBounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+		FVector LocalCenter = MeshBounds.GetCenter();
+		MeshCenterOffset = LocalCenter * ConstructionGhostPart->GetActorScale3D();
+	}
+
+	// Use CurrentPlacementDistance for all placement modes
+	// Offset the target position so the visual center is at the desired distance, not the pivot
+	FVector TargetCenterPos = CameraLocation + (CameraForward * CurrentPlacementDistance);
+	FVector TraceEnd = TargetCenterPos - MeshCenterOffset;
+	FVector FreePlacementPos = TargetCenterPos - MeshCenterOffset;
 
 	// Get placement mode from data asset if available, otherwise use deprecated property
 	EPlacementMode Mode = ConstructionGhostPart->PartData
 		? ConstructionGhostPart->PartData->PlacementMode
 		: ConstructionGhostPart->PlacementMode;
+
+	// Override mode based on snap mode toggle
+	EPlacementMode EffectiveMode = Mode;
+	if (!bSnapModeEnabled)
+	{
+		// If snapping is disabled, force free placement
+		EffectiveMode = EPlacementMode::FreePlace;
+	}
+
 	bool bFoundSnapPoint = false;
 	bool bFoundGroundPoint = false;
 	FVector PlacementPos;
 	FRotator PlacementRot = FRotator::ZeroRotator;
 
 	// Try socket snapping first (if mode allows)
-	if (Mode == EPlacementMode::SocketSnap || Mode == EPlacementMode::Hybrid)
+	if (EffectiveMode == EPlacementMode::SocketSnap || EffectiveMode == EPlacementMode::Hybrid)
 	{
 		// Find all placed construction parts
 		TArray<AActor*> AllConstructionParts;
@@ -2275,15 +2364,17 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 	}
 
 	// Try ground snapping if no socket found (and mode allows)
-	if (!bFoundSnapPoint && (Mode == EPlacementMode::GroundSnap || Mode == EPlacementMode::Hybrid))
+	if (!bFoundSnapPoint && (EffectiveMode == EPlacementMode::GroundSnap || EffectiveMode == EPlacementMode::Hybrid))
 	{
 		FHitResult HitResult;
 		FCollisionQueryParams QueryParams;
 		QueryParams.AddIgnoredActor(this);
 		QueryParams.AddIgnoredActor(ConstructionGhostPart);
 
-		// Trace for ground
-		if (GetWorld()->LineTraceSingleByChannel(HitResult, CameraLocation, TraceEnd, ECC_Visibility, QueryParams))
+		// Use a sphere trace for more stable ground detection (reduces flickering at distance)
+		float SphereRadius = 10.0f; // Small sphere to smooth out minor surface variations
+		if (GetWorld()->SweepSingleByChannel(HitResult, CameraLocation, TraceEnd, FQuat::Identity,
+			ECC_Visibility, FCollisionShape::MakeSphere(SphereRadius), QueryParams))
 		{
 			bFoundGroundPoint = true;
 
@@ -2302,20 +2393,221 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			// Clear socket target
 			TargetConstructionPart = nullptr;
 			TargetSocketName = NAME_None;
+
+			// Check for overlap even in ground snap mode
+			bool bHasOverlap = false;
+			if (ConstructionGhostPart->PartData && ConstructionGhostPart->MeshComponent)
+			{
+				// Even when overlap is "not allowed", use a small tolerance for surface contact
+				// Surface contact is expected and normal - only reject significant penetration
+				float OverlapThreshold = ConstructionGhostPart->PartData->bAllowOverlap
+					? ConstructionGhostPart->PartData->MaxOverlapThreshold
+					: 0.05f; // 5% tolerance for surface contact when overlap is disabled
+
+				// Temporarily move ghost to test position
+				FVector OldGhostPos = ConstructionGhostPart->GetActorLocation();
+				ConstructionGhostPart->SetActorLocation(PlacementPos);
+
+				FBox GhostBounds = ConstructionGhostPart->MeshComponent->Bounds.GetBox();
+				FVector GhostSize = GhostBounds.GetSize();
+
+				// Check against the ground/surface hit actor
+				if (HitResult.GetActor())
+				{
+					TArray<UStaticMeshComponent*> MeshComponents;
+					HitResult.GetActor()->GetComponents<UStaticMeshComponent>(MeshComponents);
+
+					for (UStaticMeshComponent* MeshComp : MeshComponents)
+					{
+						if (MeshComp)
+						{
+							FBox OtherBounds = MeshComp->Bounds.GetBox();
+							FBox Intersection = GhostBounds.Overlap(OtherBounds);
+
+							if (Intersection.IsValid)
+							{
+								// Calculate overlap percentage to see if it's significant
+								FVector IntersectionSize = Intersection.GetSize();
+								float OverlapPercentX = IntersectionSize.X / GhostSize.X;
+								float OverlapPercentY = IntersectionSize.Y / GhostSize.Y;
+								float OverlapPercentZ = IntersectionSize.Z / GhostSize.Z;
+								float MaxOverlapPercent = FMath::Max3(OverlapPercentX, OverlapPercentY, OverlapPercentZ);
+
+								// Only reject if overlap exceeds threshold
+								if (MaxOverlapPercent > OverlapThreshold)
+								{
+									bHasOverlap = true;
+									break;
+								}
+							}
+						}
+					}
+				}
+
+				// Also check against all placed construction parts
+				if (!bHasOverlap)
+				{
+					TArray<AActor*> AllConstructionParts;
+					UGameplayStatics::GetAllActorsOfClass(GetWorld(), AConstructionPart::StaticClass(), AllConstructionParts);
+
+					for (AActor* PartActor : AllConstructionParts)
+					{
+						AConstructionPart* OtherPart = Cast<AConstructionPart>(PartActor);
+						if (!OtherPart || OtherPart == ConstructionGhostPart ||
+							OtherPart->CurrentState == EConstructionPartState::InInventory ||
+							OtherPart->CurrentState == EConstructionPartState::GhostPreview)
+						{
+							continue;
+						}
+
+						if (OtherPart->MeshComponent)
+						{
+							FBox OtherBounds = OtherPart->MeshComponent->Bounds.GetBox();
+							FBox Intersection = GhostBounds.Overlap(OtherBounds);
+
+							if (Intersection.IsValid)
+							{
+								// Calculate overlap percentage
+								FVector IntersectionSize = Intersection.GetSize();
+								float OverlapPercentX = IntersectionSize.X / GhostSize.X;
+								float OverlapPercentY = IntersectionSize.Y / GhostSize.Y;
+								float OverlapPercentZ = IntersectionSize.Z / GhostSize.Z;
+								float MaxOverlapPercent = FMath::Max3(OverlapPercentX, OverlapPercentY, OverlapPercentZ);
+
+								// Only reject if overlap exceeds threshold
+								if (MaxOverlapPercent > OverlapThreshold)
+								{
+									bHasOverlap = true;
+									break;
+								}
+							}
+						}
+					}
+				}
+
+				// Restore ghost to original position
+				ConstructionGhostPart->SetActorLocation(OldGhostPos);
+			}
+
+			// If overlap detected and not allowed, invalidate ground placement
+			if (bHasOverlap)
+			{
+				bFoundGroundPoint = false;
+			}
 		}
 	}
 
 	// Free placement (if mode allows and nothing else found)
-	if (!bFoundSnapPoint && !bFoundGroundPoint && Mode == EPlacementMode::FreePlace)
+	if (!bFoundSnapPoint && !bFoundGroundPoint && EffectiveMode == EPlacementMode::FreePlace)
 	{
-		PlacementPos = TraceEnd;
+		PlacementPos = FreePlacementPos;
 		PlacementRot = FRotator::ZeroRotator;
 		TargetConstructionPart = nullptr;
 		TargetSocketName = NAME_None;
+
+		// Check for overlap with world geometry and construction parts
+		bool bHasOverlap = false;
+		if (ConstructionGhostPart->PartData && ConstructionGhostPart->MeshComponent)
+		{
+			// Even when overlap is "not allowed", use a small tolerance
+			// This prevents false positives from minor contact
+			float OverlapThreshold = ConstructionGhostPart->PartData->bAllowOverlap
+				? ConstructionGhostPart->PartData->MaxOverlapThreshold
+				: 0.05f; // 5% tolerance when overlap is disabled
+
+			// Temporarily move ghost to test position
+			FVector OldGhostPos = ConstructionGhostPart->GetActorLocation();
+			ConstructionGhostPart->SetActorLocation(PlacementPos);
+
+			FBox GhostBounds = ConstructionGhostPart->MeshComponent->Bounds.GetBox();
+			FVector GhostSize = GhostBounds.GetSize();
+
+			// Check for any world geometry that might overlap
+			TArray<FOverlapResult> OverlapResults;
+			FCollisionQueryParams OverlapParams;
+			OverlapParams.AddIgnoredActor(this);
+			OverlapParams.AddIgnoredActor(ConstructionGhostPart);
+
+			// Use box overlap to check for any colliding geometry
+			if (GetWorld()->OverlapMultiByChannel(OverlapResults, PlacementPos, FQuat::Identity, ECC_Visibility,
+				FCollisionShape::MakeBox(GhostBounds.GetExtent()), OverlapParams))
+			{
+				// Check each overlapping actor for overlap percentage
+				for (const FOverlapResult& Result : OverlapResults)
+				{
+					if (Result.GetActor())
+					{
+						// Get all mesh components from the overlapping actor
+						TArray<UStaticMeshComponent*> MeshComponents;
+						Result.GetActor()->GetComponents<UStaticMeshComponent>(MeshComponents);
+
+						for (UStaticMeshComponent* MeshComp : MeshComponents)
+						{
+							if (MeshComp)
+							{
+								FBox OtherBounds = MeshComp->Bounds.GetBox();
+								FBox Intersection = GhostBounds.Overlap(OtherBounds);
+
+								if (Intersection.IsValid)
+								{
+									// Calculate overlap percentage
+									FVector IntersectionSize = Intersection.GetSize();
+									float OverlapPercentX = IntersectionSize.X / GhostSize.X;
+									float OverlapPercentY = IntersectionSize.Y / GhostSize.Y;
+									float OverlapPercentZ = IntersectionSize.Z / GhostSize.Z;
+									float MaxOverlapPercent = FMath::Max3(OverlapPercentX, OverlapPercentY, OverlapPercentZ);
+
+									// Only reject if overlap exceeds threshold
+									if (MaxOverlapPercent > OverlapThreshold)
+									{
+										bHasOverlap = true;
+										break;
+									}
+								}
+							}
+						}
+
+						if (bHasOverlap)
+						{
+							break;
+						}
+					}
+				}
+			}
+
+			// Restore ghost to original position
+			ConstructionGhostPart->SetActorLocation(OldGhostPos);
+		}
+
+		// If overlap detected and not allowed, mark placement as invalid but still show ghost
+		if (bHasOverlap)
+		{
+			// Don't set bFoundSnapPoint or bFoundGroundPoint, so placement is considered free but invalid
+			// The ghost will be shown in red (invalid) state
+			ConstructionGhostPart->SetActorLocation(PlacementPos);
+			ConstructionGhostPart->SetActorRotation(PlacementRot);
+			ConstructionGhostPart->SetGhostPreview(false); // Red/invalid material
+			bHasValidPlacement = false;
+			return; // Exit early - don't proceed to normal placement logic
+		}
 	}
 
 	// Apply placement
-	if (bFoundSnapPoint || bFoundGroundPoint || Mode == EPlacementMode::FreePlace)
+	bool bNewValidState = (bFoundSnapPoint || bFoundGroundPoint || EffectiveMode == EPlacementMode::FreePlace);
+
+	// Stabilization: Only change state if it's been consistent or definitively invalid
+	// This prevents rapid flickering between valid/invalid
+	if (bNewValidState != bPreviousValidPlacement)
+	{
+		// State is changing - for ground snap at distance, be more lenient staying valid
+		if (!bNewValidState && bPreviousValidPlacement && bFoundGroundPoint)
+		{
+			// Keep previous valid state for one more frame to prevent jitter
+			bNewValidState = true;
+		}
+	}
+
+	if (bNewValidState)
 	{
 		ConstructionGhostPart->SetActorLocation(PlacementPos);
 		ConstructionGhostPart->SetActorRotation(PlacementRot);
@@ -2331,6 +2623,9 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		ConstructionGhostPart->SetGhostPreview(false);
 		bHasValidPlacement = false;
 	}
+
+	// Store state for next frame
+	bPreviousValidPlacement = bHasValidPlacement;
 }
 
 void AOutercorpCharacter::PlaceConstructionPart()
@@ -2363,7 +2658,19 @@ void AOutercorpCharacter::PlaceConstructionPart()
 
 		if (NotificationComponent)
 		{
-			NotificationComponent->ShowSimpleNotification(FText::FromString("Part Placed"), ENotificationType::Success, 1.5f);
+			// Get the part name from the part's data
+			FString PartName = "Part";
+			if (NewPart->PartData && !NewPart->PartData->PartName.IsEmpty())
+			{
+				PartName = NewPart->PartData->PartName.ToString();
+			}
+			else if (!NewPart->PartName.IsEmpty())
+			{
+				PartName = NewPart->PartName;
+			}
+
+			FString NotificationText = FString::Printf(TEXT("%s Placed"), *PartName);
+			NotificationComponent->ShowSimpleNotification(FText::FromString(NotificationText), ENotificationType::Success, 1.5f);
 		}
 	}
 	else
@@ -2377,4 +2684,238 @@ void AOutercorpCharacter::FastenConstructionPart()
 {
 	// TODO: Implement fastening logic (for Phase 2)
 	// This will be used to "bolt" or "weld" parts after placement
+}
+
+void AOutercorpCharacter::ToggleSnapMode()
+{
+	// Only allow toggling when in construction mode
+	if (!bIsInConstructionMode)
+	{
+		return;
+	}
+
+	bSnapModeEnabled = !bSnapModeEnabled;
+
+	// Show notification to user
+	if (NotificationComponent)
+	{
+		FString ModeText = bSnapModeEnabled ? "Snapping: ON" : "Free Placement: ON";
+		NotificationComponent->ShowSimpleNotification(
+			FText::FromString(ModeText),
+			ENotificationType::Info,
+			2.0f
+		);
+	}
+}
+
+void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value)
+{
+	// Only allow adjustment when in construction mode
+	if (!bIsInConstructionMode || !ConstructionGhostPart)
+	{
+		return;
+	}
+
+	// Get the scroll wheel axis value (positive = scroll up, negative = scroll down)
+	float ScrollValue = Value.Get<float>();
+
+	// Adjust placement distance (50 units per scroll notch)
+	float DistanceStep = 50.0f;
+	CurrentPlacementDistance += ScrollValue * DistanceStep;
+
+	// Get min/max from part data if available, otherwise use character defaults
+	float MinDist = MinPlacementDistance;
+	float MaxDist = MaxPlacementDistance;
+
+	if (ConstructionGhostPart->PartData)
+	{
+		MinDist = ConstructionGhostPart->PartData->MinPlacementDistance;
+		MaxDist = ConstructionGhostPart->PartData->MaxPlacementDistance;
+	}
+
+	// Clamp to reasonable values
+	CurrentPlacementDistance = FMath::Clamp(CurrentPlacementDistance, MinDist, MaxDist);
+}
+
+void AOutercorpCharacter::ToggleDeleteMode()
+{
+	if (bIsInDeleteMode)
+	{
+		ExitDeleteMode();
+	}
+	else
+	{
+		EnterDeleteMode();
+	}
+}
+
+void AOutercorpCharacter::EnterDeleteMode()
+{
+	// Can't enter delete mode if UI is open
+	if (IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// Can't enter if holding an item
+	if (HeldItemData)
+	{
+		return;
+	}
+
+	// If in construction mode, exit it first
+	if (bIsInConstructionMode)
+	{
+		ExitConstructionMode();
+	}
+
+	bIsInDeleteMode = true;
+
+	if (NotificationComponent)
+	{
+		NotificationComponent->ShowSimpleNotification(
+			FText::FromString("Delete Mode: ON"),
+			ENotificationType::Warning,
+			2.0f
+		);
+	}
+}
+
+void AOutercorpCharacter::ExitDeleteMode()
+{
+	bIsInDeleteMode = false;
+
+	// Clear any highlighted part
+	if (HighlightedPartForDeletion)
+	{
+		// Restore original materials
+		if (HighlightedPartForDeletion->MeshComponent)
+		{
+			// The AConstructionPart class handles restoring materials when ghost preview ends
+			HighlightedPartForDeletion->SetGhostPreview(true); // Temporarily set to valid
+			HighlightedPartForDeletion->SetPartState(HighlightedPartForDeletion->CurrentState); // Restore to current state
+		}
+		HighlightedPartForDeletion = nullptr;
+	}
+
+	if (NotificationComponent)
+	{
+		NotificationComponent->ShowSimpleNotification(
+			FText::FromString("Delete Mode: OFF"),
+			ENotificationType::Info,
+			2.0f
+		);
+	}
+}
+
+void AOutercorpCharacter::UpdateDeleteModeHighlight()
+{
+	if (!FirstPersonCameraComponent)
+	{
+		return;
+	}
+
+	FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+	FVector CameraForward = FirstPersonCameraComponent->GetForwardVector();
+
+	// Use a long trace distance to find all potential parts
+	float MaxTraceDistance = 2000.0f; // Long enough to find any part
+	FVector TraceEnd = CameraLocation + (CameraForward * MaxTraceDistance);
+
+	// Raycast to find construction parts
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		CameraLocation,
+		TraceEnd,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	AConstructionPart* HitPart = nullptr;
+	if (bHit && HitResult.GetActor())
+	{
+		HitPart = Cast<AConstructionPart>(HitResult.GetActor());
+
+		// Check if the hit part is within its delete distance
+		if (HitPart && HitPart->PartData)
+		{
+			float DistanceToPart = FVector::Dist(CameraLocation, HitResult.Location);
+			if (DistanceToPart > HitPart->PartData->MaxDeleteDistance)
+			{
+				// Too far to delete this part
+				HitPart = nullptr;
+			}
+		}
+	}
+
+	// Update highlighting
+	if (HitPart != HighlightedPartForDeletion)
+	{
+		// Clear previous highlight
+		if (HighlightedPartForDeletion && HighlightedPartForDeletion->MeshComponent)
+		{
+			HighlightedPartForDeletion->SetPartState(HighlightedPartForDeletion->CurrentState);
+		}
+
+		// Set new highlight
+		HighlightedPartForDeletion = HitPart;
+
+		if (HighlightedPartForDeletion && HighlightedPartForDeletion->MeshComponent)
+		{
+			// Use the invalid placement material (red) to highlight for deletion
+			if (DeleteHighlightMaterial)
+			{
+				// Apply delete highlight material to all mesh elements
+				int32 NumMaterials = HighlightedPartForDeletion->MeshComponent->GetNumMaterials();
+				for (int32 i = 0; i < NumMaterials; i++)
+				{
+					HighlightedPartForDeletion->MeshComponent->SetMaterial(i, DeleteHighlightMaterial);
+				}
+			}
+			else
+			{
+				// Fallback to ghost preview with invalid state (red)
+				HighlightedPartForDeletion->SetGhostPreview(false);
+			}
+		}
+	}
+}
+
+void AOutercorpCharacter::DeleteHighlightedPart()
+{
+	// Only allow deletion when in delete mode
+	if (!bIsInDeleteMode || !HighlightedPartForDeletion)
+	{
+		return;
+	}
+
+	// Get the part name for notification
+	FString PartName = "Part";
+	if (HighlightedPartForDeletion->PartData && !HighlightedPartForDeletion->PartData->PartName.IsEmpty())
+	{
+		PartName = HighlightedPartForDeletion->PartData->PartName.ToString();
+	}
+	else if (!HighlightedPartForDeletion->PartName.IsEmpty())
+	{
+		PartName = HighlightedPartForDeletion->PartName;
+	}
+
+	// Destroy the part
+	HighlightedPartForDeletion->Destroy();
+	HighlightedPartForDeletion = nullptr;
+
+	// Show notification
+	if (NotificationComponent)
+	{
+		FString NotificationText = FString::Printf(TEXT("%s Deleted"), *PartName);
+		NotificationComponent->ShowSimpleNotification(
+			FText::FromString(NotificationText),
+			ENotificationType::Warning,
+			1.5f
+		);
+	}
 }

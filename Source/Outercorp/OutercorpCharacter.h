@@ -189,6 +189,22 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *ConstructionPlaceAction;
 
+	/** Toggle Snap Mode Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ToggleSnapModeAction;
+
+	/** Adjust Placement Distance Input Action (mousewheel) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *AdjustPlacementDistanceAction;
+
+	/** Delete Mode Toggle Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *DeleteModeAction;
+
+	/** Delete Item Input Action (left click in delete mode) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *DeleteItemAction;
+
 	/** Time player must hold interact key before picking up item */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	float InteractHoldDelay = 0.5f;
@@ -224,9 +240,36 @@ protected:
 	/** Whether current placement location is valid */
 	bool bHasValidPlacement;
 
+	/** Previous frame's valid placement state (for stabilization) */
+	bool bPreviousValidPlacement;
+
 	/** Construction mode state */
 	UPROPERTY(BlueprintReadOnly, Category = "Construction")
 	bool bIsInConstructionMode;
+
+	/** Whether snapping is enabled in construction mode */
+	UPROPERTY(BlueprintReadWrite, Category = "Construction")
+	bool bSnapModeEnabled;
+
+	/** Current placement distance from camera */
+	UPROPERTY(BlueprintReadWrite, Category = "Construction")
+	float CurrentPlacementDistance;
+
+	/** Minimum placement distance */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
+	float MinPlacementDistance = 100.0f;
+
+	/** Whether in delete mode */
+	UPROPERTY(BlueprintReadOnly, Category = "Construction")
+	bool bIsInDeleteMode;
+
+	/** Currently highlighted construction part for deletion */
+	UPROPERTY()
+	class AConstructionPart* HighlightedPartForDeletion;
+
+	/** Material for highlighting parts in delete mode */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
+	class UMaterialInterface* DeleteHighlightMaterial;
 
 	/** Current construction part ghost (for socket-based placement) */
 	UPROPERTY()
@@ -341,6 +384,33 @@ protected:
 	/** Fasten the construction part (called on second interact) */
 	UFUNCTION(BlueprintCallable, Category = "Construction")
 	void FastenConstructionPart();
+
+	/** Toggle snap mode in construction */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void ToggleSnapMode();
+
+	/** Adjust placement distance (mousewheel) */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void AdjustPlacementDistance(const FInputActionValue& Value);
+
+	/** Toggle delete mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void ToggleDeleteMode();
+
+	/** Enter delete mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void EnterDeleteMode();
+
+	/** Exit delete mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void ExitDeleteMode();
+
+	/** Update delete mode highlighting */
+	void UpdateDeleteModeHighlight();
+
+	/** Delete the highlighted construction part */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void DeleteHighlightedPart();
 
 	/** Toggle inventory display */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
