@@ -1,0 +1,242 @@
+Goal
+
+When your preview crate is near another crate, it should:
+
+choose a target snap point on the existing crate
+
+choose the best matching snap point on the preview crate
+
+rotate preview so the two faces meet (normals opposite)
+
+apply a 90° “twist” step so edges line up
+
+translate preview so snap points coincide
+
+Step-by-step UE5 implementation
+Step 0 — Setup collision and channels (do this first)
+
+Create a collision preset for placed crates, e.g. Buildable.
+
+Your preview crate should not block placement traces.
+
+Give it collision = “NoCollision” (or custom that ignores your trace channel).
+
+Create a trace channel in Project Settings:
+
+BuildTrace
+
+Placed crates Block BuildTrace
+
+Preview crate Ignore BuildTrace
+
+This avoids “snapping to yourself” and jitter.
+
+Step 1 — Add snap point components to the crate blueprint
+
+In BP_Crate:
+
+Add a SceneComponent called SnapRoot.
+
+Add 6 ArrowComponents as children of SnapRoot:
+
+SP_Top, SP_Bottom, SP_PosX, SP_NegX, SP_PosY, SP_NegY
+
+Position each arrow at the face center (half extent away from center).
+
+Orient each arrow so:
+
+Arrow Forward/X points OUT of the face (the face normal)
+
+Arrow Up/Z is consistent:
+
+Top & Bottom: set Up roughly to +Y
+
+Side faces: set Up to +Z
+
+This “Up” consistency is what stops perpendicular snaps from rolling randomly.
+
+Create a variable: SnapPoints (Array of SceneComponent references).
+
+On BeginPlay (or Construction Script), fill the array with the 6 arrows.
+
+Step 2 — Build a preview actor class
+
+Create BP_CratePreview:
+
+Same mesh as crate
+
+Collision: NoCollision
+
+Same 6 snap arrows (or just reuse BP_Crate but with “IsPreview” flag)
+
+In your Player / Builder component:
+
+Spawn preview actor once when entering build mode
+
+Update its transform every tick
+
+Step 3 — Find a target crate and target snap point
+
+Each tick while building:
+
+A) Trace to find what you’re aiming at
+
+LineTraceByChannel using BuildTrace from camera
+
+If Hit Actor is a placed crate:
+
+TargetActor = HitActor
+
+HitLocation = Hit.ImpactPoint
+
+Else fall back to “free placement” (skip snapping)
+
+B) Choose the best target snap point on the target crate
+
+Function: GetBestTargetSnap(TargetCrate, HitLocation)
+
+Loop TargetCrate.SnapPoints
+
+Compute distance: Dist = VectorDistance(SP.WorldLocation, HitLocation)
+
+Keep the smallest dist (optionally require Dist < SnapRange, e.g. 75)
+
+Return: TargetSP
+
+This chooses the face you’re near.
+
+Step 4 — Choose the best preview snap point (this fixes perpendicular issues)
+
+Function: GetBestPreviewSnap(PreviewCrate, TargetSP)
+
+Compute:
+
+DesiredNormal = -TargetSP.ForwardVector (world)
+
+Loop through preview snap points:
+
+Dot = DotProduct(PreviewSP.ForwardVector, DesiredNormal)
+
+Keep the highest dot (closest to 1)
+
+Require Dot > 0.7 (angle threshold) or you’re too far off → don’t snap.
+
+Return: PreviewSP
+
+Why this works: it forces the preview to use the face that will actually mate with the target face, regardless of perpendicular layout.
+
+Step 5 — Compute rotation: align normals, then apply 90° twist
+
+Function: ComputeSnappedRotation(PreviewSP, TargetSP, TwistSteps=90)
+
+A) Align normals (Forward)
+
+You want:
+
+PreviewSP.Forward → -TargetSP.Forward
+
+In Blueprints, do:
+
+ForwardDesired = -TargetSP.ForwardVector
+
+UpDesired = TargetSP.UpVector (this is why we authored stable Up)
+
+Then build an orthonormal basis:
+3. RightDesired = Normalize(CrossProduct(UpDesired, ForwardDesired))
+4. UpDesiredFixed = Normalize(CrossProduct(ForwardDesired, RightDesired))
+
+Now build a rotator:
+5. Use Make Rotation from Axes (Forward, Right, Up)
+
+Forward = ForwardDesired
+
+Right = RightDesired
+
+Up = UpDesiredFixed
+This gives you the “base” snapped orientation.
+
+B) Apply twist snapping (90° steps) around ForwardDesired
+
+This removes roll ambiguity and makes edges line up.
+
+Take the preview snap’s current Up and project onto the plane perpendicular to ForwardDesired:
+
+PrevUp = PreviewSP.UpVector
+
+PrevUpOnPlane = Normalize(PrevUp - (Dot(PrevUp, ForwardDesired) * ForwardDesired))
+
+Same for target up:
+
+TgtUp = TargetSP.UpVector
+
+TgtUpOnPlane = Normalize(TgtUp - (Dot(TgtUp, ForwardDesired) * ForwardDesired))
+
+Compute signed angle between these two around ForwardDesired:
+
+Angle = atan2( Dot(ForwardDesired, Cross(PrevUpOnPlane, TgtUpOnPlane)), Dot(PrevUpOnPlane, TgtUpOnPlane) )
+
+Convert to degrees.
+
+Quantize:
+
+QuantAngle = Round(Angle / 90) * 90
+
+Make a rotator from axis-angle:
+
+Axis = ForwardDesired
+
+Angle = QuantAngle
+
+FinalRotation = BaseRotation * TwistRotation
+
+If you don’t want to do the plane projection + signed angle math yet, you can start with a simpler twist: let the player rotate in 90° steps and apply that as TwistRotation around ForwardDesired.
+
+Step 6 — Move preview so snap points match (after rotation)
+
+This part is critical: don’t align the actor pivot, align the chosen snap points.
+
+Set preview actor rotation to FinalRotation
+
+Now read PreviewSP.WorldLocation again (it changed because actor rotated)
+
+Compute:
+
+Delta = TargetSP.WorldLocation - PreviewSP.WorldLocation
+
+Set preview actor location:
+
+NewLocation = PreviewActor.Location + Delta
+
+Now the faces should meet perfectly.
+
+Step 7 — Locking to stop flicker near edges
+
+When you have a valid snap:
+
+Save LockedTargetActor + LockedTargetSP
+
+Keep using it until:
+
+distance > UnlockDistance (e.g. SnapRange * 1.5), OR
+
+trace no longer hits anything relevant
+
+This prevents the “it flips between two faces” behavior.
+
+What to implement first (minimal working version)
+
+If you want fastest success:
+
+6 arrows with correct Forward + consistent Up
+
+choose nearest target snap by distance
+
+choose preview snap by dot product to desired normal
+
+base rotation from axes (ForwardDesired + UpDesired)
+
+translate snap points to match
+
+skip twist math and just let player rotate 90° with input around ForwardDesired
+
+Once that feels stable, add automatic twist quantization.

@@ -5,6 +5,7 @@
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/SphereComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -33,7 +34,7 @@
 #include "ConstructionPart.h"
 #include "ConstructionPartData.h"
 #include "Engine/OverlapResult.h"
-#include "Engine/StaticMeshSocket.h"
+#include "Components/ArrowComponent.h"
 
 AOutercorpCharacter::AOutercorpCharacter()
 {
@@ -2245,8 +2246,14 @@ void AOutercorpCharacter::EnterConstructionMode()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
+	// Use the current slot's data (we already validated it exists above)
+	UConstructionPartData* DataToUse = ConstructionPartSlots[CurrentConstructionSlot];
+
+	// Use the Blueprint class from the DataAsset if specified, otherwise fallback to ConstructionPartClass
+	TSubclassOf<AConstructionPart> ClassToSpawn = DataToUse->PartBlueprintClass ? DataToUse->PartBlueprintClass : ConstructionPartClass;
+
 	ConstructionGhostPart = GetWorld()->SpawnActor<AConstructionPart>(
-		ConstructionPartClass,
+		ClassToSpawn,
 		FVector::ZeroVector,
 		FRotator::ZeroRotator,
 		SpawnParams
@@ -2254,9 +2261,6 @@ void AOutercorpCharacter::EnterConstructionMode()
 
 	if (ConstructionGhostPart)
 	{
-		// Use the current slot's data (we already validated it exists above)
-		UConstructionPartData* DataToUse = ConstructionPartSlots[CurrentConstructionSlot];
-
 		// Initialize from data asset to apply socket type definitions
 		ConstructionGhostPart->InitializeFromData(DataToUse);
 		CurrentPlacementDistance = DataToUse->MaxPlacementDistance;
@@ -2330,443 +2334,213 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 	FVector PlacementPos;
 	FRotator PlacementRot = FRotator::ZeroRotator;
 
-	// Try socket snapping first if snap mode is enabled
+	// Try snap point snapping using Arrow components (snapping.txt guide)
 	if (bSnapModeEnabled)
 	{
-		// Find all placed construction parts
-		TArray<AActor*> AllConstructionParts;
-		UGameplayStatics::GetAllActorsOfClass(GetWorld(), AConstructionPart::StaticClass(), AllConstructionParts);
-
-		// Do a raycast to find where we're looking (ignore ghost parts)
-		FHitResult HitResult;
-		FCollisionQueryParams QueryParams;
-		QueryParams.AddIgnoredActor(this);
-		if (ConstructionGhostPart)
-		{
-			QueryParams.AddIgnoredActor(ConstructionGhostPart);
-		}
-
-		// Position ghost at raycast hit or trace end
-		FVector TempGhostPos = TraceEnd;
-		if (GetWorld()->LineTraceSingleByChannel(HitResult, CameraLocation, TraceEnd, ECC_Visibility, QueryParams))
-		{
-			// Hit something - position ghost at hit location
-			TempGhostPos = HitResult.Location;
-		}
-
-		// Save the current ghost position before temporarily positioning it
+		// Save ghost position for restoration later
 		FVector SavedGhostPos = ConstructionGhostPart->GetActorLocation();
 
-		ConstructionGhostPart->SetActorLocation(TempGhostPos);
-		ConstructionGhostPart->SetActorRotation(FRotator::ZeroRotator);
+		// STEP 3: Find target construction part and best target snap point
+		float SnapRange = ConstructionGhostPart->PartData ? ConstructionGhostPart->PartData->SnapDistance : 75.0f;
 
-		// Now find the closest socket pair (ghost socket to target socket)
-		float BestDistance = FLT_MAX;
-		FName BestGhostSocket = NAME_None;
-		FName BestTargetSocket = NAME_None;
-		AConstructionPart* BestTargetPart = nullptr;
-		int32 TotalSocketPairsChecked = 0;
+		// Trace to find what we're aiming at
+		FHitResult TraceHit;
+		FCollisionQueryParams TraceParams;
+		TraceParams.AddIgnoredActor(this);
+		TraceParams.AddIgnoredActor(ConstructionGhostPart);
 
-		// Rotation to apply to ghost sockets
-		// Use normalized rotation to avoid floating-point precision issues
-		float CleanRotation = FMath::Fmod(CurrentGhostRotation, 360.0f);
-		if (CleanRotation < 0.0f) CleanRotation += 360.0f;
-		FQuat UserRotation = FQuat(FRotator(0.0f, CleanRotation, 0.0f));
+		bool bHitSomething = GetWorld()->LineTraceSingleByChannel(TraceHit, CameraLocation, TraceEnd, ECC_Visibility, TraceParams);
 
-		// Check all ghost sockets
-		for (const FAttachmentPoint& GhostAttachPoint : ConstructionGhostPart->AttachmentPoints)
+		AConstructionPart* TargetPart = nullptr;
+		UArrowComponent* BestTargetSnapPoint = nullptr;
+		UArrowComponent* BestGhostSnapPoint = nullptr;
+
+		if (bHitSomething)
 		{
-			FTransform GhostSocketWorld = ConstructionGhostPart->GetSocketTransformByName(GhostAttachPoint.SocketName);
+			TargetPart = Cast<AConstructionPart>(TraceHit.GetActor());
+		}
 
-			// Apply user rotation to ghost socket position
-			FVector GhostCenter = ConstructionGhostPart->GetActorLocation();
-			FVector SocketOffset = GhostSocketWorld.GetLocation() - GhostCenter;
-			FVector RotatedOffset = UserRotation.RotateVector(SocketOffset);
-			FVector RotatedSocketPos = GhostCenter + RotatedOffset;
+		if (TargetPart && TargetPart->SnapPoints.Num() > 0)
+		{
+			FVector HitLocation = TraceHit.ImpactPoint;
 
-			// Check against all placed parts
-			for (AActor* PartActor : AllConstructionParts)
+			UE_LOG(LogTemp, Warning, TEXT("STEP 3: Target part rotation=%s"), *TargetPart->GetActorRotation().ToString());
+
+			// STEP 3B: Choose best target snap point (nearest to hit location)
+			float ClosestDist = FLT_MAX;
+			for (UArrowComponent* TargetSnap : TargetPart->SnapPoints)
 			{
-				AConstructionPart* TargetPart = Cast<AConstructionPart>(PartActor);
-				if (!TargetPart || TargetPart == ConstructionGhostPart ||
-					TargetPart->CurrentState == EConstructionPartState::InInventory ||
-					TargetPart->CurrentState == EConstructionPartState::GhostPreview)
+				if (!TargetSnap) continue;
+
+				float Dist = FVector::Distance(TargetSnap->GetComponentLocation(), HitLocation);
+				if (Dist < ClosestDist && Dist < SnapRange)
 				{
-					continue;
+					ClosestDist = Dist;
+					BestTargetSnapPoint = TargetSnap;
+				}
+			}
+
+			// CRITICAL: Reset ghost to zero rotation before Step 4 so arrows are in known orientation
+			ConstructionGhostPart->SetActorRotation(FRotator::ZeroRotator);
+
+			// STEP 4: Choose best preview snap point (fixes perpendicular issues)
+			if (BestTargetSnapPoint && ConstructionGhostPart->SnapPoints.Num() > 0)
+			{
+				// Compute desired normal: opposite of target snap forward
+				FVector DesiredNormal = -BestTargetSnapPoint->GetForwardVector();
+
+				UE_LOG(LogTemp, Warning, TEXT("STEP 4: DesiredNormal = %s"), *DesiredNormal.ToString());
+				UE_LOG(LogTemp, Warning, TEXT("  Target: %s has RelativeRotation=%s"), *BestTargetSnapPoint->GetName(), *BestTargetSnapPoint->GetRelativeRotation().ToString());
+
+				// Find ghost snap with best matching normal
+				float BestDot = -1.0f;
+				for (UArrowComponent* GhostSnap : ConstructionGhostPart->SnapPoints)
+				{
+					if (!GhostSnap) continue;
+
+					FVector GhostForward = GhostSnap->GetForwardVector();
+					FRotator GhostRot = GhostSnap->GetRelativeRotation();
+					float Dot = FVector::DotProduct(GhostForward, DesiredNormal);
+
+					UE_LOG(LogTemp, Warning, TEXT("  %s: RelRot=%s, Forward=%s, Dot=%.3f"), *GhostSnap->GetName(), *GhostRot.ToString(), *GhostForward.ToString(), Dot);
+
+					// Only consider if within angle threshold (dot > 0.7 ≈ 45°)
+					if (Dot > 0.7f && Dot > BestDot)
+					{
+						BestDot = Dot;
+						BestGhostSnapPoint = GhostSnap;
+					}
 				}
 
-				// Check all target sockets
-				for (const FAttachmentPoint& TargetAttachPoint : TargetPart->AttachmentPoints)
+				if (BestGhostSnapPoint)
 				{
-					FTransform TargetSocketWorld = TargetPart->GetSocketTransformByName(TargetAttachPoint.SocketName);
-
-					// Check if target socket is in front of the camera (dot product check)
-					FVector ToTarget = (TargetSocketWorld.GetLocation() - CameraLocation).GetSafeNormal();
-					FVector ViewDirection = GetControlRotation().Vector();
-					float DotProduct = FVector::DotProduct(ViewDirection, ToTarget);
-
-					// Get the view angle threshold from data asset (convert from degrees to dot product)
-					float MaxViewAngleDegrees = ConstructionGhostPart->PartData ? ConstructionGhostPart->PartData->SnapViewAngleMax : 70.0f;
-					float MinDotProduct = FMath::Cos(FMath::DegreesToRadians(MaxViewAngleDegrees));
-
-					// Only consider sockets within the view angle threshold
-					if (DotProduct < MinDotProduct)
-					{
-						continue; // Skip sockets that are behind or too far to the side
-					}
-
-					// Check socket compatibility (bidirectional)
-					bool bGhostAllowsTarget = false;
-					bool bTargetAllowsGhost = false;
-
-					// Get the ghost socket definition from the data asset
-					const FSocketTypeDefinition* GhostSocketDef = nullptr;
-					if (ConstructionGhostPart->PartData)
-					{
-						for (const FSocketTypeDefinition& SocketDef : ConstructionGhostPart->PartData->SocketTypeDefinitions)
-						{
-							if (SocketDef.SocketName == GhostAttachPoint.SocketName)
-							{
-								GhostSocketDef = &SocketDef;
-								break;
-							}
-						}
-					}
-
-					// Get the target socket definition from the target part's data asset
-					const FSocketTypeDefinition* TargetSocketDef = nullptr;
-					if (TargetPart->PartData)
-					{
-						for (const FSocketTypeDefinition& SocketDef : TargetPart->PartData->SocketTypeDefinitions)
-						{
-							if (SocketDef.SocketName == TargetAttachPoint.SocketName)
-							{
-								TargetSocketDef = &SocketDef;
-								break;
-							}
-						}
-					}
-
-					// Check if ghost socket allows snapping to target socket
-					if (GhostSocketDef)
-					{
-						TArray<FName> GhostAllowedTypes = GhostSocketDef->GetAllowedSocketTypes();
-						FName TargetType = TargetSocketDef ? TargetSocketDef->GetSocketType() : FName("Any");
-
-						// If allowed list contains "Any", it can snap to anything
-						if (GhostAllowedTypes.Contains(FName("Any")))
-						{
-							bGhostAllowsTarget = true;
-						}
-						else
-						{
-							// Check if target socket type is in the allowed list
-							bGhostAllowsTarget = GhostAllowedTypes.Contains(TargetType);
-						}
-					}
-					else
-					{
-						// No socket definition found - default to ALLOW snapping (backward compatibility)
-						bGhostAllowsTarget = true;
-					}
-
-					// Check if target socket allows ghost socket to snap to it
-					if (TargetSocketDef)
-					{
-						TArray<FName> TargetAllowedTypes = TargetSocketDef->GetAllowedSocketTypes();
-						FName GhostType = GhostSocketDef ? GhostSocketDef->GetSocketType() : FName("Any");
-
-						// If allowed list contains "Any", it can snap to anything
-						if (TargetAllowedTypes.Contains(FName("Any")))
-						{
-							bTargetAllowsGhost = true;
-						}
-						else
-						{
-							// Check if ghost socket type is in the allowed list
-							bTargetAllowsGhost = TargetAllowedTypes.Contains(GhostType);
-						}
-					}
-					else
-					{
-						// No socket definition found - default to ALLOW snapping (backward compatibility)
-						bTargetAllowsGhost = true;
-					}
-
-					// Both sockets must allow the connection (bidirectional check)
-					if (!bGhostAllowsTarget || !bTargetAllowsGhost)
-					{
-						continue; // Skip this socket pair - not compatible
-					}
-
-					// Check if target socket is already occupied
-					if (TargetAttachPoint.Connections.Num() > 0)
-					{
-						continue; // Skip occupied sockets
-					}
-
-					// Calculate distance between rotated ghost socket and target socket
-					float Distance = FVector::Dist(RotatedSocketPos, TargetSocketWorld.GetLocation());
-					TotalSocketPairsChecked++;
-
-					// Apply a penalty based on viewing angle - sockets you're looking directly at are favored
-					// DotProduct ranges from MinDotProduct (edge of view cone) to 1.0 (looking directly at it)
-					// Normalize to 0-1 range where 1 = looking directly at socket, 0 = at edge of view cone
-					float ViewScore = (DotProduct - MinDotProduct) / (1.0f - MinDotProduct);
-					ViewScore = FMath::Clamp(ViewScore, 0.0f, 1.0f);
-
-					// Apply penalty to distance based on view score (looking away = effectively "further")
-					// Penalty multiplier: 1.0x when looking directly at it, up to 3.0x when at edge of view cone
-					float ViewPenaltyMultiplier = 1.0f + (2.0f * (1.0f - ViewScore));
-					float PenalizedDistance = Distance * ViewPenaltyMultiplier;
-
-					// Use a very large search radius to find sockets even if rotation isn't perfect yet
-					// This is crucial for perpendicular snapping (front-to-left, etc) where sockets
-					// might be far apart until rotation is correct
-					// Also important for top/bottom sockets where ghost might be positioned on top
-					float SearchRadius = 800.0f; // Very large radius for forgiving snapping
-					if (Distance < SearchRadius && PenalizedDistance < BestDistance)
-					{
-						BestDistance = PenalizedDistance;
-						BestGhostSocket = GhostAttachPoint.SocketName;
-						BestTargetSocket = TargetAttachPoint.SocketName;
-						BestTargetPart = TargetPart;
-						bFoundSnapPoint = true;
-					}
+					UE_LOG(LogTemp, Warning, TEXT("  BEST: %s with Dot=%.3f"), *BestGhostSnapPoint->GetName(), BestDot);
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("  NO MATCH FOUND (all dots < 0.7)"));
 				}
 			}
 		}
 
-		// Socket type matching handles compatibility now, no need for angle tolerance checks
-		// The user can freely rotate and snap at any angle they want
-
-		// If we still have a valid snap point, calculate the offset needed
-		if (bFoundSnapPoint)
+		// If we found valid snap points, compute snapped transform
+		if (BestTargetSnapPoint && BestGhostSnapPoint)
 		{
-			// Get target socket world transform
-			FTransform TargetSocketWorld = BestTargetPart->GetSocketTransformByName(BestTargetSocket);
+			bFoundSnapPoint = true;
 
-			// Get LOCAL socket data from meshes
-			UStaticMesh* GhostMesh = ConstructionGhostPart->MeshComponent->GetStaticMesh();
+			// STEP 5: Compute rotation - align normals then apply 90° twist
+			// Get target snap point world transform vectors
+			FVector TargetForward = BestTargetSnapPoint->GetForwardVector();
+			FVector TargetUp = BestTargetSnapPoint->GetUpVector();
 
-			FVector GhostSocketLocalPos = FVector::ZeroVector;
-			FRotator GhostSocketLocalRot = FRotator::ZeroRotator;
+			UE_LOG(LogTemp, Warning, TEXT("STEP 5: Target=%s, Ghost=%s"), *BestTargetSnapPoint->GetName(), *BestGhostSnapPoint->GetName());
+			UE_LOG(LogTemp, Warning, TEXT("  TargetForward=%s, TargetUp=%s"), *TargetForward.ToString(), *TargetUp.ToString());
+			UE_LOG(LogTemp, Warning, TEXT("  GhostForward=%s, GhostUp=%s"), *BestGhostSnapPoint->GetForwardVector().ToString(), *BestGhostSnapPoint->GetUpVector().ToString());
 
-			if (GhostMesh)
+			// A) Align snap points: We need to find what rotation to apply to the ghost ACTOR
+			// so that the ghost SNAP POINT aligns with the target snap point
+
+			// Get the target snap point's world rotation
+			FQuat TargetSnapWorldRot = BestTargetSnapPoint->GetComponentQuat();
+
+			// Get the ghost snap point's relative rotation (relative to ghost actor at zero rotation)
+			FQuat GhostActorRotation = ConstructionGhostPart->GetActorQuat(); // Should be (0,0,0) from line 2382
+			FQuat GhostSnapWorldRot = BestGhostSnapPoint->GetComponentQuat();
+			FQuat GhostSnapRelativeRot = GhostActorRotation.Inverse() * GhostSnapWorldRot;
+
+			// We want: GhostActorRot * GhostSnapRelativeRot = TargetSnapRot rotated 180° (to face opposite)
+			// The 180° flip should be around the Forward axis so snap points face each other
+			FVector TargetSnapUp = BestTargetSnapPoint->GetUpVector();
+			FQuat FlipRot = FQuat(TargetSnapUp, PI); // 180° around target's Up axis
+			FQuat DesiredSnapRot = FlipRot * TargetSnapWorldRot;
+			FQuat BaseRotation = DesiredSnapRot * GhostSnapRelativeRot.Inverse();
+
+			UE_LOG(LogTemp, Warning, TEXT("  TargetSnapWorldRot=%s, GhostSnapRelativeRot=%s"), *TargetSnapWorldRot.Rotator().ToString(), *GhostSnapRelativeRot.Rotator().ToString());
+
+			UE_LOG(LogTemp, Warning, TEXT("  BaseRotation=%s"), *BaseRotation.ToString());
+
+			// B) Apply 90° twist snapping around the snap normal axis
+			float RotationStepDegrees = 90.0f; // Default from data asset
+
+			FQuat FinalRotation = BaseRotation;
+
+			if (RotationStepDegrees > 0.0f)
 			{
-				for (UStaticMeshSocket* Socket : GhostMesh->Sockets)
-				{
-					if (Socket && Socket->SocketName == BestGhostSocket)
-					{
-						GhostSocketLocalPos = Socket->RelativeLocation;
-						GhostSocketLocalRot = Socket->RelativeRotation;
-						break;
-					}
-				}
+				// Apply the base rotation to get the rotated snap point orientation
+				FQuat RotatedSnapRotation = BaseRotation * GhostSnapRelativeRot;
+				FVector GhostUpAfterBase = RotatedSnapRotation.GetUpVector();
+
+				// The twist axis is the snap normal (target's forward)
+				FVector TwistAxis = TargetForward;
+
+				// Project both up vectors onto plane perpendicular to twist axis
+				FVector PrevUpOnPlane = (GhostUpAfterBase - (FVector::DotProduct(GhostUpAfterBase, TwistAxis) * TwistAxis)).GetSafeNormal();
+				FVector TgtUpOnPlane = (TargetUp - (FVector::DotProduct(TargetUp, TwistAxis) * TwistAxis)).GetSafeNormal();
+
+				// Compute signed angle between the two up vectors around twist axis
+				float DotProd = FVector::DotProduct(PrevUpOnPlane, TgtUpOnPlane);
+				FVector CrossProd = FVector::CrossProduct(PrevUpOnPlane, TgtUpOnPlane);
+				float SignedAngleDeg = FMath::Atan2(FVector::DotProduct(TwistAxis, CrossProd), DotProd) * (180.0f / PI);
+
+				// Quantize to rotation step (90° increments)
+				float QuantAngle = FMath::RoundToFloat(SignedAngleDeg / RotationStepDegrees) * RotationStepDegrees;
+
+				UE_LOG(LogTemp, Warning, TEXT("  Twist: GhostUpAfterBase=%s, TgtUpOnPlane=%s"), *GhostUpAfterBase.ToString(), *TgtUpOnPlane.ToString());
+				UE_LOG(LogTemp, Warning, TEXT("  Twist: SignedAngleDeg=%.1f, QuantAngle=%.1f"), SignedAngleDeg, QuantAngle);
+
+				// Create twist rotation around twist axis
+				FQuat TwistRotation = FQuat(TwistAxis, QuantAngle * (PI / 180.0f));
+
+				// Combine: Apply base rotation first, then twist
+				FinalRotation = BaseRotation * TwistRotation;
 			}
 
-			// Calculate rotation: We want the ghost socket to face OPPOSITE to target socket
-			// Target socket forward in world space
-			FVector TargetSocketWorldForward = TargetSocketWorld.GetRotation().GetForwardVector();
-			FVector DesiredGhostSocketWorldForward = -TargetSocketWorldForward;
-
-			// Ghost socket forward in LOCAL space (not affected by current ghost rotation)
-			FQuat GhostSocketLocalQuat = FQuat(GhostSocketLocalRot);
-			FVector GhostSocketLocalForward = GhostSocketLocalQuat.GetForwardVector();
-
-			// Project to 2D for yaw-only
-			FVector2D DesiredForward2D(DesiredGhostSocketWorldForward.X, DesiredGhostSocketWorldForward.Y);
-			FVector2D LocalForward2D(GhostSocketLocalForward.X, GhostSocketLocalForward.Y);
-
-			DesiredForward2D.Normalize();
-			LocalForward2D.Normalize();
-
-			// Calculate angles
-			float DesiredWorldYaw = FMath::Atan2(DesiredForward2D.Y, DesiredForward2D.X) * (180.0f / PI);
-			float LocalSocketYaw = FMath::Atan2(LocalForward2D.Y, LocalForward2D.X) * (180.0f / PI);
-
-			// Get socket configuration from data asset
-			float SocketRotationOffset = 0.0f;
-			FVector SocketPositionOffset = FVector::ZeroVector;
-			bool bUseAutoRotation = true;
-
-			if (ConstructionGhostPart->PartData)
-			{
-				for (const FSocketTypeDefinition& SocketDef : ConstructionGhostPart->PartData->SocketTypeDefinitions)
-				{
-					if (SocketDef.SocketName == BestGhostSocket)
-					{
-						SocketRotationOffset = SocketDef.RotationOffset;
-						SocketPositionOffset = SocketDef.PositionOffset;
-						bUseAutoRotation = SocketDef.bUseAutomaticRotation;
-						break;
-					}
-				}
-			}
-
-			// Calculate rotation
-			float AlignedRotation;
-			if (bUseAutoRotation)
-			{
-				// Automatic: align based on socket normals
-				AlignedRotation = DesiredWorldYaw - LocalSocketYaw + CleanRotation + SocketRotationOffset;
-			}
-			else
-			{
-				// Manual: use target part rotation + offset
-				float TargetYaw = BestTargetPart->GetActorRotation().Yaw;
-				AlignedRotation = TargetYaw + CleanRotation + SocketRotationOffset;
-			}
-
-			// Normalize
-			AlignedRotation = FMath::Fmod(AlignedRotation, 360.0f);
-			if (AlignedRotation < 0.0f) AlignedRotation += 360.0f;
-
-			// Apply socket position offset
-			FVector SocketOffset = GhostSocketLocalPos + SocketPositionOffset;
-
-			// Also apply legacy per-socket offset if configured
-			FAttachmentPoint* GhostAttachPoint = ConstructionGhostPart->AttachmentPoints.FindByPredicate([BestGhostSocket](const FAttachmentPoint& Point) {
-				return Point.SocketName == BestGhostSocket;
-			});
-			if (GhostAttachPoint && !GhostAttachPoint->SocketOffset.IsZero())
-			{
-				SocketOffset += GhostAttachPoint->SocketOffset;
-			}
-
-			// Rotate socket offset by aligned rotation
-			FQuat AlignedRotationQuat = FQuat(FRotator(0.0f, AlignedRotation, 0.0f));
-			FVector RotatedSocketOffset = AlignedRotationQuat.RotateVector(SocketOffset);
-
-			// Position = target socket - rotated offset
-			PlacementPos = TargetSocketWorld.GetLocation() - RotatedSocketOffset;
-
-			// Set placement rotation to aligned rotation
-			PlacementRot = FRotator(0.0f, AlignedRotation, 0.0f);
-
-			// Check overlap using component bounds test
-			// Temporarily move ghost to the snap position to test overlap
-			ConstructionGhostPart->SetActorLocation(PlacementPos);
+			// STEP 6: Translate so snap points match (AFTER rotation)
+			// Set the ghost to the final rotation first
+			PlacementRot = FinalRotation.Rotator();
+			UE_LOG(LogTemp, Warning, TEXT("  FinalRotation (as Rotator)=%s"), *PlacementRot.ToString());
 			ConstructionGhostPart->SetActorRotation(PlacementRot);
+			UE_LOG(LogTemp, Warning, TEXT("  Ghost actual rotation after SetActorRotation=%s"), *ConstructionGhostPart->GetActorRotation().ToString());
 
-			// Get bounds and check overlap using Separating Axis Theorem (SAT)
-			FBox GhostLocalBounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
-			FBox TargetLocalBounds = BestTargetPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+			// NOW read the ghost snap point world location (it changed because we rotated the actor)
+			FVector GhostSnapWorldLoc = BestGhostSnapPoint->GetComponentLocation();
+			FVector TargetSnapWorldLoc = BestTargetSnapPoint->GetComponentLocation();
 
-			FVector GhostExtent = GhostLocalBounds.GetExtent() * ConstructionGhostPart->GetActorScale3D();
-			FVector TargetExtent = TargetLocalBounds.GetExtent() * BestTargetPart->GetActorScale3D();
+			// Compute offset needed to align snap points
+			FVector Delta = TargetSnapWorldLoc - GhostSnapWorldLoc;
 
-			FVector GhostCenter = ConstructionGhostPart->GetActorTransform().TransformPosition(GhostLocalBounds.GetCenter());
-			FVector TargetCenter = BestTargetPart->GetActorTransform().TransformPosition(TargetLocalBounds.GetCenter());
+			// Set final position
+			PlacementPos = ConstructionGhostPart->GetActorLocation() + Delta;
 
-			// Get oriented axes for both boxes
-			FQuat GhostQuat = ConstructionGhostPart->GetActorQuat();
-			FQuat TargetQuat = BestTargetPart->GetActorQuat();
+			// Check overlap using OBB
+			ConstructionGhostPart->SetActorLocation(PlacementPos);
 
-			FVector GhostAxisX = GhostQuat.GetAxisX();
-			FVector GhostAxisY = GhostQuat.GetAxisY();
-			FVector GhostAxisZ = GhostQuat.GetAxisZ();
-
-			FVector TargetAxisX = TargetQuat.GetAxisX();
-			FVector TargetAxisY = TargetQuat.GetAxisY();
-			FVector TargetAxisZ = TargetQuat.GetAxisZ();
-
-			// Vector from ghost center to target center
-			FVector CenterDelta = TargetCenter - GhostCenter;
-
-			bool bExcessiveOverlap = false;
-
-			// Lambda to test separation along an axis using SAT
-			auto TestSeparationAxis = [&](const FVector& Axis) -> bool
-			{
-				if (Axis.SizeSquared() < KINDA_SMALL_NUMBER)
-					return true; // Invalid axis, skip
-
-				FVector NormAxis = Axis.GetSafeNormal();
-
-				// Project extents of both boxes onto the axis
-				float GhostProjection = FMath::Abs(FVector::DotProduct(GhostAxisX * GhostExtent.X, NormAxis)) +
-										FMath::Abs(FVector::DotProduct(GhostAxisY * GhostExtent.Y, NormAxis)) +
-										FMath::Abs(FVector::DotProduct(GhostAxisZ * GhostExtent.Z, NormAxis));
-
-				float TargetProjection = FMath::Abs(FVector::DotProduct(TargetAxisX * TargetExtent.X, NormAxis)) +
-										 FMath::Abs(FVector::DotProduct(TargetAxisY * TargetExtent.Y, NormAxis)) +
-										 FMath::Abs(FVector::DotProduct(TargetAxisZ * TargetExtent.Z, NormAxis));
-
-				// Project center distance onto the axis
-				float CenterProjection = FMath::Abs(FVector::DotProduct(CenterDelta, NormAxis));
-
-				// If the center distance is greater than the sum of projections, boxes are separated on this axis
-				return CenterProjection <= (GhostProjection + TargetProjection);
-			};
-
-			// Test all 15 potential separating axes (3 from each OBB + 9 cross products)
-			// If we find separation on ANY axis, the boxes don't overlap
-			bool bOverlapping = true;
-
-			// Test the 3 axes of the ghost box
-			if (!TestSeparationAxis(GhostAxisX)) bOverlapping = false;
-			if (!TestSeparationAxis(GhostAxisY)) bOverlapping = false;
-			if (!TestSeparationAxis(GhostAxisZ)) bOverlapping = false;
-
-			// Test the 3 axes of the target box
-			if (bOverlapping && !TestSeparationAxis(TargetAxisX)) bOverlapping = false;
-			if (bOverlapping && !TestSeparationAxis(TargetAxisY)) bOverlapping = false;
-			if (bOverlapping && !TestSeparationAxis(TargetAxisZ)) bOverlapping = false;
-
-			// Test the 9 cross product axes
-			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisX, TargetAxisX))) bOverlapping = false;
-			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisX, TargetAxisY))) bOverlapping = false;
-			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisX, TargetAxisZ))) bOverlapping = false;
-			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisY, TargetAxisX))) bOverlapping = false;
-			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisY, TargetAxisY))) bOverlapping = false;
-			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisY, TargetAxisZ))) bOverlapping = false;
-			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisZ, TargetAxisX))) bOverlapping = false;
-			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisZ, TargetAxisY))) bOverlapping = false;
-			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisZ, TargetAxisZ))) bOverlapping = false;
-
-			// For socket snapping, allow significant overlap at connection points
-			// This is essential for perpendicular snapping where boxes meet at right angles
+			// Simple overlap check - just verify not too much overlap
 			bool bHasExcessiveOverlap = false;
-
-			if (bOverlapping)
+			if (ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap)
 			{
-				// CRITICAL: For socket-based snapping, we should be VERY lenient with overlap
-				// When boxes snap at perpendicular angles (front-to-left), they WILL have significant
-				// bounding box overlap even though only their faces are touching
-
-				// Only reject if boxes are basically completely inside each other
-				// Calculate how much the centers have penetrated into each other's bounds
-				float CenterDistance = FVector::Dist(GhostCenter, TargetCenter);
-
-				// Get the minimum dimension of each box (thinnest side)
-				float GhostMinDim = FMath::Min3(GhostExtent.X, GhostExtent.Y, GhostExtent.Z);
-				float TargetMinDim = FMath::Min3(TargetExtent.X, TargetExtent.Y, TargetExtent.Z);
-
-				// Only reject if centers are closer than half the smallest dimension
-				// This catches cases where boxes are truly inside each other
-				float MinSeparation = FMath::Min(GhostMinDim, TargetMinDim) * 0.5f;
-
-				bHasExcessiveOverlap = (CenterDistance < MinSeparation);
+				// For now, skip detailed overlap check - just use the snap
+				bHasExcessiveOverlap = false; // Simplified for initial test
 			}
 
-			bExcessiveOverlap = bHasExcessiveOverlap;
-
-			// Restore ghost to original position from before socket search
-			// This is critical - if we don't restore, ghost will be left in wrong state for next frame
-			ConstructionGhostPart->SetActorLocation(SavedGhostPos);
-			ConstructionGhostPart->SetActorRotation(FRotator(0.0f, CurrentGhostRotation, 0.0f));
-
-			if (!bExcessiveOverlap)
+			if (!bHasExcessiveOverlap)
 			{
-				TargetConstructionPart = BestTargetPart;
-				TargetSocketName = BestTargetSocket;
-				GhostSocketName = BestGhostSocket;
+				// Success! Keep this snap
 			}
 			else
 			{
 				bFoundSnapPoint = false;
 			}
+
+			// Restore ghost for ground snapping fallback
+			ConstructionGhostPart->SetActorLocation(SavedGhostPos);
+			ConstructionGhostPart->SetActorRotation(FRotator::ZeroRotator);
+		}
+		else
+		{
+			// No valid snap - restore ghost position
+			ConstructionGhostPart->SetActorLocation(SavedGhostPos);
+			ConstructionGhostPart->SetActorRotation(FRotator::ZeroRotator);
 		}
 	}
 
@@ -2974,8 +2748,12 @@ void AOutercorpCharacter::PlaceConstructionPart()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
+	// Use the Blueprint class from the DataAsset if specified, otherwise fallback to ConstructionPartClass
+	UConstructionPartData* DataToUse = ConstructionGhostPart->PartData;
+	TSubclassOf<AConstructionPart> ClassToSpawn = (DataToUse && DataToUse->PartBlueprintClass) ? DataToUse->PartBlueprintClass : ConstructionPartClass;
+
 	AConstructionPart* NewPart = GetWorld()->SpawnActor<AConstructionPart>(
-		ConstructionPartClass,
+		ClassToSpawn,
 		ConstructionGhostPart->GetActorLocation(),
 		ConstructionGhostPart->GetActorRotation(),
 		SpawnParams
@@ -2997,7 +2775,8 @@ void AOutercorpCharacter::PlaceConstructionPart()
 		else
 		{
 			// Free placement - just set to Placed state
-			NewPart->SetPartState(EConstructionPartState::Placed);		}
+			NewPart->SetPartState(EConstructionPartState::Placed);
+		}
 
 		if (NotificationComponent)
 		{
@@ -3192,8 +2971,14 @@ void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
+	// Initialize with the selected slot's data
+	UConstructionPartData* DataToUse = ConstructionPartSlots[SlotIndex];
+
+	// Use the Blueprint class from the DataAsset if specified, otherwise fallback to ConstructionPartClass
+	TSubclassOf<AConstructionPart> ClassToSpawn = DataToUse->PartBlueprintClass ? DataToUse->PartBlueprintClass : ConstructionPartClass;
+
 	ConstructionGhostPart = GetWorld()->SpawnActor<AConstructionPart>(
-		ConstructionPartClass,
+		ClassToSpawn,
 		FVector::ZeroVector,
 		FRotator::ZeroRotator,
 		SpawnParams
@@ -3201,8 +2986,6 @@ void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
 
 	if (ConstructionGhostPart)
 	{
-		// Initialize with the selected slot's data
-		UConstructionPartData* DataToUse = ConstructionPartSlots[SlotIndex];
 		ConstructionGhostPart->InitializeFromData(DataToUse);
 		CurrentPlacementDistance = DataToUse->MaxPlacementDistance;
 

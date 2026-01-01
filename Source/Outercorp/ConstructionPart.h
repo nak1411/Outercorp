@@ -119,6 +119,38 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* MeshComponent;
 
+	// Snap point system using Arrow components (following snapping.txt guide)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	class USceneComponent* SnapRoot;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
+	class UArrowComponent* SnapPoint_Top;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
+	class UArrowComponent* SnapPoint_Bottom;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
+	class UArrowComponent* SnapPoint_Front;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
+	class UArrowComponent* SnapPoint_Back;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
+	class UArrowComponent* SnapPoint_Right;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
+	class UArrowComponent* SnapPoint_Left;
+
+	// Array of all snap points for easy iteration
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TArray<class UArrowComponent*> SnapPoints;
+
+	// If true, snap points will be automatically positioned based on mesh bounds
+	// If false, you must manually position them in Blueprint
+	// IMPORTANT: Set this in Blueprint Class Defaults, not on instances
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Components")
+	bool bAutoPositionSnapPoints = true;
+
 	// Part Data Asset
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
 	class UConstructionPartData* PartData;
@@ -143,14 +175,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Construction")
 	EConstructionPartState CurrentState;
 
-	// Attachment Points (automatically populated from mesh sockets)
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Construction")
+	// Deprecated - kept for backward compatibility
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Construction|Deprecated")
 	TArray<FAttachmentPoint> AttachmentPoints;
 
 
 	// Functions
 	UFUNCTION(BlueprintCallable, Category = "Construction")
-	void InitializeAttachmentPoints();
+	void InitializeSnapPoints();
 
 	UFUNCTION(BlueprintCallable, Category = "Construction")
 	void InitializeFromData(UConstructionPartData* Data);
@@ -185,11 +217,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Construction")
 	int32 GetFastenedConnectionCount() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void RestoreOriginalMaterials();
+
 private:
 	EAttachmentType DetermineAttachmentType(const FName& SocketName);
 
 	UMaterialInterface* OriginalMaterial;
 	TArray<UMaterialInterface*> OriginalMaterials;
 	void StoreOriginalMaterials();
-	void RestoreOriginalMaterials();
 };
