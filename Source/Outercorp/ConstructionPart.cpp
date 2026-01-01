@@ -3,6 +3,7 @@
 #include "ConstructionPart.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/ArrowComponent.h"
+#include "Components/BoxComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Kismet/GameplayStatics.h"
 #include "ConstructionPartData.h"
@@ -15,64 +16,21 @@ AConstructionPart::AConstructionPart()
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	RootComponent = MeshComponent;
 
+	// Create overlap bounds visualizer (for adjusting overlap detection in Blueprint viewport)
+	OverlapBounds = CreateDefaultSubobject<UBoxComponent>(TEXT("OverlapBounds"));
+	OverlapBounds->SetupAttachment(MeshComponent);
+	OverlapBounds->SetBoxExtent(FVector(50.0f, 50.0f, 50.0f)); // Default size
+	OverlapBounds->SetCollisionEnabled(ECollisionEnabled::NoCollision); // Only for visualization
+	OverlapBounds->SetHiddenInGame(true); // Only visible in editor
+	OverlapBounds->bDrawOnlyIfSelected = true; // Only show when selected
+	OverlapBounds->ShapeColor = FColor::Yellow; // Yellow box for visibility
+
 	// Create snap root
 	SnapRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SnapRoot"));
 	SnapRoot->SetupAttachment(MeshComponent);
 
-	// Create 6 snap point arrows (following snapping.txt Step 1)
-	SnapPoint_Top = CreateDefaultSubobject<UArrowComponent>(TEXT("SnapPoint_Top"));
-	SnapPoint_Top->SetupAttachment(SnapRoot);
-	SnapPoint_Top->SetArrowColor(FLinearColor::Green);
-	SnapPoint_Top->ArrowSize = 2.0f;
-	SnapPoint_Top->bIsScreenSizeScaled = true;
-	SnapPoint_Top->bTreatAsASprite = true;
-	SnapPoint_Top->SetHiddenInGame(false);
-	SnapPoint_Top->SetVisibility(true);
-
-	SnapPoint_Bottom = CreateDefaultSubobject<UArrowComponent>(TEXT("SnapPoint_Bottom"));
-	SnapPoint_Bottom->SetupAttachment(SnapRoot);
-	SnapPoint_Bottom->SetArrowColor(FLinearColor::Green);
-	SnapPoint_Bottom->ArrowSize = 2.0f;
-	SnapPoint_Bottom->bIsScreenSizeScaled = true;
-	SnapPoint_Bottom->bTreatAsASprite = true;
-	SnapPoint_Bottom->SetHiddenInGame(false);
-	SnapPoint_Bottom->SetVisibility(true);
-
-	SnapPoint_Front = CreateDefaultSubobject<UArrowComponent>(TEXT("SnapPoint_Front"));
-	SnapPoint_Front->SetupAttachment(SnapRoot);
-	SnapPoint_Front->SetArrowColor(FLinearColor::Red);
-	SnapPoint_Front->ArrowSize = 2.0f;
-	SnapPoint_Front->bIsScreenSizeScaled = true;
-	SnapPoint_Front->bTreatAsASprite = true;
-	SnapPoint_Front->SetHiddenInGame(false);
-	SnapPoint_Front->SetVisibility(true);
-
-	SnapPoint_Back = CreateDefaultSubobject<UArrowComponent>(TEXT("SnapPoint_Back"));
-	SnapPoint_Back->SetupAttachment(SnapRoot);
-	SnapPoint_Back->SetArrowColor(FLinearColor::Red);
-	SnapPoint_Back->ArrowSize = 2.0f;
-	SnapPoint_Back->bIsScreenSizeScaled = true;
-	SnapPoint_Back->bTreatAsASprite = true;
-	SnapPoint_Back->SetHiddenInGame(false);
-	SnapPoint_Back->SetVisibility(true);
-
-	SnapPoint_Right = CreateDefaultSubobject<UArrowComponent>(TEXT("SnapPoint_Right"));
-	SnapPoint_Right->SetupAttachment(SnapRoot);
-	SnapPoint_Right->SetArrowColor(FLinearColor::Blue);
-	SnapPoint_Right->ArrowSize = 2.0f;
-	SnapPoint_Right->bIsScreenSizeScaled = true;
-	SnapPoint_Right->bTreatAsASprite = true;
-	SnapPoint_Right->SetHiddenInGame(false);
-	SnapPoint_Right->SetVisibility(true);
-
-	SnapPoint_Left = CreateDefaultSubobject<UArrowComponent>(TEXT("SnapPoint_Left"));
-	SnapPoint_Left->SetupAttachment(SnapRoot);
-	SnapPoint_Left->SetArrowColor(FLinearColor::Blue);
-	SnapPoint_Left->ArrowSize = 2.0f;
-	SnapPoint_Left->bIsScreenSizeScaled = true;
-	SnapPoint_Left->bTreatAsASprite = true;
-	SnapPoint_Left->SetHiddenInGame(false);
-	SnapPoint_Left->SetVisibility(true);
+	// Snap points are now added dynamically in Blueprint child classes
+	// This allows each construction part type to have different numbers of snap points
 
 	// Default state
 	CurrentState = EConstructionPartState::InInventory;
@@ -118,57 +76,28 @@ void AConstructionPart::BeginPlay()
 
 void AConstructionPart::InitializeSnapPoints()
 {
-	// Fill the SnapPoints array for easy iteration (snapping.txt Step 1)
-	SnapPoints.Empty();
-	SnapPoints.Add(SnapPoint_Top);
-	SnapPoints.Add(SnapPoint_Bottom);
-	SnapPoints.Add(SnapPoint_Front);
-	SnapPoints.Add(SnapPoint_Back);
-	SnapPoints.Add(SnapPoint_Right);
-	SnapPoints.Add(SnapPoint_Left);
-
-	UE_LOG(LogTemp, Warning, TEXT("InitializeSnapPoints: bAutoPositionSnapPoints = %d"), bAutoPositionSnapPoints);
-
-	// Only auto-position if enabled (allows manual positioning in Blueprint)
-	if (!bAutoPositionSnapPoints)
+	// If SnapPoints array is empty, gather all ArrowComponents that are children of SnapRoot
+	if (SnapPoints.Num() == 0 && SnapRoot)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("InitializeSnapPoints: Auto-positioning disabled, using manual positions"));
-		return;
+		TArray<USceneComponent*> ChildComponents;
+		SnapRoot->GetChildrenComponents(false, ChildComponents);
+
+		for (USceneComponent* Child : ChildComponents)
+		{
+			UArrowComponent* Arrow = Cast<UArrowComponent>(Child);
+			if (Arrow)
+			{
+				SnapPoints.Add(Arrow);
+			}
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("InitializeSnapPoints: Found %d snap points attached to SnapRoot"), SnapPoints.Num());
 	}
 
-	// Get mesh bounds to position snap points at face centers
-	if (MeshComponent && MeshComponent->GetStaticMesh())
-	{
-		FBox MeshBounds = MeshComponent->GetStaticMesh()->GetBoundingBox();
-		FVector Extent = MeshBounds.GetExtent();
+	UE_LOG(LogTemp, Warning, TEXT("InitializeSnapPoints: Total snap points = %d"), SnapPoints.Num());
 
-		UE_LOG(LogTemp, Warning, TEXT("InitializeSnapPoints: Auto-positioning enabled, mesh extent = %s"), *Extent.ToString());
-
-		// Position and orient each snap point
-		// Top: Forward=+Z, Up=+Y (toward front)
-		SnapPoint_Top->SetRelativeLocation(FVector(0, 0, Extent.Z));
-		SnapPoint_Top->SetRelativeRotation(FRotator(90, 0, 0)); // Pitch up
-
-		// Bottom: Forward=-Z, Up=+Y
-		SnapPoint_Bottom->SetRelativeLocation(FVector(0, 0, -Extent.Z));
-		SnapPoint_Bottom->SetRelativeRotation(FRotator(-90, 0, 0)); // Pitch down
-
-		// Front: Forward=+X, Up=+Z
-		SnapPoint_Front->SetRelativeLocation(FVector(Extent.X, 0, 0));
-		SnapPoint_Front->SetRelativeRotation(FRotator(0, 0, 0)); // Default orientation
-
-		// Back: Forward=-X, Up=+Z
-		SnapPoint_Back->SetRelativeLocation(FVector(-Extent.X, 0, 0));
-		SnapPoint_Back->SetRelativeRotation(FRotator(0, 180, 0)); // Turn around
-
-		// Right: Forward=+Y, Up=+Z
-		SnapPoint_Right->SetRelativeLocation(FVector(0, Extent.Y, 0));
-		SnapPoint_Right->SetRelativeRotation(FRotator(0, 90, 0)); // Turn right
-
-		// Left: Forward=-Y, Up=+Z
-		SnapPoint_Left->SetRelativeLocation(FVector(0, -Extent.Y, 0));
-		SnapPoint_Left->SetRelativeRotation(FRotator(0, -90, 0)); // Turn left
-	}
+	// Snap points are positioned manually in each Blueprint child class
+	// This gives full control over snap point placement for different part geometries
 }
 
 void AConstructionPart::InitializeFromData(UConstructionPartData* Data)
@@ -189,13 +118,8 @@ void AConstructionPart::InitializeFromData(UConstructionPartData* Data)
 	Mass = Data->Mass;
 	bRequiresTool = Data->bRequiresTool;
 
-	// Re-initialize snap points with correct mesh bounds (only if auto-positioning is enabled)
-	// bAutoPositionSnapPoints is controlled in Blueprint Class Defaults
-	// Mesh is already set in Blueprint, so we can auto-position based on it
-	if (bAutoPositionSnapPoints)
-	{
-		InitializeSnapPoints();
-	}
+	// Re-initialize snap points to gather any snap points added in Blueprint
+	InitializeSnapPoints();
 
 	// Store materials for ghost preview (materials are set in Blueprint)
 	StoreOriginalMaterials();

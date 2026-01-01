@@ -290,6 +290,13 @@ protected:
 	/** Input accumulator for snap rotation */
 	float RotationInputAccumulator;
 
+	/** Snap twist offset in degrees (0, 90, 180, 270) - allows perpendicular snapping */
+	UPROPERTY(BlueprintReadWrite, Category = "Construction")
+	float SnapTwistOffset;
+
+	/** Whether the ghost is currently snapped to a snap point */
+	bool bIsCurrentlySnapped;
+
 	/** Current placement distance from camera */
 	UPROPERTY(BlueprintReadWrite, Category = "Construction")
 	float CurrentPlacementDistance;

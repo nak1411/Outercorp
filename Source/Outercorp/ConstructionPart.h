@@ -119,37 +119,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UStaticMeshComponent* MeshComponent;
 
+	// Overlap bounds visualization (for overlap detection)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	class UBoxComponent* OverlapBounds;
+
 	// Snap point system using Arrow components (following snapping.txt guide)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	class USceneComponent* SnapRoot;
 
+	// Dynamic array of snap points - can be populated in Blueprint or C++
+	// Add ArrowComponents as children of SnapRoot in your Blueprint child class
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
-	class UArrowComponent* SnapPoint_Top;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
-	class UArrowComponent* SnapPoint_Bottom;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
-	class UArrowComponent* SnapPoint_Front;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
-	class UArrowComponent* SnapPoint_Back;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
-	class UArrowComponent* SnapPoint_Right;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
-	class UArrowComponent* SnapPoint_Left;
-
-	// Array of all snap points for easy iteration
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TArray<class UArrowComponent*> SnapPoints;
-
-	// If true, snap points will be automatically positioned based on mesh bounds
-	// If false, you must manually position them in Blueprint
-	// IMPORTANT: Set this in Blueprint Class Defaults, not on instances
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Components")
-	bool bAutoPositionSnapPoints = true;
 
 	// Part Data Asset
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")

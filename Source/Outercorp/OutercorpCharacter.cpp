@@ -35,6 +35,7 @@
 #include "ConstructionPartData.h"
 #include "Engine/OverlapResult.h"
 #include "Components/ArrowComponent.h"
+#include "Components/BoxComponent.h"
 
 AOutercorpCharacter::AOutercorpCharacter()
 {
@@ -104,6 +105,8 @@ AOutercorpCharacter::AOutercorpCharacter()
 	CurrentPlacementDistance = 300.0f; // Start at max placement distance
 	CurrentGhostRotation = 0.0f; // Start at 0 degrees rotation
 	bIsHoldingRightClick = false;
+	SnapTwistOffset = 0.0f; // Start with no twist offset
+	bIsCurrentlySnapped = false;
 	RotationInputAccumulator = 0.0f;
 	bIsInDeleteMode = false;
 	HighlightedPartForDeletion = nullptr;
@@ -2333,6 +2336,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 	bool bFoundGroundPoint = false;
 	FVector PlacementPos;
 	FRotator PlacementRot = FRotator::ZeroRotator;
+	AConstructionPart* CurrentSnapTarget = nullptr; // Store the part we're snapping to for overlap checks
 
 	// Try snap point snapping using Arrow components (snapping.txt guide)
 	if (bSnapModeEnabled)
@@ -2380,8 +2384,10 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				}
 			}
 
-			// CRITICAL: Reset ghost to zero rotation before Step 4 so arrows are in known orientation
-			ConstructionGhostPart->SetActorRotation(FRotator::ZeroRotator);
+			// CRITICAL: Reset ghost to zero rotation, then apply user's twist offset before choosing snap point
+			// FRotator is (Pitch, Yaw, Roll) - Yaw rotates around Z axis (world up/turntable rotation)
+			FRotator GhostBaseRotation = FRotator(0, SnapTwistOffset, 0);
+			ConstructionGhostPart->SetActorRotation(GhostBaseRotation);
 
 			// STEP 4: Choose best preview snap point (fixes perpendicular issues)
 			if (BestTargetSnapPoint && ConstructionGhostPart->SnapPoints.Num() > 0)
@@ -2427,6 +2433,8 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		if (BestTargetSnapPoint && BestGhostSnapPoint)
 		{
 			bFoundSnapPoint = true;
+			bIsCurrentlySnapped = true;
+			CurrentSnapTarget = TargetPart; // Store for overlap checking
 
 			// STEP 5: Compute rotation - align normals then apply 90° twist
 			// Get target snap point world transform vectors
@@ -2495,6 +2503,18 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				FinalRotation = BaseRotation * TwistRotation;
 			}
 
+			// Apply user's twist offset ONLY for top/bottom snaps (where yaw pre-rotation doesn't choose different faces)
+			if (SnapTwistOffset != 0.0f)
+			{
+				FString SnapName = BestGhostSnapPoint->GetName();
+				if (SnapName.Contains("Top") || SnapName.Contains("Bottom"))
+				{
+					// For top/bottom, apply yaw rotation after alignment
+					FQuat AdditionalYaw = FQuat(FVector(0, 0, 1), SnapTwistOffset * (PI / 180.0f));
+					FinalRotation = FinalRotation * AdditionalYaw;
+				}
+			}
+
 			// STEP 6: Translate so snap points match (AFTER rotation)
 			// Set the ghost to the final rotation first
 			PlacementRot = FinalRotation.Rotator();
@@ -2515,12 +2535,24 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			// Check overlap using OBB
 			ConstructionGhostPart->SetActorLocation(PlacementPos);
 
-			// Simple overlap check - just verify not too much overlap
+			// Check for overlaps with other construction parts
 			bool bHasExcessiveOverlap = false;
 			if (ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap)
 			{
-				// For now, skip detailed overlap check - just use the snap
-				bHasExcessiveOverlap = false; // Simplified for initial test
+				// Get all overlapping actors
+				TArray<AActor*> OverlappingActors;
+				ConstructionGhostPart->GetOverlappingActors(OverlappingActors, AConstructionPart::StaticClass());
+
+				// Check if any overlapping parts are not the target we're snapping to
+				for (AActor* OverlapActor : OverlappingActors)
+				{
+					if (OverlapActor != TargetPart)
+					{
+						// Overlapping with a different part - invalid placement
+						bHasExcessiveOverlap = true;
+						break;
+					}
+				}
 			}
 
 			if (!bHasExcessiveOverlap)
@@ -2547,6 +2579,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 	// Always try ground snapping if no socket snap found
 	if (!bFoundSnapPoint)
 	{
+		bIsCurrentlySnapped = false;
 		FHitResult HitResult;
 		FCollisionQueryParams QueryParams;
 		QueryParams.AddIgnoredActor(this);
@@ -2716,8 +2749,89 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		// PlacementRot already includes CurrentGhostRotation for all placement modes
 		ConstructionGhostPart->SetActorRotation(PlacementRot);
 
-		ConstructionGhostPart->SetGhostPreview(true);
-		bHasValidPlacement = true;
+		// Force update transforms to ensure collision is up to date
+		if (ConstructionGhostPart->MeshComponent)
+		{
+			ConstructionGhostPart->MeshComponent->UpdateComponentToWorld();
+		}
+
+		// Final overlap check after positioning and rotation
+		bool bHasFinalOverlap = false;
+		if (ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap)
+		{
+			// Perform a sweep test to check for overlaps
+			TArray<FOverlapResult> Overlaps;
+			FCollisionShape CollisionShape;
+			FVector OverlapCheckCenter = PlacementPos;
+
+			// Determine which bounds to use for overlap checking
+			FVector BoxExtent;
+			if (ConstructionGhostPart->OverlapBounds)
+			{
+				// Use custom overlap bounds box component (can be adjusted in Blueprint viewport)
+				BoxExtent = ConstructionGhostPart->OverlapBounds->GetScaledBoxExtent();
+				OverlapCheckCenter += PlacementRot.RotateVector(ConstructionGhostPart->OverlapBounds->GetRelativeLocation());
+			}
+			else if (ConstructionGhostPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
+			{
+				// Use mesh bounds
+				FBox MeshBounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+				BoxExtent = MeshBounds.GetExtent() * ConstructionGhostPart->GetActorScale3D();
+			}
+			else
+			{
+				// Fallback to default box
+				BoxExtent = FVector(50.0f, 50.0f, 50.0f);
+			}
+
+			CollisionShape = FCollisionShape::MakeBox(BoxExtent);
+
+			// Debug visualization if enabled
+			if (ConstructionGhostPart->PartData->bDrawBoundsDebug)
+			{
+				DrawDebugBox(GetWorld(), OverlapCheckCenter, BoxExtent, PlacementRot.Quaternion(), FColor::Yellow, false, -1.0f, 0, 2.0f);
+			}
+
+			FCollisionQueryParams QueryParams;
+			QueryParams.AddIgnoredActor(ConstructionGhostPart);
+			QueryParams.AddIgnoredActor(this);
+
+			bool bHasOverlaps = GetWorld()->OverlapMultiByChannel(
+				Overlaps,
+				OverlapCheckCenter,
+				PlacementRot.Quaternion(),
+				ECC_WorldStatic,
+				CollisionShape,
+				QueryParams
+			);
+
+			if (bHasOverlaps)
+			{
+				for (const FOverlapResult& Overlap : Overlaps)
+				{
+					AActor* OverlapActor = Overlap.GetActor();
+					if (!OverlapActor) continue;
+
+					// Skip the part we're snapping to
+					if (CurrentSnapTarget && OverlapActor == CurrentSnapTarget)
+					{
+						continue;
+					}
+
+					// Check if it's a placed construction part
+					AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
+					if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Overlap detected with %s"), *OverlapPart->GetName());
+						bHasFinalOverlap = true;
+						break;
+					}
+				}
+			}
+		}
+
+		ConstructionGhostPart->SetGhostPreview(!bHasFinalOverlap);
+		bHasValidPlacement = !bHasFinalOverlap; // Only valid if no overlap
 	}
 	else
 	{
@@ -2857,7 +2971,27 @@ void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value
 	// Get the scroll wheel axis value (positive = scroll up, negative = scroll down)
 	float ScrollValue = Value.Get<float>();
 
-	// Adjust placement distance (50 units per scroll notch)
+	// If currently snapped, toggle snap twist instead of adjusting distance
+	if (bIsCurrentlySnapped)
+	{
+		// Increment/decrement snap twist by 90° per scroll notch
+		if (ScrollValue > 0)
+		{
+			SnapTwistOffset += 90.0f;
+		}
+		else if (ScrollValue < 0)
+		{
+			SnapTwistOffset -= 90.0f;
+		}
+
+		// Wrap around 0-360
+		while (SnapTwistOffset >= 360.0f) SnapTwistOffset -= 360.0f;
+		while (SnapTwistOffset < 0.0f) SnapTwistOffset += 360.0f;
+
+		return;
+	}
+
+	// Not snapped - adjust placement distance (50 units per scroll notch)
 	float DistanceStep = 50.0f;
 	CurrentPlacementDistance += ScrollValue * DistanceStep;
 
