@@ -29,9 +29,6 @@ void AConstructionPart::BeginPlay()
 		InitializeFromData(PartData);
 	}
 
-	// Initialize attachment points from mesh sockets
-	InitializeAttachmentPoints();
-
 	// Store original materials for ghost preview
 	StoreOriginalMaterials();
 }
@@ -69,7 +66,30 @@ void AConstructionPart::InitializeFromData(UConstructionPartData* Data)
 	PartType = Data->PartType;
 	Mass = Data->Mass;
 	bRequiresTool = Data->bRequiresTool;
-	PlacementMode = Data->PlacementMode;
+
+	// Auto-populate socket definitions if needed
+	if (Data->PartMesh && Data->SocketTypeDefinitions.Num() == 0)
+	{
+		Data->AutoPopulateSocketDefinitions();
+	}
+
+	// Initialize attachment points from mesh sockets FIRST
+	InitializeAttachmentPoints();
+
+	// Apply socket type definitions to attachment points
+	for (const FSocketTypeDefinition& SocketTypeDef : Data->SocketTypeDefinitions)
+	{
+		// Find the attachment point with this socket name
+		FAttachmentPoint* AttachPoint = AttachmentPoints.FindByPredicate([&SocketTypeDef](const FAttachmentPoint& Point) {
+			return Point.SocketName == SocketTypeDef.SocketName;
+		});
+
+		if (AttachPoint)
+		{
+			// Use GetSocketType() to resolve the preset enum to FName
+			AttachPoint->SocketType = SocketTypeDef.GetSocketType();
+		}
+	}
 }
 
 void AConstructionPart::Tick(float DeltaTime)

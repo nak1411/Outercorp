@@ -21,6 +21,7 @@ class UWindow;
 class UInteractionPromptWidget;
 class UInteractionManagerComponent;
 class UNotificationComponent;
+class UConstructionPartData;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -205,6 +206,26 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *DeleteItemAction;
 
+	/** Right Click to Enable Rotation Mode Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *RightClickAction;
+
+	/** Toggle Rotation Snap Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ToggleRotationSnapAction;
+
+	/** Construction Part Slot 1 Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ConstructionSlot1Action;
+
+	/** Construction Part Slot 2 Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ConstructionSlot2Action;
+
+	/** Construction Part Slot 3 Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ConstructionSlot3Action;
+
 	/** Time player must hold interact key before picking up item */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	float InteractHoldDelay = 0.5f;
@@ -221,9 +242,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	class UMaterialInterface* InvalidPlacementMaterial;
 
-	/** Test construction part class for placement (temporary - for testing) */
+	/** Base construction part class to spawn (all parts use this class with different data assets) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
-	TSubclassOf<class AConstructionPart> TestConstructionPartClass;
+	TSubclassOf<class AConstructionPart> ConstructionPartClass;
+
+	/** Construction part slots for hotkey switching (index 0 = hotkey 1, index 1 = hotkey 2, etc.) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
+	TArray<class UConstructionPartData*> ConstructionPartSlots;
 
 protected:
 	/** Ghost/preview mesh for placement */
@@ -251,6 +276,20 @@ protected:
 	UPROPERTY(BlueprintReadWrite, Category = "Construction")
 	bool bSnapModeEnabled;
 
+	/** Whether rotation snapping is currently enabled (controlled by hotkey) */
+	UPROPERTY(BlueprintReadWrite, Category = "Construction")
+	bool bRotationSnapEnabled;
+
+	/** Current rotation angle for construction ghost (Z-axis/yaw) */
+	UPROPERTY(BlueprintReadWrite, Category = "Construction")
+	float CurrentGhostRotation;
+
+	/** Whether right-click is being held for rotation mode */
+	bool bIsHoldingRightClick;
+
+	/** Input accumulator for snap rotation */
+	float RotationInputAccumulator;
+
 	/** Current placement distance from camera */
 	UPROPERTY(BlueprintReadWrite, Category = "Construction")
 	float CurrentPlacementDistance;
@@ -258,6 +297,18 @@ protected:
 	/** Minimum placement distance */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
 	float MinPlacementDistance = 100.0f;
+
+	/** Rotation snap angle in degrees (e.g., 15, 45, 90) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
+	float RotationSnapAngle = 15.0f;
+
+	/** Mouse sensitivity for free rotation */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
+	float RotationMouseSensitivity = 1.0f;
+
+	/** Current construction part slot index (0-2 for slots 1-3) */
+	UPROPERTY(BlueprintReadOnly, Category = "Construction")
+	int32 CurrentConstructionSlot = 0;
 
 	/** Whether in delete mode */
 	UPROPERTY(BlueprintReadOnly, Category = "Construction")
@@ -393,6 +444,18 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Construction")
 	void AdjustPlacementDistance(const FInputActionValue& Value);
 
+	/** Called when right-click is pressed in construction mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void RightClickPressed();
+
+	/** Called when right-click is released in construction mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void RightClickReleased();
+
+	/** Toggle rotation snap mode on/off */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void ToggleRotationSnap();
+
 	/** Toggle delete mode */
 	UFUNCTION(BlueprintCallable, Category = "Construction")
 	void ToggleDeleteMode();
@@ -411,6 +474,25 @@ protected:
 	/** Delete the highlighted construction part */
 	UFUNCTION(BlueprintCallable, Category = "Construction")
 	void DeleteHighlightedPart();
+
+	/** Switch to construction part slot by index (0-2) */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void SwitchConstructionPartSlot(int32 SlotIndex);
+
+	/** Switch to construction part slot 1 */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void SelectConstructionSlot1();
+
+	/** Switch to construction part slot 2 */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void SelectConstructionSlot2();
+
+	/** Switch to construction part slot 3 */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void SelectConstructionSlot3();
+
+	/** Helper function to check if two socket types are compatible for snapping */
+	bool AreSocketTypesCompatible(FName SocketType1, FName SocketType2) const;
 
 	/** Toggle inventory display */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -565,4 +647,7 @@ public:
 	/** Setup notification canvas to use the HUD canvas */
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void SetupNotificationCanvas();
+
+	/** Update construction controls text visibility */
+	void UpdateConstructionControlsVisibility();
 };

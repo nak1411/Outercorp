@@ -65,6 +65,12 @@ struct FAttachmentPoint
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	EAttachmentType AttachmentType;
 
+	// Socket type/tag for matching compatible sockets (e.g., "MountPoint", "PowerPort", etc.)
+	// Only sockets with matching types can snap together
+	// Leave empty to allow snapping to any socket
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snapping")
+	FName SocketType = NAME_None;
+
 	// Offset adjustment for this specific socket (editable per socket)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snapping")
 	FVector SocketOffset = FVector::ZeroVector;

@@ -33,6 +33,7 @@
 #include "ConstructionPart.h"
 #include "ConstructionPartData.h"
 #include "Engine/OverlapResult.h"
+#include "Engine/StaticMeshSocket.h"
 
 AOutercorpCharacter::AOutercorpCharacter()
 {
@@ -98,7 +99,11 @@ AOutercorpCharacter::AOutercorpCharacter()
 	// Initialize construction mode variables
 	bIsInConstructionMode = false;
 	bSnapModeEnabled = true; // Default to snapping enabled
+	bRotationSnapEnabled = false; // Default to free rotation (hold key to enable snap)
 	CurrentPlacementDistance = 300.0f; // Start at max placement distance
+	CurrentGhostRotation = 0.0f; // Start at 0 degrees rotation
+	bIsHoldingRightClick = false;
+	RotationInputAccumulator = 0.0f;
 	bIsInDeleteMode = false;
 	HighlightedPartForDeletion = nullptr;
 	DeleteHighlightMaterial = nullptr;
@@ -299,6 +304,15 @@ void AOutercorpCharacter::BeginPlay()
 		else
 		{		}
 
+		// Ensure we start with construction mode and delete mode both OFF
+		bIsInConstructionMode = false;
+		bIsInDeleteMode = false;
+		ConstructionGhostPart = nullptr;
+		HighlightedPartForDeletion = nullptr;
+
+		// Initialize construction controls text to hidden (now that bIsInConstructionMode is set)
+		UpdateConstructionControlsVisibility();
+
 		// Set initial input mode to game-only (no UI, no cursor)
 		APlayerController *PC = Cast<APlayerController>(GetController());
 		if (PC)
@@ -307,12 +321,6 @@ void AOutercorpCharacter::BeginPlay()
 			PC->SetInputMode(InputMode);
 			PC->SetShowMouseCursor(false);
 		}
-
-		// Ensure we start with construction mode and delete mode both OFF
-		bIsInConstructionMode = false;
-		bIsInDeleteMode = false;
-		ConstructionGhostPart = nullptr;
-		HighlightedPartForDeletion = nullptr;
 	}
 }
 
@@ -418,6 +426,33 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 			EnhancedInputComponent->BindAction(DeleteItemAction, ETriggerEvent::Started, this, &AOutercorpCharacter::DeleteHighlightedPart);
 		}
 
+		// Right Click for Rotation Mode (press and release)
+		if (RightClickAction)
+		{
+			EnhancedInputComponent->BindAction(RightClickAction, ETriggerEvent::Started, this, &AOutercorpCharacter::RightClickPressed);
+			EnhancedInputComponent->BindAction(RightClickAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::RightClickReleased);
+		}
+
+		// Toggle Rotation Snap
+		if (ToggleRotationSnapAction)
+		{
+			EnhancedInputComponent->BindAction(ToggleRotationSnapAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleRotationSnap);
+		}
+
+		// Construction Part Hotkeys
+		if (ConstructionSlot1Action)
+		{
+			EnhancedInputComponent->BindAction(ConstructionSlot1Action, ETriggerEvent::Started, this, &AOutercorpCharacter::SelectConstructionSlot1);
+		}
+		if (ConstructionSlot2Action)
+		{
+			EnhancedInputComponent->BindAction(ConstructionSlot2Action, ETriggerEvent::Started, this, &AOutercorpCharacter::SelectConstructionSlot2);
+		}
+		if (ConstructionSlot3Action)
+		{
+			EnhancedInputComponent->BindAction(ConstructionSlot3Action, ETriggerEvent::Started, this, &AOutercorpCharacter::SelectConstructionSlot3);
+		}
+
 		// Interact - bind both press and release
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AOutercorpCharacter::InteractPressed);
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::InteractReleased);
@@ -465,6 +500,72 @@ void AOutercorpCharacter::DoMove(float Right, float Forward)
 	// Don't process movement input if any UI widget is open
 	if (IsAnyUIWidgetOpen())
 	{
+		return;
+	}
+
+	// If in construction mode and holding right-click, use A/D for rotation instead of movement
+	if (bIsInConstructionMode && bIsHoldingRightClick && ConstructionGhostPart)
+	{
+		// Use the Right input (A/D keys) for rotation
+		float RotationInput = Right;
+
+		if (FMath::Abs(RotationInput) > 0.01f) // Small deadzone
+		{
+			if (bRotationSnapEnabled && RotationSnapAngle > 0.0f)
+			{
+				// Snap mode: Rotate by snap angle increments
+				// Accumulate input over time - faster rate for better responsiveness
+				RotationInputAccumulator += RotationInput * GetWorld()->GetDeltaSeconds() * 10.0f; // Faster accumulation
+
+				// When accumulator crosses threshold, snap rotate
+				if (FMath::Abs(RotationInputAccumulator) >= 1.0f)
+				{
+					float Direction = FMath::Sign(RotationInputAccumulator);
+					CurrentGhostRotation += Direction * RotationSnapAngle;
+					RotationInputAccumulator = 0.0f; // Reset accumulator
+
+					// Normalize immediately after snap
+					while (CurrentGhostRotation >= 360.0f)
+					{
+						CurrentGhostRotation -= 360.0f;
+					}
+					while (CurrentGhostRotation < 0.0f)
+					{
+						CurrentGhostRotation += 360.0f;
+					}
+				}
+			}
+			else
+			{
+				// Free rotation mode: Smooth continuous rotation
+				// Get rotation speed from part data if available, otherwise use default
+				float RotationSpeed = 90.0f; // Default degrees per second
+				if (ConstructionGhostPart->PartData)
+				{
+					RotationSpeed = ConstructionGhostPart->PartData->RotationSpeed;
+				}
+
+				float RotationDelta = RotationInput * RotationSpeed * GetWorld()->GetDeltaSeconds();
+				CurrentGhostRotation += RotationDelta;
+			}
+
+			// Normalize angle to 0-360 range
+			while (CurrentGhostRotation >= 360.0f)
+			{
+				CurrentGhostRotation -= 360.0f;
+			}
+			while (CurrentGhostRotation < 0.0f)
+			{
+				CurrentGhostRotation += 360.0f;
+			}
+		}
+		else
+		{
+			// Reset accumulator when no input
+			RotationInputAccumulator = 0.0f;
+		}
+
+		// Don't process normal movement when in rotation mode
 		return;
 	}
 
@@ -1995,6 +2096,63 @@ void AOutercorpCharacter::SetupNotificationCanvas()
 	{	}
 }
 
+void AOutercorpCharacter::UpdateConstructionControlsVisibility()
+{
+	if (!BaseHUDWidget)
+	{
+		return;
+	}
+
+	// Try to get the Border widget that wraps the construction controls text
+	// Make sure the Border is named "ConstructionControlsBorder" in the Blueprint and has "Is Variable" checked
+	UWidget* ConstructionControlsWidget = BaseHUDWidget->GetWidgetFromName(FName("ConstructionControlsBorder"));
+
+	// If not found via GetWidgetFromName, try searching in the root canvas
+	if (!ConstructionControlsWidget)
+	{
+		// Get the root widget (should be a canvas)
+		UPanelWidget* RootPanel = Cast<UPanelWidget>(BaseHUDWidget->GetRootWidget());
+		if (RootPanel)
+		{
+			// Search through all children recursively
+			TFunction<UWidget*(UPanelWidget*)> FindConstructionControlsRecursive;
+			FindConstructionControlsRecursive = [&](UPanelWidget* Panel) -> UWidget*
+			{
+				if (!Panel) return nullptr;
+
+				for (int32 i = 0; i < Panel->GetChildrenCount(); ++i)
+				{
+					UWidget* Child = Panel->GetChildAt(i);
+					if (Child)
+					{
+						if (Child->GetFName() == FName("ConstructionControlsBorder"))
+						{
+							return Child;
+						}
+
+						// Recursively search if this child is also a panel
+						if (UPanelWidget* ChildPanel = Cast<UPanelWidget>(Child))
+						{
+							UWidget* Found = FindConstructionControlsRecursive(ChildPanel);
+							if (Found) return Found;
+						}
+					}
+				}
+				return nullptr;
+			};
+
+			ConstructionControlsWidget = FindConstructionControlsRecursive(RootPanel);
+		}
+	}
+
+	if (ConstructionControlsWidget)
+	{
+		// Show when in construction mode, hide otherwise
+		ESlateVisibility NewVisibility = bIsInConstructionMode ? ESlateVisibility::Visible : ESlateVisibility::Hidden;
+		ConstructionControlsWidget->SetVisibility(NewVisibility);
+	}
+}
+
 void AOutercorpCharacter::ToggleConstructionMode()
 {
 	// Safety check: if we have a ghost but mode is false, clean up first
@@ -2036,23 +2194,59 @@ void AOutercorpCharacter::EnterConstructionMode()
 		ExitDeleteMode();
 	}
 
-	// Check if we have a test construction part class assigned
-	if (!TestConstructionPartClass)
-	{		if (NotificationComponent)
+	// Check if we have a construction part class assigned
+	if (!ConstructionPartClass)
+	{
+		if (NotificationComponent)
 		{
-			NotificationComponent->ShowSimpleNotification(FText::FromString("No construction part assigned!"), ENotificationType::Warning, 3.0f);
+			NotificationComponent->ShowSimpleNotification(FText::FromString("No construction part class assigned!"), ENotificationType::Warning, 3.0f);
+		}
+		return;
+	}
+
+	// Check if we have any construction slots defined
+	if (ConstructionPartSlots.Num() == 0)
+	{
+		if (NotificationComponent)
+		{
+			NotificationComponent->ShowSimpleNotification(FText::FromString("No construction parts defined in slots!"), ENotificationType::Warning, 3.0f);
+		}
+		return;
+	}
+
+	// Always start with slot 0 (hotkey 1) when entering construction mode
+	CurrentConstructionSlot = 0;
+
+	// Make sure slot 0 has valid data
+	if (!ConstructionPartSlots[0])
+	{
+		if (NotificationComponent)
+		{
+			NotificationComponent->ShowSimpleNotification(FText::FromString("Construction slot 1 is empty!"), ENotificationType::Warning, 3.0f);
 		}
 		return;
 	}
 
 	bIsInConstructionMode = true;
 
+	// Enable snap mode by default when entering construction mode
+	bSnapModeEnabled = true;
+
+	// Update UI to show construction controls
+	UpdateConstructionControlsVisibility();
+
+	// Reset rotation when entering construction mode
+	CurrentGhostRotation = 0.0f;
+
+	// Ensure rotation snap starts disabled
+	bRotationSnapEnabled = false;
+
 	// Spawn the ghost construction part
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	ConstructionGhostPart = GetWorld()->SpawnActor<AConstructionPart>(
-		TestConstructionPartClass,
+		ConstructionPartClass,
 		FVector::ZeroVector,
 		FRotator::ZeroRotator,
 		SpawnParams
@@ -2060,22 +2254,21 @@ void AOutercorpCharacter::EnterConstructionMode()
 
 	if (ConstructionGhostPart)
 	{
+		// Use the current slot's data (we already validated it exists above)
+		UConstructionPartData* DataToUse = ConstructionPartSlots[CurrentConstructionSlot];
+
+		// Initialize from data asset to apply socket type definitions
+		ConstructionGhostPart->InitializeFromData(DataToUse);
+		CurrentPlacementDistance = DataToUse->MaxPlacementDistance;
+
 		// Set to ghost preview state
 		ConstructionGhostPart->SetPartState(EConstructionPartState::GhostPreview);
 
-		// Initialize placement distance to the part's max distance (or character default)
-		if (ConstructionGhostPart->PartData)
-		{
-			CurrentPlacementDistance = ConstructionGhostPart->PartData->MaxPlacementDistance;
-		}
-		else
-		{
-			CurrentPlacementDistance = MaxPlacementDistance;
-		}
-
 		if (NotificationComponent)
 		{
-			NotificationComponent->ShowSimpleNotification(FText::FromString("Construction Mode: ON"), ENotificationType::Info, 2.0f);
+			FString ModeText = FString::Printf(TEXT("Construction Mode: ON | Rotation: %s"),
+				bRotationSnapEnabled ? TEXT("SNAP") : TEXT("FREE"));
+			NotificationComponent->ShowSimpleNotification(FText::FromString(ModeText), ENotificationType::Info, 2.0f);
 		}
 	}
 	else
@@ -2086,6 +2279,9 @@ void AOutercorpCharacter::EnterConstructionMode()
 void AOutercorpCharacter::ExitConstructionMode()
 {
 	bIsInConstructionMode = false;
+
+	// Update UI to hide construction controls
+	UpdateConstructionControlsVisibility();
 
 	// Destroy the ghost part
 	if (ConstructionGhostPart)
@@ -2129,26 +2325,13 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 	FVector TraceEnd = TargetCenterPos - MeshCenterOffset;
 	FVector FreePlacementPos = TargetCenterPos - MeshCenterOffset;
 
-	// Get placement mode from data asset if available, otherwise use deprecated property
-	EPlacementMode Mode = ConstructionGhostPart->PartData
-		? ConstructionGhostPart->PartData->PlacementMode
-		: ConstructionGhostPart->PlacementMode;
-
-	// Override mode based on snap mode toggle
-	EPlacementMode EffectiveMode = Mode;
-	if (!bSnapModeEnabled)
-	{
-		// If snapping is disabled, force free placement
-		EffectiveMode = EPlacementMode::FreePlace;
-	}
-
 	bool bFoundSnapPoint = false;
 	bool bFoundGroundPoint = false;
 	FVector PlacementPos;
 	FRotator PlacementRot = FRotator::ZeroRotator;
 
-	// Try socket snapping first (if mode allows)
-	if (EffectiveMode == EPlacementMode::SocketSnap || EffectiveMode == EPlacementMode::Hybrid)
+	// Try socket snapping first if snap mode is enabled
+	if (bSnapModeEnabled)
 	{
 		// Find all placed construction parts
 		TArray<AActor*> AllConstructionParts;
@@ -2171,6 +2354,9 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			TempGhostPos = HitResult.Location;
 		}
 
+		// Save the current ghost position before temporarily positioning it
+		FVector SavedGhostPos = ConstructionGhostPart->GetActorLocation();
+
 		ConstructionGhostPart->SetActorLocation(TempGhostPos);
 		ConstructionGhostPart->SetActorRotation(FRotator::ZeroRotator);
 
@@ -2181,10 +2367,22 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		AConstructionPart* BestTargetPart = nullptr;
 		int32 TotalSocketPairsChecked = 0;
 
+		// Rotation to apply to ghost sockets
+		// Use normalized rotation to avoid floating-point precision issues
+		float CleanRotation = FMath::Fmod(CurrentGhostRotation, 360.0f);
+		if (CleanRotation < 0.0f) CleanRotation += 360.0f;
+		FQuat UserRotation = FQuat(FRotator(0.0f, CleanRotation, 0.0f));
+
 		// Check all ghost sockets
 		for (const FAttachmentPoint& GhostAttachPoint : ConstructionGhostPart->AttachmentPoints)
 		{
 			FTransform GhostSocketWorld = ConstructionGhostPart->GetSocketTransformByName(GhostAttachPoint.SocketName);
+
+			// Apply user rotation to ghost socket position
+			FVector GhostCenter = ConstructionGhostPart->GetActorLocation();
+			FVector SocketOffset = GhostSocketWorld.GetLocation() - GhostCenter;
+			FVector RotatedOffset = UserRotation.RotateVector(SocketOffset);
+			FVector RotatedSocketPos = GhostCenter + RotatedOffset;
 
 			// Check against all placed parts
 			for (AActor* PartActor : AllConstructionParts)
@@ -2202,17 +2400,134 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				{
 					FTransform TargetSocketWorld = TargetPart->GetSocketTransformByName(TargetAttachPoint.SocketName);
 
-					// Calculate distance between sockets
-					float Distance = FVector::Dist(GhostSocketWorld.GetLocation(), TargetSocketWorld.GetLocation());
+					// Check if target socket is in front of the camera (dot product check)
+					FVector ToTarget = (TargetSocketWorld.GetLocation() - CameraLocation).GetSafeNormal();
+					FVector ViewDirection = GetControlRotation().Vector();
+					float DotProduct = FVector::DotProduct(ViewDirection, ToTarget);
+
+					// Get the view angle threshold from data asset (convert from degrees to dot product)
+					float MaxViewAngleDegrees = ConstructionGhostPart->PartData ? ConstructionGhostPart->PartData->SnapViewAngleMax : 70.0f;
+					float MinDotProduct = FMath::Cos(FMath::DegreesToRadians(MaxViewAngleDegrees));
+
+					// Only consider sockets within the view angle threshold
+					if (DotProduct < MinDotProduct)
+					{
+						continue; // Skip sockets that are behind or too far to the side
+					}
+
+					// Check socket compatibility (bidirectional)
+					bool bGhostAllowsTarget = false;
+					bool bTargetAllowsGhost = false;
+
+					// Get the ghost socket definition from the data asset
+					const FSocketTypeDefinition* GhostSocketDef = nullptr;
+					if (ConstructionGhostPart->PartData)
+					{
+						for (const FSocketTypeDefinition& SocketDef : ConstructionGhostPart->PartData->SocketTypeDefinitions)
+						{
+							if (SocketDef.SocketName == GhostAttachPoint.SocketName)
+							{
+								GhostSocketDef = &SocketDef;
+								break;
+							}
+						}
+					}
+
+					// Get the target socket definition from the target part's data asset
+					const FSocketTypeDefinition* TargetSocketDef = nullptr;
+					if (TargetPart->PartData)
+					{
+						for (const FSocketTypeDefinition& SocketDef : TargetPart->PartData->SocketTypeDefinitions)
+						{
+							if (SocketDef.SocketName == TargetAttachPoint.SocketName)
+							{
+								TargetSocketDef = &SocketDef;
+								break;
+							}
+						}
+					}
+
+					// Check if ghost socket allows snapping to target socket
+					if (GhostSocketDef)
+					{
+						TArray<FName> GhostAllowedTypes = GhostSocketDef->GetAllowedSocketTypes();
+						FName TargetType = TargetSocketDef ? TargetSocketDef->GetSocketType() : FName("Any");
+
+						// If allowed list contains "Any", it can snap to anything
+						if (GhostAllowedTypes.Contains(FName("Any")))
+						{
+							bGhostAllowsTarget = true;
+						}
+						else
+						{
+							// Check if target socket type is in the allowed list
+							bGhostAllowsTarget = GhostAllowedTypes.Contains(TargetType);
+						}
+					}
+					else
+					{
+						// No socket definition found - default to ALLOW snapping (backward compatibility)
+						bGhostAllowsTarget = true;
+					}
+
+					// Check if target socket allows ghost socket to snap to it
+					if (TargetSocketDef)
+					{
+						TArray<FName> TargetAllowedTypes = TargetSocketDef->GetAllowedSocketTypes();
+						FName GhostType = GhostSocketDef ? GhostSocketDef->GetSocketType() : FName("Any");
+
+						// If allowed list contains "Any", it can snap to anything
+						if (TargetAllowedTypes.Contains(FName("Any")))
+						{
+							bTargetAllowsGhost = true;
+						}
+						else
+						{
+							// Check if ghost socket type is in the allowed list
+							bTargetAllowsGhost = TargetAllowedTypes.Contains(GhostType);
+						}
+					}
+					else
+					{
+						// No socket definition found - default to ALLOW snapping (backward compatibility)
+						bTargetAllowsGhost = true;
+					}
+
+					// Both sockets must allow the connection (bidirectional check)
+					if (!bGhostAllowsTarget || !bTargetAllowsGhost)
+					{
+						continue; // Skip this socket pair - not compatible
+					}
+
+					// Check if target socket is already occupied
+					if (TargetAttachPoint.Connections.Num() > 0)
+					{
+						continue; // Skip occupied sockets
+					}
+
+					// Calculate distance between rotated ghost socket and target socket
+					float Distance = FVector::Dist(RotatedSocketPos, TargetSocketWorld.GetLocation());
 					TotalSocketPairsChecked++;
 
-					// Use a large search radius to find sockets even if ghost is positioned far away
-					// This is especially important for top/bottom sockets where the ghost might be
-					// positioned on top of the target part, making sockets 100+ units apart initially
-					float SearchRadius = 300.0f; // Large search to find nearby sockets
-					if (Distance < SearchRadius && Distance < BestDistance)
+					// Apply a penalty based on viewing angle - sockets you're looking directly at are favored
+					// DotProduct ranges from MinDotProduct (edge of view cone) to 1.0 (looking directly at it)
+					// Normalize to 0-1 range where 1 = looking directly at socket, 0 = at edge of view cone
+					float ViewScore = (DotProduct - MinDotProduct) / (1.0f - MinDotProduct);
+					ViewScore = FMath::Clamp(ViewScore, 0.0f, 1.0f);
+
+					// Apply penalty to distance based on view score (looking away = effectively "further")
+					// Penalty multiplier: 1.0x when looking directly at it, up to 3.0x when at edge of view cone
+					float ViewPenaltyMultiplier = 1.0f + (2.0f * (1.0f - ViewScore));
+					float PenalizedDistance = Distance * ViewPenaltyMultiplier;
+
+					// Use a very large search radius to find sockets even if rotation isn't perfect yet
+					// This is crucial for perpendicular snapping (front-to-left, etc) where sockets
+					// might be far apart until rotation is correct
+					// Also important for top/bottom sockets where ghost might be positioned on top
+					float SearchRadius = 800.0f; // Very large radius for forgiving snapping
+					if (Distance < SearchRadius && PenalizedDistance < BestDistance)
 					{
-						BestDistance = Distance;
+						BestDistance = PenalizedDistance;
 						BestGhostSocket = GhostAttachPoint.SocketName;
 						BestTargetSocket = TargetAttachPoint.SocketName;
 						BestTargetPart = TargetPart;
@@ -2222,134 +2537,227 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			}
 		}
 
-		// If we found a snap point, calculate the offset needed
+		// Socket type matching handles compatibility now, no need for angle tolerance checks
+		// The user can freely rotate and snap at any angle they want
+
+		// If we still have a valid snap point, calculate the offset needed
 		if (bFoundSnapPoint)
 		{
-			// Get the world transforms of the two sockets we want to align
-			FTransform GhostSocketWorld = ConstructionGhostPart->GetSocketTransformByName(BestGhostSocket);
+			// Get target socket world transform
 			FTransform TargetSocketWorld = BestTargetPart->GetSocketTransformByName(BestTargetSocket);
 
-			// Calculate the offset from ghost origin to its socket
-			FVector GhostToSocket = GhostSocketWorld.GetLocation() - ConstructionGhostPart->GetActorLocation();
+			// Get LOCAL socket data from meshes
+			UStaticMesh* GhostMesh = ConstructionGhostPart->MeshComponent->GetStaticMesh();
 
-			// Apply per-socket offset if configured
+			FVector GhostSocketLocalPos = FVector::ZeroVector;
+			FRotator GhostSocketLocalRot = FRotator::ZeroRotator;
+
+			if (GhostMesh)
+			{
+				for (UStaticMeshSocket* Socket : GhostMesh->Sockets)
+				{
+					if (Socket && Socket->SocketName == BestGhostSocket)
+					{
+						GhostSocketLocalPos = Socket->RelativeLocation;
+						GhostSocketLocalRot = Socket->RelativeRotation;
+						break;
+					}
+				}
+			}
+
+			// Calculate rotation: We want the ghost socket to face OPPOSITE to target socket
+			// Target socket forward in world space
+			FVector TargetSocketWorldForward = TargetSocketWorld.GetRotation().GetForwardVector();
+			FVector DesiredGhostSocketWorldForward = -TargetSocketWorldForward;
+
+			// Ghost socket forward in LOCAL space (not affected by current ghost rotation)
+			FQuat GhostSocketLocalQuat = FQuat(GhostSocketLocalRot);
+			FVector GhostSocketLocalForward = GhostSocketLocalQuat.GetForwardVector();
+
+			// Project to 2D for yaw-only
+			FVector2D DesiredForward2D(DesiredGhostSocketWorldForward.X, DesiredGhostSocketWorldForward.Y);
+			FVector2D LocalForward2D(GhostSocketLocalForward.X, GhostSocketLocalForward.Y);
+
+			DesiredForward2D.Normalize();
+			LocalForward2D.Normalize();
+
+			// Calculate angles
+			float DesiredWorldYaw = FMath::Atan2(DesiredForward2D.Y, DesiredForward2D.X) * (180.0f / PI);
+			float LocalSocketYaw = FMath::Atan2(LocalForward2D.Y, LocalForward2D.X) * (180.0f / PI);
+
+			// Get socket configuration from data asset
+			float SocketRotationOffset = 0.0f;
+			FVector SocketPositionOffset = FVector::ZeroVector;
+			bool bUseAutoRotation = true;
+
+			if (ConstructionGhostPart->PartData)
+			{
+				for (const FSocketTypeDefinition& SocketDef : ConstructionGhostPart->PartData->SocketTypeDefinitions)
+				{
+					if (SocketDef.SocketName == BestGhostSocket)
+					{
+						SocketRotationOffset = SocketDef.RotationOffset;
+						SocketPositionOffset = SocketDef.PositionOffset;
+						bUseAutoRotation = SocketDef.bUseAutomaticRotation;
+						break;
+					}
+				}
+			}
+
+			// Calculate rotation
+			float AlignedRotation;
+			if (bUseAutoRotation)
+			{
+				// Automatic: align based on socket normals
+				AlignedRotation = DesiredWorldYaw - LocalSocketYaw + CleanRotation + SocketRotationOffset;
+			}
+			else
+			{
+				// Manual: use target part rotation + offset
+				float TargetYaw = BestTargetPart->GetActorRotation().Yaw;
+				AlignedRotation = TargetYaw + CleanRotation + SocketRotationOffset;
+			}
+
+			// Normalize
+			AlignedRotation = FMath::Fmod(AlignedRotation, 360.0f);
+			if (AlignedRotation < 0.0f) AlignedRotation += 360.0f;
+
+			// Apply socket position offset
+			FVector SocketOffset = GhostSocketLocalPos + SocketPositionOffset;
+
+			// Also apply legacy per-socket offset if configured
 			FAttachmentPoint* GhostAttachPoint = ConstructionGhostPart->AttachmentPoints.FindByPredicate([BestGhostSocket](const FAttachmentPoint& Point) {
 				return Point.SocketName == BestGhostSocket;
 			});
 			if (GhostAttachPoint && !GhostAttachPoint->SocketOffset.IsZero())
 			{
-				GhostToSocket += GhostAttachPoint->SocketOffset;
+				SocketOffset += GhostAttachPoint->SocketOffset;
 			}
 
-			// New ghost position = target socket position - offset
-			PlacementPos = TargetSocketWorld.GetLocation() - GhostToSocket;
-			PlacementRot = FRotator::ZeroRotator;
+			// Rotate socket offset by aligned rotation
+			FQuat AlignedRotationQuat = FQuat(FRotator(0.0f, AlignedRotation, 0.0f));
+			FVector RotatedSocketOffset = AlignedRotationQuat.RotateVector(SocketOffset);
 
-			// Check if this placement would cause significant collision/overlap with the target part
-			bool bWouldOverlap = false;
-			if (ConstructionGhostPart->MeshComponent && BestTargetPart->MeshComponent)
+			// Position = target socket - rotated offset
+			PlacementPos = TargetSocketWorld.GetLocation() - RotatedSocketOffset;
+
+			// Set placement rotation to aligned rotation
+			PlacementRot = FRotator(0.0f, AlignedRotation, 0.0f);
+
+			// Check overlap using component bounds test
+			// Temporarily move ghost to the snap position to test overlap
+			ConstructionGhostPart->SetActorLocation(PlacementPos);
+			ConstructionGhostPart->SetActorRotation(PlacementRot);
+
+			// Get bounds and check overlap using Separating Axis Theorem (SAT)
+			FBox GhostLocalBounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+			FBox TargetLocalBounds = BestTargetPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+
+			FVector GhostExtent = GhostLocalBounds.GetExtent() * ConstructionGhostPart->GetActorScale3D();
+			FVector TargetExtent = TargetLocalBounds.GetExtent() * BestTargetPart->GetActorScale3D();
+
+			FVector GhostCenter = ConstructionGhostPart->GetActorTransform().TransformPosition(GhostLocalBounds.GetCenter());
+			FVector TargetCenter = BestTargetPart->GetActorTransform().TransformPosition(TargetLocalBounds.GetCenter());
+
+			// Get oriented axes for both boxes
+			FQuat GhostQuat = ConstructionGhostPart->GetActorQuat();
+			FQuat TargetQuat = BestTargetPart->GetActorQuat();
+
+			FVector GhostAxisX = GhostQuat.GetAxisX();
+			FVector GhostAxisY = GhostQuat.GetAxisY();
+			FVector GhostAxisZ = GhostQuat.GetAxisZ();
+
+			FVector TargetAxisX = TargetQuat.GetAxisX();
+			FVector TargetAxisY = TargetQuat.GetAxisY();
+			FVector TargetAxisZ = TargetQuat.GetAxisZ();
+
+			// Vector from ghost center to target center
+			FVector CenterDelta = TargetCenter - GhostCenter;
+
+			bool bExcessiveOverlap = false;
+
+			// Lambda to test separation along an axis using SAT
+			auto TestSeparationAxis = [&](const FVector& Axis) -> bool
 			{
-				// Get overlap settings from data asset
-				bool bAllowOverlap = ConstructionGhostPart->PartData ? ConstructionGhostPart->PartData->bAllowOverlap : true;
-				float MaxOverlapThreshold = ConstructionGhostPart->PartData ? ConstructionGhostPart->PartData->MaxOverlapThreshold : 0.25f;
+				if (Axis.SizeSquared() < KINDA_SMALL_NUMBER)
+					return true; // Invalid axis, skip
 
-				// Check if overlap is allowed for this part
-				if (!bAllowOverlap)
-				{
-					// Overlap not allowed - check for ANY overlap
-					FVector OldGhostPos = ConstructionGhostPart->GetActorLocation();
-					ConstructionGhostPart->SetActorLocation(PlacementPos);
+				FVector NormAxis = Axis.GetSafeNormal();
 
-					FBox GhostBounds = ConstructionGhostPart->MeshComponent->Bounds.GetBox();
-					FBox TargetBounds = BestTargetPart->MeshComponent->Bounds.GetBox();
-					FBox Intersection = GhostBounds.Overlap(TargetBounds);
+				// Project extents of both boxes onto the axis
+				float GhostProjection = FMath::Abs(FVector::DotProduct(GhostAxisX * GhostExtent.X, NormAxis)) +
+										FMath::Abs(FVector::DotProduct(GhostAxisY * GhostExtent.Y, NormAxis)) +
+										FMath::Abs(FVector::DotProduct(GhostAxisZ * GhostExtent.Z, NormAxis));
 
-					if (Intersection.IsValid)
-					{
-						// Any overlap detected - reject placement
-						bWouldOverlap = true;
-					}
+				float TargetProjection = FMath::Abs(FVector::DotProduct(TargetAxisX * TargetExtent.X, NormAxis)) +
+										 FMath::Abs(FVector::DotProduct(TargetAxisY * TargetExtent.Y, NormAxis)) +
+										 FMath::Abs(FVector::DotProduct(TargetAxisZ * TargetExtent.Z, NormAxis));
 
-					ConstructionGhostPart->SetActorLocation(OldGhostPos);
-				}
-				else
-				{
-					// Overlap is allowed - check if it exceeds threshold
-					// Temporarily move ghost to test position
-					FVector OldGhostPos = ConstructionGhostPart->GetActorLocation();
-					ConstructionGhostPart->SetActorLocation(PlacementPos);
+				// Project center distance onto the axis
+				float CenterProjection = FMath::Abs(FVector::DotProduct(CenterDelta, NormAxis));
 
-					// Check for overlap between ghost bounds and target bounds
-					FBox GhostBounds = ConstructionGhostPart->MeshComponent->Bounds.GetBox();
-					FBox TargetBounds = BestTargetPart->MeshComponent->Bounds.GetBox();
+				// If the center distance is greater than the sum of projections, boxes are separated on this axis
+				return CenterProjection <= (GhostProjection + TargetProjection);
+			};
 
-					// Calculate the intersection volume to determine if it's a significant overlap
-					// Parts connecting at sockets are EXPECTED to touch/overlap slightly at the connection point
-					FBox Intersection = GhostBounds.Overlap(TargetBounds);
+			// Test all 15 potential separating axes (3 from each OBB + 9 cross products)
+			// If we find separation on ANY axis, the boxes don't overlap
+			bool bOverlapping = true;
 
-					if (Intersection.IsValid)
-				{
-					// Get the size of the intersection
-					FVector IntersectionSize = Intersection.GetSize();
-					FVector GhostSize = GhostBounds.GetSize();
+			// Test the 3 axes of the ghost box
+			if (!TestSeparationAxis(GhostAxisX)) bOverlapping = false;
+			if (!TestSeparationAxis(GhostAxisY)) bOverlapping = false;
+			if (!TestSeparationAxis(GhostAxisZ)) bOverlapping = false;
 
-					// Calculate what percentage of the ghost's volume is overlapping
-					float OverlapPercentX = IntersectionSize.X / GhostSize.X;
-					float OverlapPercentY = IntersectionSize.Y / GhostSize.Y;
-					float OverlapPercentZ = IntersectionSize.Z / GhostSize.Z;
+			// Test the 3 axes of the target box
+			if (bOverlapping && !TestSeparationAxis(TargetAxisX)) bOverlapping = false;
+			if (bOverlapping && !TestSeparationAxis(TargetAxisY)) bOverlapping = false;
+			if (bOverlapping && !TestSeparationAxis(TargetAxisZ)) bOverlapping = false;
 
-					// Determine which axis to check based on socket names
-					// For top/bottom connections, only check Z-axis penetration (X/Y overlap is expected)
-					// For side connections, check the perpendicular axes
-					bool bIsTopBottomConnection =
-						(BestGhostSocket.ToString().Contains("Top") || BestGhostSocket.ToString().Contains("Bottom")) &&
-						(BestTargetSocket.ToString().Contains("Top") || BestTargetSocket.ToString().Contains("Bottom"));
+			// Test the 9 cross product axes
+			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisX, TargetAxisX))) bOverlapping = false;
+			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisX, TargetAxisY))) bOverlapping = false;
+			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisX, TargetAxisZ))) bOverlapping = false;
+			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisY, TargetAxisX))) bOverlapping = false;
+			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisY, TargetAxisY))) bOverlapping = false;
+			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisY, TargetAxisZ))) bOverlapping = false;
+			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisZ, TargetAxisX))) bOverlapping = false;
+			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisZ, TargetAxisY))) bOverlapping = false;
+			if (bOverlapping && !TestSeparationAxis(FVector::CrossProduct(GhostAxisZ, TargetAxisZ))) bOverlapping = false;
 
-					float RelevantOverlapPercent;
-					if (bIsTopBottomConnection)
-					{
-						// Top/bottom stacking - only check Z-axis overlap (parts should align in X/Y)
-						RelevantOverlapPercent = OverlapPercentZ;
-					}
-					else
-					{
-						// Side connection - determine which axis the connection is along
-						bool bIsLeftRight = BestGhostSocket.ToString().Contains("Left") || BestGhostSocket.ToString().Contains("Right") ||
-											BestTargetSocket.ToString().Contains("Left") || BestTargetSocket.ToString().Contains("Right");
-						bool bIsFrontBack = BestGhostSocket.ToString().Contains("Front") || BestGhostSocket.ToString().Contains("Back") ||
-											BestTargetSocket.ToString().Contains("Front") || BestTargetSocket.ToString().Contains("Back");
+			// For socket snapping, allow significant overlap at connection points
+			// This is essential for perpendicular snapping where boxes meet at right angles
+			bool bHasExcessiveOverlap = false;
 
-						if (bIsLeftRight)
-						{
-							// Left/Right connection - check Y/Z overlap (X overlap is expected)
-							RelevantOverlapPercent = FMath::Max(OverlapPercentY, OverlapPercentZ);
-						}
-						else if (bIsFrontBack)
-						{
-							// Front/Back connection - check X/Z overlap (Y overlap is expected)
-							RelevantOverlapPercent = FMath::Max(OverlapPercentX, OverlapPercentZ);
-						}
-						else
-						{
-							// Unknown connection type - check all axes
-							RelevantOverlapPercent = FMath::Max3(OverlapPercentX, OverlapPercentY, OverlapPercentZ);
-						}
-					}
+			if (bOverlapping)
+			{
+				// CRITICAL: For socket-based snapping, we should be VERY lenient with overlap
+				// When boxes snap at perpendicular angles (front-to-left), they WILL have significant
+				// bounding box overlap even though only their faces are touching
 
-					// Only reject if the relevant axis overlap is significant
-					if (RelevantOverlapPercent > MaxOverlapThreshold)
-					{
-						bWouldOverlap = true;
-					}
-				}
+				// Only reject if boxes are basically completely inside each other
+				// Calculate how much the centers have penetrated into each other's bounds
+				float CenterDistance = FVector::Dist(GhostCenter, TargetCenter);
 
-					// Restore ghost to original position
-					ConstructionGhostPart->SetActorLocation(OldGhostPos);
-				}
+				// Get the minimum dimension of each box (thinnest side)
+				float GhostMinDim = FMath::Min3(GhostExtent.X, GhostExtent.Y, GhostExtent.Z);
+				float TargetMinDim = FMath::Min3(TargetExtent.X, TargetExtent.Y, TargetExtent.Z);
+
+				// Only reject if centers are closer than half the smallest dimension
+				// This catches cases where boxes are truly inside each other
+				float MinSeparation = FMath::Min(GhostMinDim, TargetMinDim) * 0.5f;
+
+				bHasExcessiveOverlap = (CenterDistance < MinSeparation);
 			}
 
-			// Only accept this snap point if it doesn't cause significant overlap
-			if (!bWouldOverlap)
+			bExcessiveOverlap = bHasExcessiveOverlap;
+
+			// Restore ghost to original position from before socket search
+			// This is critical - if we don't restore, ghost will be left in wrong state for next frame
+			ConstructionGhostPart->SetActorLocation(SavedGhostPos);
+			ConstructionGhostPart->SetActorRotation(FRotator(0.0f, CurrentGhostRotation, 0.0f));
+
+			if (!bExcessiveOverlap)
 			{
 				TargetConstructionPart = BestTargetPart;
 				TargetSocketName = BestTargetSocket;
@@ -2357,14 +2765,13 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			}
 			else
 			{
-				// Significant overlap detected - reject this snap point
 				bFoundSnapPoint = false;
 			}
 		}
 	}
 
-	// Try ground snapping if no socket found (and mode allows)
-	if (!bFoundSnapPoint && (EffectiveMode == EPlacementMode::GroundSnap || EffectiveMode == EPlacementMode::Hybrid))
+	// Always try ground snapping if no socket snap found
+	if (!bFoundSnapPoint)
 	{
 		FHitResult HitResult;
 		FCollisionQueryParams QueryParams;
@@ -2388,7 +2795,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			}
 
 			PlacementPos = HitResult.Location + BottomOffset;
-			PlacementRot = FRotator::ZeroRotator;
+			PlacementRot = FRotator(0.0f, CurrentGhostRotation, 0.0f);
 
 			// Clear socket target
 			TargetConstructionPart = nullptr;
@@ -2497,103 +2904,23 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		}
 	}
 
-	// Free placement (if mode allows and nothing else found)
-	if (!bFoundSnapPoint && !bFoundGroundPoint && EffectiveMode == EPlacementMode::FreePlace)
+	// If no ground point found, placement is invalid
+	if (!bFoundSnapPoint && !bFoundGroundPoint)
 	{
-		PlacementPos = FreePlacementPos;
-		PlacementRot = FRotator::ZeroRotator;
-		TargetConstructionPart = nullptr;
-		TargetSocketName = NAME_None;
-
-		// Check for overlap with world geometry and construction parts
-		bool bHasOverlap = false;
-		if (ConstructionGhostPart->PartData && ConstructionGhostPart->MeshComponent)
+		// No valid placement found - show ghost in invalid state
+		if (ConstructionGhostPart)
 		{
-			// Even when overlap is "not allowed", use a small tolerance
-			// This prevents false positives from minor contact
-			float OverlapThreshold = ConstructionGhostPart->PartData->bAllowOverlap
-				? ConstructionGhostPart->PartData->MaxOverlapThreshold
-				: 0.05f; // 5% tolerance when overlap is disabled
-
-			// Temporarily move ghost to test position
-			FVector OldGhostPos = ConstructionGhostPart->GetActorLocation();
-			ConstructionGhostPart->SetActorLocation(PlacementPos);
-
-			FBox GhostBounds = ConstructionGhostPart->MeshComponent->Bounds.GetBox();
-			FVector GhostSize = GhostBounds.GetSize();
-
-			// Check for any world geometry that might overlap
-			TArray<FOverlapResult> OverlapResults;
-			FCollisionQueryParams OverlapParams;
-			OverlapParams.AddIgnoredActor(this);
-			OverlapParams.AddIgnoredActor(ConstructionGhostPart);
-
-			// Use box overlap to check for any colliding geometry
-			if (GetWorld()->OverlapMultiByChannel(OverlapResults, PlacementPos, FQuat::Identity, ECC_Visibility,
-				FCollisionShape::MakeBox(GhostBounds.GetExtent()), OverlapParams))
-			{
-				// Check each overlapping actor for overlap percentage
-				for (const FOverlapResult& Result : OverlapResults)
-				{
-					if (Result.GetActor())
-					{
-						// Get all mesh components from the overlapping actor
-						TArray<UStaticMeshComponent*> MeshComponents;
-						Result.GetActor()->GetComponents<UStaticMeshComponent>(MeshComponents);
-
-						for (UStaticMeshComponent* MeshComp : MeshComponents)
-						{
-							if (MeshComp)
-							{
-								FBox OtherBounds = MeshComp->Bounds.GetBox();
-								FBox Intersection = GhostBounds.Overlap(OtherBounds);
-
-								if (Intersection.IsValid)
-								{
-									// Calculate overlap percentage
-									FVector IntersectionSize = Intersection.GetSize();
-									float OverlapPercentX = IntersectionSize.X / GhostSize.X;
-									float OverlapPercentY = IntersectionSize.Y / GhostSize.Y;
-									float OverlapPercentZ = IntersectionSize.Z / GhostSize.Z;
-									float MaxOverlapPercent = FMath::Max3(OverlapPercentX, OverlapPercentY, OverlapPercentZ);
-
-									// Only reject if overlap exceeds threshold
-									if (MaxOverlapPercent > OverlapThreshold)
-									{
-										bHasOverlap = true;
-										break;
-									}
-								}
-							}
-						}
-
-						if (bHasOverlap)
-						{
-							break;
-						}
-					}
-				}
-			}
-
-			// Restore ghost to original position
-			ConstructionGhostPart->SetActorLocation(OldGhostPos);
-		}
-
-		// If overlap detected and not allowed, mark placement as invalid but still show ghost
-		if (bHasOverlap)
-		{
-			// Don't set bFoundSnapPoint or bFoundGroundPoint, so placement is considered free but invalid
-			// The ghost will be shown in red (invalid) state
-			ConstructionGhostPart->SetActorLocation(PlacementPos);
-			ConstructionGhostPart->SetActorRotation(PlacementRot);
+			// Position ghost at camera forward distance anyway for visual feedback
+			ConstructionGhostPart->SetActorLocation(FreePlacementPos);
+			ConstructionGhostPart->SetActorRotation(FRotator(0.0f, CurrentGhostRotation, 0.0f));
 			ConstructionGhostPart->SetGhostPreview(false); // Red/invalid material
 			bHasValidPlacement = false;
-			return; // Exit early - don't proceed to normal placement logic
 		}
+		return;
 	}
 
 	// Apply placement
-	bool bNewValidState = (bFoundSnapPoint || bFoundGroundPoint || EffectiveMode == EPlacementMode::FreePlace);
+	bool bNewValidState = (bFoundSnapPoint || bFoundGroundPoint);
 
 	// Stabilization: Only change state if it's been consistent or definitively invalid
 	// This prevents rapid flickering between valid/invalid
@@ -2610,7 +2937,11 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 	if (bNewValidState)
 	{
 		ConstructionGhostPart->SetActorLocation(PlacementPos);
+
+		// Apply the placement rotation
+		// PlacementRot already includes CurrentGhostRotation for all placement modes
 		ConstructionGhostPart->SetActorRotation(PlacementRot);
+
 		ConstructionGhostPart->SetGhostPreview(true);
 		bHasValidPlacement = true;
 	}
@@ -2619,7 +2950,12 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		// Invalid placement
 		PlacementPos = TraceEnd;
 		ConstructionGhostPart->SetActorLocation(PlacementPos);
-		ConstructionGhostPart->SetActorRotation(FRotator::ZeroRotator);
+
+		// Still apply user rotation even when invalid
+		FRotator FinalRotation = FRotator::ZeroRotator;
+		FinalRotation.Yaw = CurrentGhostRotation;
+		ConstructionGhostPart->SetActorRotation(FinalRotation);
+
 		ConstructionGhostPart->SetGhostPreview(false);
 		bHasValidPlacement = false;
 	}
@@ -2639,7 +2975,7 @@ void AOutercorpCharacter::PlaceConstructionPart()
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 	AConstructionPart* NewPart = GetWorld()->SpawnActor<AConstructionPart>(
-		TestConstructionPartClass,
+		ConstructionPartClass,
 		ConstructionGhostPart->GetActorLocation(),
 		ConstructionGhostPart->GetActorRotation(),
 		SpawnParams
@@ -2647,6 +2983,13 @@ void AOutercorpCharacter::PlaceConstructionPart()
 
 	if (NewPart)
 	{
+		// Copy PartData from ghost to ensure it's initialized properly
+		if (ConstructionGhostPart->PartData)
+		{
+			NewPart->PartData = ConstructionGhostPart->PartData;
+			NewPart->InitializeFromData(ConstructionGhostPart->PartData);
+		}
+
 		// If we have a target to snap to, attach
 		if (TargetConstructionPart && TargetSocketName != NAME_None && GhostSocketName != NAME_None)
 		{
@@ -2675,6 +3018,22 @@ void AOutercorpCharacter::PlaceConstructionPart()
 	}
 	else
 	{	}
+
+	// Reset ghost rotation for next placement
+	CurrentGhostRotation = 0.0f;
+	RotationInputAccumulator = 0.0f;
+
+	// Clear snap targets
+	TargetConstructionPart = nullptr;
+	TargetSocketName = NAME_None;
+	GhostSocketName = NAME_None;
+
+	// Reset the ghost actor's rotation and position
+	if (ConstructionGhostPart)
+	{
+		ConstructionGhostPart->SetActorRotation(FRotator::ZeroRotator);
+		// Don't reset position - let UpdateConstructionGhostPosition handle that next frame
+	}
 
 	// Keep construction mode active for placing more parts
 	// Ghost stays visible for next placement
@@ -2735,6 +3094,155 @@ void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value
 
 	// Clamp to reasonable values
 	CurrentPlacementDistance = FMath::Clamp(CurrentPlacementDistance, MinDist, MaxDist);
+}
+
+void AOutercorpCharacter::RightClickPressed()
+{
+	// Only enable rotation mode when in construction mode
+	if (!bIsInConstructionMode || !ConstructionGhostPart)
+	{
+		return;
+	}
+
+	bIsHoldingRightClick = true;
+}
+
+void AOutercorpCharacter::RightClickReleased()
+{
+	// Disable rotation mode
+	bIsHoldingRightClick = false;
+}
+
+void AOutercorpCharacter::ToggleRotationSnap()
+{
+	// Only allow toggling when in construction mode
+	if (!bIsInConstructionMode)
+	{
+		return;
+	}
+
+	// Toggle rotation snap mode
+	bRotationSnapEnabled = !bRotationSnapEnabled;
+
+	// If snapping enabled, snap to nearest increment immediately
+	if (bRotationSnapEnabled && RotationSnapAngle > 0.0f)
+	{
+		CurrentGhostRotation = FMath::RoundToFloat(CurrentGhostRotation / RotationSnapAngle) * RotationSnapAngle;
+	}
+
+	// Show notification to user
+	if (NotificationComponent)
+	{
+		FString ModeText = bRotationSnapEnabled ? "Rotation Snap: ON" : "Free Rotation: ON";
+		NotificationComponent->ShowSimpleNotification(
+			FText::FromString(ModeText),
+			ENotificationType::Info,
+			2.0f
+		);
+	}
+}
+
+void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
+{
+	// Only allow switching when in construction mode
+	if (!bIsInConstructionMode)
+	{
+		return;
+	}
+
+	// Validate slot index
+	if (SlotIndex < 0 || SlotIndex >= ConstructionPartSlots.Num())
+	{
+		if (NotificationComponent)
+		{
+			NotificationComponent->ShowSimpleNotification(
+				FText::FromString(FString::Printf(TEXT("Construction slot %d is empty"), SlotIndex + 1)),
+				ENotificationType::Warning,
+				2.0f
+			);
+		}
+		return;
+	}
+
+	// Check if slot has valid data
+	if (!ConstructionPartSlots[SlotIndex])
+	{
+		if (NotificationComponent)
+		{
+			NotificationComponent->ShowSimpleNotification(
+				FText::FromString(FString::Printf(TEXT("Construction slot %d is empty"), SlotIndex + 1)),
+				ENotificationType::Warning,
+				2.0f
+			);
+		}
+		return;
+	}
+
+	// Update current slot
+	CurrentConstructionSlot = SlotIndex;
+
+	// Destroy the current ghost if it exists
+	if (ConstructionGhostPart)
+	{
+		ConstructionGhostPart->Destroy();
+		ConstructionGhostPart = nullptr;
+	}
+
+	// Spawn new ghost with the selected part data
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	ConstructionGhostPart = GetWorld()->SpawnActor<AConstructionPart>(
+		ConstructionPartClass,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		SpawnParams
+	);
+
+	if (ConstructionGhostPart)
+	{
+		// Initialize with the selected slot's data
+		UConstructionPartData* DataToUse = ConstructionPartSlots[SlotIndex];
+		ConstructionGhostPart->InitializeFromData(DataToUse);
+		CurrentPlacementDistance = DataToUse->MaxPlacementDistance;
+
+		// Set to ghost preview state
+		ConstructionGhostPart->SetPartState(EConstructionPartState::GhostPreview);
+
+		// Reset rotation
+		CurrentGhostRotation = 0.0f;
+
+
+		// Show notification
+		if (NotificationComponent)
+		{
+			FString PartName = DataToUse->PartName.ToString();
+			if (PartName.IsEmpty())
+			{
+				PartName = "Part";
+			}
+			NotificationComponent->ShowSimpleNotification(
+				FText::FromString(FString::Printf(TEXT("Slot %d: %s"), SlotIndex + 1, *PartName)),
+				ENotificationType::Info,
+				2.0f
+			);
+		}
+	}
+}
+
+void AOutercorpCharacter::SelectConstructionSlot1()
+{
+	SwitchConstructionPartSlot(0);
+}
+
+void AOutercorpCharacter::SelectConstructionSlot2()
+{
+	SwitchConstructionPartSlot(1);
+}
+
+void AOutercorpCharacter::SelectConstructionSlot3()
+{
+	SwitchConstructionPartSlot(2);
 }
 
 void AOutercorpCharacter::ToggleDeleteMode()
@@ -2904,6 +3412,38 @@ void AOutercorpCharacter::DeleteHighlightedPart()
 		PartName = HighlightedPartForDeletion->PartName;
 	}
 
+	// Clear all socket connections before destroying
+	for (FAttachmentPoint& AttachPoint : HighlightedPartForDeletion->AttachmentPoints)
+	{
+		// Clear all connections in the new Connections array
+		for (const FSocketConnection& Connection : AttachPoint.Connections)
+		{
+			if (AConstructionPart* ConnectedPart = Cast<AConstructionPart>(Connection.ConnectedPart))
+			{
+				// Find and remove the reverse connection in the connected part
+				for (FAttachmentPoint& OtherAttachPoint : ConnectedPart->AttachmentPoints)
+				{
+					if (OtherAttachPoint.SocketName == Connection.ConnectedSocket)
+					{
+						// Remove connections pointing back to the part we're deleting
+						OtherAttachPoint.Connections.RemoveAll([this](const FSocketConnection& Conn) {
+							return Conn.ConnectedPart == HighlightedPartForDeletion;
+						});
+						break;
+					}
+				}
+			}
+		}
+
+		// Clear this socket's connections
+		AttachPoint.Connections.Empty();
+
+		// Also clear deprecated fields for backward compatibility
+		AttachPoint.bIsOccupied = false;
+		AttachPoint.ConnectedPart = nullptr;
+		AttachPoint.ConnectedSocket = NAME_None;
+	}
+
 	// Destroy the part
 	HighlightedPartForDeletion->Destroy();
 	HighlightedPartForDeletion = nullptr;
@@ -2918,4 +3458,11 @@ void AOutercorpCharacter::DeleteHighlightedPart()
 			1.5f
 		);
 	}
+}
+
+bool AOutercorpCharacter::AreSocketTypesCompatible(FName SocketType1, FName SocketType2) const
+{
+	// Deprecated - compatibility is now handled by whitelist in socket definitions
+	// This is kept for backward compatibility only
+	return true;
 }
