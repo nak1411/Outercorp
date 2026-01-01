@@ -2347,7 +2347,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		// STEP 3: Find target construction part and best target snap point
 		float SnapRange = ConstructionGhostPart->PartData ? ConstructionGhostPart->PartData->SnapDistance : 75.0f;
 
-		// Trace to find what we're aiming at
+		// Try trace first to find what we're aiming at
 		FHitResult TraceHit;
 		FCollisionQueryParams TraceParams;
 		TraceParams.AddIgnoredActor(this);
@@ -2358,28 +2358,88 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		AConstructionPart* TargetPart = nullptr;
 		UArrowComponent* BestTargetSnapPoint = nullptr;
 		UArrowComponent* BestGhostSnapPoint = nullptr;
+		FVector SearchLocation = TraceEnd; // Default search location
 
 		if (bHitSomething)
 		{
 			TargetPart = Cast<AConstructionPart>(TraceHit.GetActor());
+			SearchLocation = TraceHit.ImpactPoint;
+		}
+
+		// If we didn't hit a construction part directly, search for nearby construction parts
+		// This is useful for parts with hollow geometry (like racks)
+		if (!TargetPart)
+		{
+			TArray<AActor*> FoundParts;
+			UGameplayStatics::GetAllActorsOfClass(GetWorld(), AConstructionPart::StaticClass(), FoundParts);
+
+			float ClosestSnapDist = FLT_MAX;
+			AConstructionPart* BestPart = nullptr;
+
+			// Instead of finding closest part, find the part with a snap point closest to our aim ray
+			for (AActor* Actor : FoundParts)
+			{
+				AConstructionPart* Part = Cast<AConstructionPart>(Actor);
+				if (!Part || Part == ConstructionGhostPart || Part->CurrentState == EConstructionPartState::InInventory)
+				{
+					continue;
+				}
+
+				// Check if any of this part's snap points are close to our aim ray
+				for (UArrowComponent* SnapPoint : Part->SnapPoints)
+				{
+					if (!SnapPoint) continue;
+
+					FVector SnapLocation = SnapPoint->GetComponentLocation();
+					FVector ToSnap = SnapLocation - CameraLocation;
+					float ProjectionLength = FVector::DotProduct(ToSnap, CameraForward);
+
+					// Only consider snap points in front of camera
+					if (ProjectionLength < 50.0f) continue;
+
+					FVector ClosestPointOnRay = CameraLocation + (CameraForward * ProjectionLength);
+					float DistFromRay = FVector::Dist(SnapLocation, ClosestPointOnRay);
+
+					if (DistFromRay < ClosestSnapDist && DistFromRay < SnapRange * 2.0f)
+					{
+						ClosestSnapDist = DistFromRay;
+						BestPart = Part;
+					}
+				}
+			}
+
+			if (BestPart)
+			{
+				TargetPart = BestPart;
+			}
 		}
 
 		if (TargetPart && TargetPart->SnapPoints.Num() > 0)
 		{
-			FVector HitLocation = TraceHit.ImpactPoint;
-
-			UE_LOG(LogTemp, Warning, TEXT("STEP 3: Target part rotation=%s"), *TargetPart->GetActorRotation().ToString());
-
-			// STEP 3B: Choose best target snap point (nearest to hit location)
+			// STEP 3B: Choose best target snap point based on camera aim direction
+			// Find the snap point that's closest to our camera's aim line
 			float ClosestDist = FLT_MAX;
 			for (UArrowComponent* TargetSnap : TargetPart->SnapPoints)
 			{
 				if (!TargetSnap) continue;
 
-				float Dist = FVector::Distance(TargetSnap->GetComponentLocation(), HitLocation);
-				if (Dist < ClosestDist && Dist < SnapRange)
+				FVector SnapLocation = TargetSnap->GetComponentLocation();
+
+				// Calculate distance from snap point to the camera aim ray
+				// This finds which snap point we're actually aiming at
+				FVector ToSnap = SnapLocation - CameraLocation;
+				float ProjectionLength = FVector::DotProduct(ToSnap, CameraForward);
+				FVector ClosestPointOnRay = CameraLocation + (CameraForward * ProjectionLength);
+				float DistFromRay = FVector::Dist(SnapLocation, ClosestPointOnRay);
+
+				// Also check if it's within reasonable distance from camera
+				float DistFromCamera = ToSnap.Size();
+
+				// Snap point must be close to our aim ray AND within reasonable distance
+				// Use 2x MaxPlacementDistance to be more generous for large parts
+				if (DistFromRay < SnapRange && DistFromCamera < MaxPlacementDistance * 2.0f && DistFromRay < ClosestDist)
 				{
-					ClosestDist = Dist;
+					ClosestDist = DistFromRay;
 					BestTargetSnapPoint = TargetSnap;
 				}
 			}
@@ -2395,36 +2455,24 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				// Compute desired normal: opposite of target snap forward
 				FVector DesiredNormal = -BestTargetSnapPoint->GetForwardVector();
 
-				UE_LOG(LogTemp, Warning, TEXT("STEP 4: DesiredNormal = %s"), *DesiredNormal.ToString());
-				UE_LOG(LogTemp, Warning, TEXT("  Target: %s has RelativeRotation=%s"), *BestTargetSnapPoint->GetName(), *BestTargetSnapPoint->GetRelativeRotation().ToString());
-
-				// Find ghost snap with best matching normal
+				// Find ghost snap with best matching normal AND compatible filters
 				float BestDot = -1.0f;
 				for (UArrowComponent* GhostSnap : ConstructionGhostPart->SnapPoints)
 				{
 					if (!GhostSnap) continue;
 
 					FVector GhostForward = GhostSnap->GetForwardVector();
-					FRotator GhostRot = GhostSnap->GetRelativeRotation();
 					float Dot = FVector::DotProduct(GhostForward, DesiredNormal);
 
-					UE_LOG(LogTemp, Warning, TEXT("  %s: RelRot=%s, Forward=%s, Dot=%.3f"), *GhostSnap->GetName(), *GhostRot.ToString(), *GhostForward.ToString(), Dot);
+					// Check filter compatibility
+					bool bIsCompatible = ConstructionGhostPart->AreSnapPointsCompatible(GhostSnap, TargetPart, BestTargetSnapPoint);
 
-					// Only consider if within angle threshold (dot > 0.7 ≈ 45°)
-					if (Dot > 0.7f && Dot > BestDot)
+					// Only consider if within angle threshold AND filters allow it
+					if (Dot > 0.7f && Dot > BestDot && bIsCompatible)
 					{
 						BestDot = Dot;
 						BestGhostSnapPoint = GhostSnap;
 					}
-				}
-
-				if (BestGhostSnapPoint)
-				{
-					UE_LOG(LogTemp, Warning, TEXT("  BEST: %s with Dot=%.3f"), *BestGhostSnapPoint->GetName(), BestDot);
-				}
-				else
-				{
-					UE_LOG(LogTemp, Warning, TEXT("  NO MATCH FOUND (all dots < 0.7)"));
 				}
 			}
 		}
@@ -2440,10 +2488,6 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			// Get target snap point world transform vectors
 			FVector TargetForward = BestTargetSnapPoint->GetForwardVector();
 			FVector TargetUp = BestTargetSnapPoint->GetUpVector();
-
-			UE_LOG(LogTemp, Warning, TEXT("STEP 5: Target=%s, Ghost=%s"), *BestTargetSnapPoint->GetName(), *BestGhostSnapPoint->GetName());
-			UE_LOG(LogTemp, Warning, TEXT("  TargetForward=%s, TargetUp=%s"), *TargetForward.ToString(), *TargetUp.ToString());
-			UE_LOG(LogTemp, Warning, TEXT("  GhostForward=%s, GhostUp=%s"), *BestGhostSnapPoint->GetForwardVector().ToString(), *BestGhostSnapPoint->GetUpVector().ToString());
 
 			// A) Align snap points: We need to find what rotation to apply to the ghost ACTOR
 			// so that the ghost SNAP POINT aligns with the target snap point
@@ -2462,10 +2506,6 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			FQuat FlipRot = FQuat(TargetSnapUp, PI); // 180° around target's Up axis
 			FQuat DesiredSnapRot = FlipRot * TargetSnapWorldRot;
 			FQuat BaseRotation = DesiredSnapRot * GhostSnapRelativeRot.Inverse();
-
-			UE_LOG(LogTemp, Warning, TEXT("  TargetSnapWorldRot=%s, GhostSnapRelativeRot=%s"), *TargetSnapWorldRot.Rotator().ToString(), *GhostSnapRelativeRot.Rotator().ToString());
-
-			UE_LOG(LogTemp, Warning, TEXT("  BaseRotation=%s"), *BaseRotation.ToString());
 
 			// B) Apply 90° twist snapping around the snap normal axis
 			float RotationStepDegrees = 90.0f; // Default from data asset
@@ -2493,9 +2533,6 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				// Quantize to rotation step (90° increments)
 				float QuantAngle = FMath::RoundToFloat(SignedAngleDeg / RotationStepDegrees) * RotationStepDegrees;
 
-				UE_LOG(LogTemp, Warning, TEXT("  Twist: GhostUpAfterBase=%s, TgtUpOnPlane=%s"), *GhostUpAfterBase.ToString(), *TgtUpOnPlane.ToString());
-				UE_LOG(LogTemp, Warning, TEXT("  Twist: SignedAngleDeg=%.1f, QuantAngle=%.1f"), SignedAngleDeg, QuantAngle);
-
 				// Create twist rotation around twist axis
 				FQuat TwistRotation = FQuat(TwistAxis, QuantAngle * (PI / 180.0f));
 
@@ -2518,9 +2555,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			// STEP 6: Translate so snap points match (AFTER rotation)
 			// Set the ghost to the final rotation first
 			PlacementRot = FinalRotation.Rotator();
-			UE_LOG(LogTemp, Warning, TEXT("  FinalRotation (as Rotator)=%s"), *PlacementRot.ToString());
 			ConstructionGhostPart->SetActorRotation(PlacementRot);
-			UE_LOG(LogTemp, Warning, TEXT("  Ghost actual rotation after SetActorRotation=%s"), *ConstructionGhostPart->GetActorRotation().ToString());
 
 			// NOW read the ghost snap point world location (it changed because we rotated the actor)
 			FVector GhostSnapWorldLoc = BestGhostSnapPoint->GetComponentLocation();
@@ -2822,7 +2857,6 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 					AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
 					if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
 					{
-						UE_LOG(LogTemp, Warning, TEXT("Overlap detected with %s"), *OverlapPart->GetName());
 						bHasFinalOverlap = true;
 						break;
 					}

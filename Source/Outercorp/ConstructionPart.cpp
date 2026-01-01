@@ -54,11 +54,6 @@ void AConstructionPart::BeginPlay()
 
 	// Update arrow visibility based on debug settings
 	bool bShowArrows = (PartData && PartData->bDrawSocketDebug);
-	UE_LOG(LogTemp, Warning, TEXT("ConstructionPart BeginPlay: PartData=%s, bDrawSocketDebug=%d, bShowArrows=%d, SnapPoints count=%d"),
-		PartData ? *PartData->GetName() : TEXT("NULL"),
-		PartData ? PartData->bDrawSocketDebug : false,
-		bShowArrows,
-		SnapPoints.Num());
 
 	for (UArrowComponent* Arrow : SnapPoints)
 	{
@@ -66,10 +61,6 @@ void AConstructionPart::BeginPlay()
 		{
 			Arrow->SetVisibility(bShowArrows);
 			Arrow->SetHiddenInGame(!bShowArrows);
-			UE_LOG(LogTemp, Warning, TEXT("  Arrow %s: Visibility=%d, HiddenInGame=%d"),
-				*Arrow->GetName(),
-				Arrow->IsVisible(),
-				Arrow->bHiddenInGame);
 		}
 	}
 }
@@ -91,10 +82,7 @@ void AConstructionPart::InitializeSnapPoints()
 			}
 		}
 
-		UE_LOG(LogTemp, Warning, TEXT("InitializeSnapPoints: Found %d snap points attached to SnapRoot"), SnapPoints.Num());
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("InitializeSnapPoints: Total snap points = %d"), SnapPoints.Num());
 
 	// Snap points are positioned manually in each Blueprint child class
 	// This gives full control over snap point placement for different part geometries
@@ -138,13 +126,10 @@ EAttachmentType AConstructionPart::DetermineAttachmentType(const FName& SocketNa
 
 void AConstructionPart::SetPartState(EConstructionPartState NewState)
 {
-	EConstructionPartState OldState = CurrentState;
 	CurrentState = NewState;
 
 	// Toggle arrow visibility based on debug settings
 	bool bShowArrows = (PartData && PartData->bDrawSocketDebug);
-	UE_LOG(LogTemp, Warning, TEXT("SetPartState: %d -> %d, bShowArrows=%d"),
-		(int32)OldState, (int32)NewState, bShowArrows);
 
 	for (UArrowComponent* Arrow : SnapPoints)
 	{
@@ -440,4 +425,67 @@ int32 AConstructionPart::GetFastenedConnectionCount() const
 	}
 
 	return Count;
+}
+
+FName AConstructionPart::GetSnapPointTag(UArrowComponent* SnapPoint) const
+{
+	if (!SnapPoint)
+	{
+		return NAME_None;
+	}
+
+	FName SnapPointName = SnapPoint->GetFName();
+
+	// First check if there's a custom tag override in the map
+	const FName* CustomTag = SnapPointTags.Find(SnapPointName);
+	if (CustomTag && *CustomTag != NAME_None)
+	{
+		return *CustomTag;
+	}
+
+	// If no custom tag, use the arrow component's name as the tag
+	// This allows simple naming like "ShelfMount_01", "PowerPort_A", etc.
+	return SnapPointName;
+}
+
+bool AConstructionPart::AreSnapPointsCompatible(UArrowComponent* MySnapPoint, AConstructionPart* OtherPart, UArrowComponent* OtherSnapPoint) const
+{
+	if (!MySnapPoint || !OtherPart || !OtherSnapPoint)
+	{
+		return false;
+	}
+
+	// Get tags for both snap points
+	FName MyTag = GetSnapPointTag(MySnapPoint);
+	FName OtherTag = OtherPart->GetSnapPointTag(OtherSnapPoint);
+
+	// Get filters for both snap points
+	FName MySnapPointName = MySnapPoint->GetFName();
+	FName OtherSnapPointName = OtherSnapPoint->GetFName();
+
+	const FSnapPointFilter* MyFilter = SnapPointFilters.Find(MySnapPointName);
+	const FSnapPointFilter* OtherFilter = OtherPart->SnapPointFilters.Find(OtherSnapPointName);
+
+	// Check if my filter allows the other tag
+	if (MyFilter)
+	{
+		bool bAllows = MyFilter->AllowsTag(OtherTag);
+		if (!bAllows)
+		{
+			return false;
+		}
+	}
+
+	// Check if other filter allows my tag
+	if (OtherFilter)
+	{
+		bool bAllows = OtherFilter->AllowsTag(MyTag);
+		if (!bAllows)
+		{
+			return false;
+		}
+	}
+
+	// Both filters passed (or no filters defined)
+	return true;
 }

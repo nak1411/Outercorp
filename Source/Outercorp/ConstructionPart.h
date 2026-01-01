@@ -32,6 +32,55 @@ enum class EAttachmentType : uint8
 	Utility			UMETA(DisplayName = "Utility")		// Power/fluid/data connection
 };
 
+UENUM(BlueprintType)
+enum class ESnapFilterMode : uint8
+{
+	NoFilter		UMETA(DisplayName = "No Filter"),		// Accept any snap point (default)
+	Whitelist		UMETA(DisplayName = "Whitelist"),		// Only accept tags in the list
+	Blacklist		UMETA(DisplayName = "Blacklist")		// Reject tags in the list
+};
+
+USTRUCT(BlueprintType)
+struct FSnapPointFilter
+{
+	GENERATED_BODY()
+
+	/** Filter mode: No filter, whitelist, or blacklist */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snap Filter")
+	ESnapFilterMode FilterMode = ESnapFilterMode::NoFilter;
+
+	/** Tags to filter by. In whitelist mode, only these tags are accepted. In blacklist mode, these tags are rejected. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snap Filter")
+	TArray<FName> FilterTags;
+
+	FSnapPointFilter()
+		: FilterMode(ESnapFilterMode::NoFilter)
+	{}
+
+	/** Check if this filter allows the given tag */
+	bool AllowsTag(FName Tag) const
+	{
+		if (FilterMode == ESnapFilterMode::NoFilter)
+		{
+			return true; // No filtering
+		}
+
+		bool TagExists = FilterTags.Contains(Tag);
+
+		if (FilterMode == ESnapFilterMode::Whitelist)
+		{
+			// Whitelist: Only allow if tag is in the list
+			// If filter list is empty, allow everything (no restrictions)
+			return FilterTags.Num() == 0 || TagExists;
+		}
+		else // Blacklist
+		{
+			// Blacklist: Reject if tag is in the list
+			return !TagExists;
+		}
+	}
+};
+
 USTRUCT(BlueprintType)
 struct FSocketConnection
 {
@@ -132,6 +181,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Components")
 	TArray<class UArrowComponent*> SnapPoints;
 
+	// OPTIONAL: Custom tag overrides for snap points
+	// By default, the arrow component's NAME is used as its tag (e.g., "ShelfMount_01" arrow = "ShelfMount_01" tag)
+	// Only use this map if you want to override the default name with a different tag
+	// Key = Arrow component name, Value = Custom tag name
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snap Filtering")
+	TMap<FName, FName> SnapPointTags;
+
+	// Snap point filters - controls what this snap point will accept
+	// Key = Arrow component name, Value = Filter settings
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Snap Filtering")
+	TMap<FName, FSnapPointFilter> SnapPointFilters;
+
 	// Part Data Asset
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
 	class UConstructionPartData* PartData;
@@ -200,6 +261,16 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Construction")
 	void RestoreOriginalMaterials();
+
+	// Snap Filtering Functions
+
+	/** Get the tag for a specific snap point (arrow component) */
+	UFUNCTION(BlueprintPure, Category = "Snap Filtering")
+	FName GetSnapPointTag(UArrowComponent* SnapPoint) const;
+
+	/** Check if two snap points are compatible based on their tags and filters */
+	UFUNCTION(BlueprintPure, Category = "Snap Filtering")
+	bool AreSnapPointsCompatible(UArrowComponent* MySnapPoint, AConstructionPart* OtherPart, UArrowComponent* OtherSnapPoint) const;
 
 private:
 	EAttachmentType DetermineAttachmentType(const FName& SocketName);
