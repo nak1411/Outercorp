@@ -9,7 +9,7 @@ UInteractionPromptWidget::UInteractionPromptWidget(const FObjectInitializer& Obj
 	: Super(ObjectInitializer)
 {
 	// Enable ticking for this widget
-	bIsFocusable = false;
+	SetIsFocusable(false);
 }
 
 void UInteractionPromptWidget::NativeConstruct()
