@@ -70,8 +70,8 @@ struct FSnapPointFilter
 		if (FilterMode == ESnapFilterMode::Whitelist)
 		{
 			// Whitelist: Only allow if tag is in the list
-			// If filter list is empty, allow everything (no restrictions)
-			return FilterTags.Num() == 0 || TagExists;
+			// If filter list is empty, reject everything (must explicitly whitelist tags)
+			return TagExists;
 		}
 		else // Blacklist
 		{
@@ -169,8 +169,9 @@ public:
 	UStaticMeshComponent* MeshComponent;
 
 	// Overlap bounds visualization (for overlap detection)
+	// Multiple bounds can be used for complex shapes (e.g., rack with two posts)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	class UBoxComponent* OverlapBounds;
+	TArray<class UBoxComponent*> OverlapBounds;
 
 	// Snap point system using Arrow components (following snapping.txt guide)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
@@ -225,6 +226,9 @@ public:
 	// Functions
 	UFUNCTION(BlueprintCallable, Category = "Construction")
 	void InitializeSnapPoints();
+
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void InitializeOverlapBounds();
 
 	UFUNCTION(BlueprintCallable, Category = "Construction")
 	void InitializeFromData(UConstructionPartData* Data);

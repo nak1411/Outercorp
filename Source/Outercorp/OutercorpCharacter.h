@@ -66,6 +66,10 @@ class AOutercorpCharacter : public ACharacter
 	UPROPERTY()
 	UInteractionPromptWidget *InteractionPromptWidget;
 
+	/** Construction mode border widget */
+	UPROPERTY()
+	UUserWidget *ConstructionModeBorderWidget;
+
 protected:
 	/** Inventory widget (the actual content widget) */
 	UPROPERTY(BlueprintReadWrite, Category = "UI")
@@ -129,6 +133,10 @@ protected:
 	/** Interaction prompt widget class */
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UInteractionPromptWidget> InteractionPromptWidgetClass;
+
+	/** Construction mode border widget class */
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UUserWidget> ConstructionModeBorderWidgetClass;
 
 	/** Inventory window capabilities */
 	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
@@ -270,6 +278,9 @@ protected:
 	/** Current valid placement location */
 	FVector PlacementLocation;
 
+	/** Previous frame's placement location (for stabilization) */
+	FVector PreviousPlacementLocation;
+
 	/** Whether current placement location is valid */
 	bool bHasValidPlacement;
 
@@ -356,6 +367,9 @@ protected:
 	/** Current construction part ghost (for socket-based placement) */
 	UPROPERTY()
 	class AConstructionPart* ConstructionGhostPart;
+
+	/** Cached ground offset for current ghost (calculated once to prevent jitter) */
+	float CachedGroundOffset;
 
 	/** Target socket for snapping */
 	FName TargetSocketName;
@@ -700,4 +714,13 @@ public:
 
 	/** Update construction controls text visibility */
 	void UpdateConstructionControlsVisibility();
+
+	/** Getter for construction mode state */
+	FORCEINLINE bool IsInConstructionMode() const { return bIsInConstructionMode; }
+
+	/** Getter for delete mode state */
+	FORCEINLINE bool IsInDeleteMode() const { return bIsInDeleteMode; }
+
+	/** Getter for move mode state */
+	FORCEINLINE bool IsInMoveMode() const { return bIsInMoveMode; }
 };

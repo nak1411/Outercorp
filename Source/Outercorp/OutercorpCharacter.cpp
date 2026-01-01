@@ -329,6 +329,16 @@ void AOutercorpCharacter::BeginPlay()
 		else
 		{		}
 
+		// Create and display the construction mode border widget
+		if (ConstructionModeBorderWidgetClass)
+		{
+			ConstructionModeBorderWidget = CreateWidget<UUserWidget>(GetWorld(), ConstructionModeBorderWidgetClass);
+			if (ConstructionModeBorderWidget)
+			{
+				ConstructionModeBorderWidget->AddToViewport(10); // High Z-order to appear above other UI
+			}
+		}
+
 		// Ensure we start with construction mode, delete mode, and move mode all OFF
 		bIsInConstructionMode = false;
 		bIsInDeleteMode = false;
@@ -2310,6 +2320,39 @@ void AOutercorpCharacter::EnterConstructionMode()
 		ConstructionGhostPart->InitializeFromData(DataToUse);
 		CurrentPlacementDistance = DataToUse->MaxPlacementDistance;
 
+		// Calculate and cache ground offset ONCE to prevent jitter
+		CachedGroundOffset = 0.0f;
+		if (ConstructionGhostPart->OverlapBounds.Num() > 0 && ConstructionGhostPart->MeshComponent)
+		{
+			float LowestZ = FLT_MAX;
+
+			// Get MeshComponent's offset from actor root
+			FVector MeshRelLoc = ConstructionGhostPart->MeshComponent->GetRelativeLocation();
+
+			for (UBoxComponent* BoundComp : ConstructionGhostPart->OverlapBounds)
+			{
+				if (BoundComp)
+				{
+					// Boundary is child of MeshComponent, so we need to add MeshComponent's offset
+					FVector BoundRelLoc = BoundComp->GetRelativeLocation();
+					FVector BoundExtent = BoundComp->GetScaledBoxExtent();
+					float LocalBottom = MeshRelLoc.Z + BoundRelLoc.Z - BoundExtent.Z;
+
+					LowestZ = FMath::Min(LowestZ, LocalBottom);
+				}
+			}
+			if (LowestZ != FLT_MAX)
+			{
+				CachedGroundOffset = LowestZ;
+			}
+		}
+		else if (ConstructionGhostPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
+		{
+			FBox Bounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+			FVector ScaledMin = Bounds.Min * ConstructionGhostPart->GetActorScale3D();
+			CachedGroundOffset = ScaledMin.Z;
+		}
+
 		// Set to ghost preview state
 		ConstructionGhostPart->SetPartState(EConstructionPartState::GhostPreview);
 
@@ -2659,6 +2702,10 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		}
 	}
 
+	// Track overlap from ground placement
+	bool bHasOverlap = false;
+	AActor* GroundActor = nullptr; // Track the ground/surface actor to exclude from overlap checks
+
 	// Always try ground snapping if no socket snap found
 	if (!bFoundSnapPoint)
 	{
@@ -2674,17 +2721,14 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			ECC_Visibility, FCollisionShape::MakeSphere(SphereRadius), QueryParams))
 		{
 			bFoundGroundPoint = true;
+			GroundActor = HitResult.GetActor(); // Store ground actor to exclude from overlap checks
 
-			// Offset up by mesh bounds so it sits on surface
-			FVector BottomOffset = FVector::ZeroVector;
-			if (ConstructionGhostPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
-			{
-				FBox Bounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
-				FVector ScaledMin = Bounds.Min * ConstructionGhostPart->GetActorScale3D();
-				BottomOffset = FVector(0, 0, -ScaledMin.Z);
-			}
+			// Sphere trace returns center of sphere, subtract radius to get actual surface
+			FVector GroundSurface = HitResult.Location - FVector(0, 0, SphereRadius);
 
-			PlacementPos = HitResult.Location + BottomOffset;
+			// Use cached ground offset (calculated once when ghost spawned to prevent jitter)
+			// Negate the offset: if boundary bottom is at -2, we need to raise actor by +2
+			PlacementPos = GroundSurface - FVector(0, 0, CachedGroundOffset);
 			PlacementRot = FRotator(0.0f, CurrentGhostRotation, 0.0f);
 
 			// Clear socket target
@@ -2692,54 +2736,53 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			TargetSocketName = NAME_None;
 
 			// Check for overlap even in ground snap mode
-			bool bHasOverlap = false;
-			if (ConstructionGhostPart->PartData && ConstructionGhostPart->MeshComponent)
+			// Only check overlap if bAllowOverlap is FALSE
+			if (ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap && ConstructionGhostPart->MeshComponent)
 			{
-				// Even when overlap is "not allowed", use a small tolerance for surface contact
-				// Surface contact is expected and normal - only reject significant penetration
-				float OverlapThreshold = ConstructionGhostPart->PartData->bAllowOverlap
-					? ConstructionGhostPart->PartData->MaxOverlapThreshold
-					: 0.05f; // 5% tolerance for surface contact when overlap is disabled
-
 				// Temporarily move ghost to test position
 				FVector OldGhostPos = ConstructionGhostPart->GetActorLocation();
 				ConstructionGhostPart->SetActorLocation(PlacementPos);
 
-				FBox GhostBounds = ConstructionGhostPart->MeshComponent->Bounds.GetBox();
-				FVector GhostSize = GhostBounds.GetSize();
-
-				// Check against the ground/surface hit actor
-				if (HitResult.GetActor())
+				// IMPORTANT: Use OverlapBounds if available, otherwise fall back to mesh bounds
+				// This prevents jittering when OverlapBounds differ from mesh bounds
+				FBox GhostBounds;
+				if (ConstructionGhostPart->OverlapBounds.Num() > 0)
 				{
-					TArray<UStaticMeshComponent*> MeshComponents;
-					HitResult.GetActor()->GetComponents<UStaticMeshComponent>(MeshComponents);
-
-					for (UStaticMeshComponent* MeshComp : MeshComponents)
+					// Calculate combined bounds from all OverlapBounds
+					bool bFirstBound = true;
+					for (UBoxComponent* BoundComp : ConstructionGhostPart->OverlapBounds)
 					{
-						if (MeshComp)
+						if (BoundComp)
 						{
-							FBox OtherBounds = MeshComp->Bounds.GetBox();
-							FBox Intersection = GhostBounds.Overlap(OtherBounds);
+							FVector BoundCenter = BoundComp->GetComponentLocation();
+							FVector BoundExtent = BoundComp->GetScaledBoxExtent();
+							FBox BoundBox(BoundCenter - BoundExtent, BoundCenter + BoundExtent);
 
-							if (Intersection.IsValid)
+							if (bFirstBound)
 							{
-								// Calculate overlap percentage to see if it's significant
-								FVector IntersectionSize = Intersection.GetSize();
-								float OverlapPercentX = IntersectionSize.X / GhostSize.X;
-								float OverlapPercentY = IntersectionSize.Y / GhostSize.Y;
-								float OverlapPercentZ = IntersectionSize.Z / GhostSize.Z;
-								float MaxOverlapPercent = FMath::Max3(OverlapPercentX, OverlapPercentY, OverlapPercentZ);
-
-								// Only reject if overlap exceeds threshold
-								if (MaxOverlapPercent > OverlapThreshold)
-								{
-									bHasOverlap = true;
-									break;
-								}
+								GhostBounds = BoundBox;
+								bFirstBound = false;
+							}
+							else
+							{
+								GhostBounds += BoundBox;
 							}
 						}
 					}
 				}
+				else
+				{
+					// Fall back to mesh bounds if no overlap bounds
+					GhostBounds = ConstructionGhostPart->MeshComponent->Bounds.GetBox();
+				}
+
+				FVector GhostSize = GhostBounds.GetSize();
+
+				// SKIP ground overlap check - ground snapping is supposed to touch the surface
+				// The item is intentionally placed on the ground, so overlap with ground is expected and valid
+
+				// Use small tolerance for detecting overlaps with other construction parts
+				float OverlapThreshold = 0.05f; // 5% tolerance
 
 				// Also check against all placed construction parts
 				if (!bHasOverlap)
@@ -2757,8 +2800,47 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 							continue;
 						}
 
-						if (OtherPart->MeshComponent)
+						// If the other part has custom overlap bounds, check against those instead of mesh bounds
+						if (OtherPart->OverlapBounds.Num() > 0)
 						{
+							// Check each overlap bound of the target part
+							for (UBoxComponent* TargetBound : OtherPart->OverlapBounds)
+							{
+								if (TargetBound)
+								{
+									FVector TargetCenter = OtherPart->GetActorLocation() + OtherPart->GetActorRotation().RotateVector(TargetBound->GetRelativeLocation());
+									FVector TargetExtent = TargetBound->GetScaledBoxExtent();
+									FBox TargetBox(TargetCenter - TargetExtent, TargetCenter + TargetExtent);
+
+									FBox Intersection = GhostBounds.Overlap(TargetBox);
+
+									if (Intersection.IsValid)
+									{
+										// Calculate overlap percentage
+										FVector IntersectionSize = Intersection.GetSize();
+										float OverlapPercentX = IntersectionSize.X / GhostSize.X;
+										float OverlapPercentY = IntersectionSize.Y / GhostSize.Y;
+										float OverlapPercentZ = IntersectionSize.Z / GhostSize.Z;
+										float MaxOverlapPercent = FMath::Max3(OverlapPercentX, OverlapPercentY, OverlapPercentZ);
+
+										// Only reject if overlap exceeds threshold
+										if (MaxOverlapPercent > OverlapThreshold)
+										{
+											bHasOverlap = true;
+											break;
+										}
+									}
+								}
+							}
+
+							if (bHasOverlap)
+							{
+								break;
+							}
+						}
+						else if (OtherPart->MeshComponent)
+						{
+							// No custom bounds, use mesh bounds as fallback
 							FBox OtherBounds = OtherPart->MeshComponent->Bounds.GetBox();
 							FBox Intersection = GhostBounds.Overlap(OtherBounds);
 
@@ -2786,15 +2868,12 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				ConstructionGhostPart->SetActorLocation(OldGhostPos);
 			}
 
-			// If overlap detected and not allowed, invalidate ground placement
-			if (bHasOverlap)
-			{
-				bFoundGroundPoint = false;
-			}
+			// Store overlap result but don't invalidate ground point
+			// We want to show the ghost at the ground position even if overlapping
 		}
 	}
 
-	// If no ground point found, placement is invalid
+	// If no ground point found and no snap point, placement is invalid
 	if (!bFoundSnapPoint && !bFoundGroundPoint)
 	{
 		// No valid placement found - show ghost in invalid state
@@ -2808,6 +2887,10 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		}
 		return;
 	}
+
+	// Check if placement should be marked invalid due to overlap
+	// This happens AFTER positioning so ghost stays at ground level
+	bool bInvalidDueToOverlap = bHasOverlap;
 
 	// Apply placement
 	bool bNewValidState = (bFoundSnapPoint || bFoundGroundPoint);
@@ -2840,80 +2923,252 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 		// Final overlap check after positioning and rotation
 		bool bHasFinalOverlap = false;
+
 		if (ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap)
 		{
-			// Perform a sweep test to check for overlaps
-			TArray<FOverlapResult> Overlaps;
-			FCollisionShape CollisionShape;
-			FVector OverlapCheckCenter = PlacementPos;
 
-			// Determine which bounds to use for overlap checking
-			FVector BoxExtent;
-			if (ConstructionGhostPart->OverlapBounds)
+			// Check all overlap bounds (supports multiple bounds for complex shapes)
+			TArray<UBoxComponent*> BoundsToCheck;
+
+			if (ConstructionGhostPart->OverlapBounds.Num() > 0)
 			{
-				// Use custom overlap bounds box component (can be adjusted in Blueprint viewport)
-				BoxExtent = ConstructionGhostPart->OverlapBounds->GetScaledBoxExtent();
-				OverlapCheckCenter += PlacementRot.RotateVector(ConstructionGhostPart->OverlapBounds->GetRelativeLocation());
+				// Use custom overlap bounds box components (can be adjusted in Blueprint viewport)
+				BoundsToCheck = ConstructionGhostPart->OverlapBounds;
 			}
 			else if (ConstructionGhostPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
 			{
-				// Use mesh bounds
-				FBox MeshBounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
-				BoxExtent = MeshBounds.GetExtent() * ConstructionGhostPart->GetActorScale3D();
-			}
-			else
-			{
-				// Fallback to default box
-				BoxExtent = FVector(50.0f, 50.0f, 50.0f);
-			}
-
-			CollisionShape = FCollisionShape::MakeBox(BoxExtent);
-
-			// Debug visualization if enabled
-			if (ConstructionGhostPart->PartData->bDrawBoundsDebug)
-			{
-				DrawDebugBox(GetWorld(), OverlapCheckCenter, BoxExtent, PlacementRot.Quaternion(), FColor::Yellow, false, -1.0f, 0, 2.0f);
+				// Fallback to single mesh bounds check
+				// This branch handles legacy parts without explicit overlap bounds
 			}
 
 			FCollisionQueryParams QueryParams;
 			QueryParams.AddIgnoredActor(ConstructionGhostPart);
 			QueryParams.AddIgnoredActor(this);
 
-			bool bHasOverlaps = GetWorld()->OverlapMultiByChannel(
-				Overlaps,
-				OverlapCheckCenter,
-				PlacementRot.Quaternion(),
-				ECC_WorldStatic,
-				CollisionShape,
-				QueryParams
-			);
-
-			if (bHasOverlaps)
+			// Check each overlap bound
+			for (UBoxComponent* OverlapBound : BoundsToCheck)
 			{
-				for (const FOverlapResult& Overlap : Overlaps)
+				if (!OverlapBound) continue;
+
+				TArray<FOverlapResult> Overlaps;
+				FVector OverlapCheckCenter = PlacementPos;
+				FVector BoxExtent = OverlapBound->GetScaledBoxExtent();
+				OverlapCheckCenter += PlacementRot.RotateVector(OverlapBound->GetRelativeLocation());
+
+				FCollisionShape CollisionShape = FCollisionShape::MakeBox(BoxExtent);
+
+				// Debug visualization if enabled
+				if (ConstructionGhostPart->PartData->bDrawBoundsDebug)
 				{
-					AActor* OverlapActor = Overlap.GetActor();
-					if (!OverlapActor) continue;
+					DrawDebugBox(GetWorld(), OverlapCheckCenter, BoxExtent, PlacementRot.Quaternion(), FColor::Yellow, false, -1.0f, 0, 2.0f);
+				}
 
-					// Skip the part we're snapping to
-					if (CurrentSnapTarget && OverlapActor == CurrentSnapTarget)
+				// Query against multiple channels to catch all construction parts
+				// Some parts may use WorldStatic, others WorldDynamic, or Visibility
+				TArray<ECollisionChannel> ChannelsToCheck = { ECC_WorldStatic, ECC_WorldDynamic, ECC_Visibility };
+
+				for (ECollisionChannel Channel : ChannelsToCheck)
+				{
+					TArray<FOverlapResult> ChannelOverlaps;
+					GetWorld()->OverlapMultiByChannel(
+						ChannelOverlaps,
+						OverlapCheckCenter,
+						PlacementRot.Quaternion(),
+						Channel,
+						CollisionShape,
+						QueryParams
+					);
+					Overlaps.Append(ChannelOverlaps);
+				}
+
+
+				if (Overlaps.Num() > 0)
+				{
+					for (const FOverlapResult& Overlap : Overlaps)
 					{
-						continue;
+						AActor* OverlapActor = Overlap.GetActor();
+						if (!OverlapActor) continue;
+
+						// Skip the ground/surface actor we're placing on
+						if (GroundActor && OverlapActor == GroundActor)
+						{
+							continue;
+						}
+
+						// Skip the part we're snapping to
+						if (CurrentSnapTarget && OverlapActor == CurrentSnapTarget)
+						{
+							continue;
+						}
+
+						// Check if it's a placed construction part
+						AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
+						if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
+						{
+							// If the overlapped part has custom overlap bounds, check against those instead
+							if (OverlapPart->OverlapBounds.Num() > 0)
+							{
+
+								// Check if we're actually overlapping with any of the target part's bounds
+								bool bOverlapsWithTargetBounds = false;
+								for (UBoxComponent* TargetBound : OverlapPart->OverlapBounds)
+								{
+									if (TargetBound)
+									{
+										FVector TargetCenter = OverlapPart->GetActorLocation() + OverlapPart->GetActorRotation().RotateVector(TargetBound->GetRelativeLocation());
+										FVector TargetExtent = TargetBound->GetScaledBoxExtent();
+
+										// Check if our ghost's bound overlaps with this target bound
+										FBox GhostBox(OverlapCheckCenter - BoxExtent, OverlapCheckCenter + BoxExtent);
+										FBox TargetBox(TargetCenter - TargetExtent, TargetCenter + TargetExtent);
+
+										bool bIntersects = GhostBox.Intersect(TargetBox);
+
+										if (bIntersects)
+										{
+											bOverlapsWithTargetBounds = true;
+											break;
+										}
+									}
+								}
+
+								if (bOverlapsWithTargetBounds)
+								{
+									bHasFinalOverlap = true;
+									break;
+								}
+								else
+								{
+								}
+							}
+							else
+							{
+								// No custom bounds on target, treat as overlap
+								bHasFinalOverlap = true;
+								break;
+							}
+						}
 					}
+				}
 
-					// Check if it's a placed construction part
-					AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
-					if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
+				// If we found an overlap in this bound, no need to check others
+				if (bHasFinalOverlap)
+				{
+					break;
+				}
+			}
+
+			// Fallback to mesh bounds if no overlap bounds defined
+			if (BoundsToCheck.Num() == 0 && ConstructionGhostPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
+			{
+				TArray<FOverlapResult> Overlaps;
+				FVector OverlapCheckCenter = PlacementPos;
+				FBox MeshBounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+				FVector BoxExtent = MeshBounds.GetExtent() * ConstructionGhostPart->GetActorScale3D();
+
+				FCollisionShape CollisionShape = FCollisionShape::MakeBox(BoxExtent);
+
+				// Debug visualization if enabled
+				if (ConstructionGhostPart->PartData->bDrawBoundsDebug)
+				{
+					DrawDebugBox(GetWorld(), OverlapCheckCenter, BoxExtent, PlacementRot.Quaternion(), FColor::Yellow, false, -1.0f, 0, 2.0f);
+				}
+
+				// Query against multiple channels to catch all construction parts
+				// Some parts may use WorldStatic, others WorldDynamic, or Visibility
+				TArray<ECollisionChannel> ChannelsToCheck = { ECC_WorldStatic, ECC_WorldDynamic, ECC_Visibility };
+
+				for (ECollisionChannel Channel : ChannelsToCheck)
+				{
+					TArray<FOverlapResult> ChannelOverlaps;
+					GetWorld()->OverlapMultiByChannel(
+						ChannelOverlaps,
+						OverlapCheckCenter,
+						PlacementRot.Quaternion(),
+						Channel,
+						CollisionShape,
+						QueryParams
+					);
+					Overlaps.Append(ChannelOverlaps);
+				}
+
+
+				if (Overlaps.Num() > 0)
+				{
+					for (const FOverlapResult& Overlap : Overlaps)
 					{
-						bHasFinalOverlap = true;
-						break;
+						AActor* OverlapActor = Overlap.GetActor();
+						if (!OverlapActor) continue;
+
+						// Skip the ground/surface actor we're placing on
+						if (GroundActor && OverlapActor == GroundActor)
+						{
+							continue;
+						}
+
+						// Skip the part we're snapping to
+						if (CurrentSnapTarget && OverlapActor == CurrentSnapTarget)
+						{
+							continue;
+						}
+
+						// Check if it's a placed construction part
+						AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
+						if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
+						{
+							// If the overlapped part has custom overlap bounds, check against those instead
+							if (OverlapPart->OverlapBounds.Num() > 0)
+							{
+
+								// Check if we're actually overlapping with any of the target part's bounds
+								bool bOverlapsWithTargetBounds = false;
+								for (UBoxComponent* TargetBound : OverlapPart->OverlapBounds)
+								{
+									if (TargetBound)
+									{
+										FVector TargetCenter = OverlapPart->GetActorLocation() + OverlapPart->GetActorRotation().RotateVector(TargetBound->GetRelativeLocation());
+										FVector TargetExtent = TargetBound->GetScaledBoxExtent();
+
+										// Check if our ghost's bound overlaps with this target bound
+										FBox GhostBox(OverlapCheckCenter - BoxExtent, OverlapCheckCenter + BoxExtent);
+										FBox TargetBox(TargetCenter - TargetExtent, TargetCenter + TargetExtent);
+
+										bool bIntersects = GhostBox.Intersect(TargetBox);
+
+										if (bIntersects)
+										{
+											bOverlapsWithTargetBounds = true;
+											break;
+										}
+									}
+								}
+
+								if (bOverlapsWithTargetBounds)
+								{
+									bHasFinalOverlap = true;
+									break;
+								}
+								else
+								{
+								}
+							}
+							else
+							{
+								// No custom bounds on target, treat as overlap
+								bHasFinalOverlap = true;
+								break;
+							}
+						}
 					}
 				}
 			}
 		}
 
-		ConstructionGhostPart->SetGhostPreview(!bHasFinalOverlap);
-		bHasValidPlacement = !bHasFinalOverlap; // Only valid if no overlap
+		// Combine both overlap checks (from ground placement and final check)
+		bool bHasAnyOverlap = bInvalidDueToOverlap || bHasFinalOverlap;
+
+		ConstructionGhostPart->SetGhostPreview(!bHasAnyOverlap);
+		bHasValidPlacement = !bHasAnyOverlap; // Only valid if no overlap
 	}
 	else
 	{

@@ -16,14 +16,9 @@ AConstructionPart::AConstructionPart()
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	RootComponent = MeshComponent;
 
-	// Create overlap bounds visualizer (for adjusting overlap detection in Blueprint viewport)
-	OverlapBounds = CreateDefaultSubobject<UBoxComponent>(TEXT("OverlapBounds"));
-	OverlapBounds->SetupAttachment(MeshComponent);
-	OverlapBounds->SetBoxExtent(FVector(50.0f, 50.0f, 50.0f)); // Default size
-	OverlapBounds->SetCollisionEnabled(ECollisionEnabled::NoCollision); // Only for visualization
-	OverlapBounds->SetHiddenInGame(true); // Only visible in editor
-	OverlapBounds->bDrawOnlyIfSelected = true; // Only show when selected
-	OverlapBounds->ShapeColor = FColor::Yellow; // Yellow box for visibility
+	// Overlap bounds are added in Blueprint child classes
+	// Add BoxComponents as children of MeshComponent with collision disabled
+	// Multiple bounds can be used for complex shapes (e.g., rack with two posts)
 
 	// Create snap root
 	SnapRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SnapRoot"));
@@ -39,6 +34,9 @@ AConstructionPart::AConstructionPart()
 void AConstructionPart::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Initialize overlap bounds array from Blueprint-added components
+	InitializeOverlapBounds();
 
 	// Initialize snap points array
 	InitializeSnapPoints();
@@ -86,6 +84,40 @@ void AConstructionPart::InitializeSnapPoints()
 
 	// Snap points are positioned manually in each Blueprint child class
 	// This gives full control over snap point placement for different part geometries
+}
+
+void AConstructionPart::InitializeOverlapBounds()
+{
+	// Gather all BoxComponents that are direct children of MeshComponent
+	// This allows Blueprint to add multiple overlap bounds with custom names
+	OverlapBounds.Empty();
+
+	if (MeshComponent)
+	{
+		TArray<USceneComponent*> ChildComponents;
+		MeshComponent->GetChildrenComponents(false, ChildComponents);
+
+		// Find all Box Components added in Blueprint
+		for (USceneComponent* Child : ChildComponents)
+		{
+			UBoxComponent* BoxComp = Cast<UBoxComponent>(Child);
+			if (BoxComp)
+			{
+				// Check if this looks like an overlap bounds component
+				// (has collision disabled and is hidden in game)
+				if (BoxComp->GetCollisionEnabled() == ECollisionEnabled::NoCollision)
+				{
+					OverlapBounds.Add(BoxComp);
+				}
+			}
+		}
+	}
+
+	// Debug log
+	if (OverlapBounds.Num() > 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: Initialized %d overlap bounds"), *GetName(), OverlapBounds.Num());
+	}
 }
 
 void AConstructionPart::InitializeFromData(UConstructionPartData* Data)
@@ -158,7 +190,9 @@ void AConstructionPart::SetPartState(EConstructionPartState NewState)
 		RestoreOriginalMaterials();
 		if (MeshComponent)
 		{
-			MeshComponent->SetSimulatePhysics(false);
+			// Enable physics if the part has bHasPhysics enabled in data asset
+			bool bEnablePhysics = (PartData && PartData->bHasPhysics);
+			MeshComponent->SetSimulatePhysics(bEnablePhysics);
 		}
 		break;
 
@@ -168,6 +202,7 @@ void AConstructionPart::SetPartState(EConstructionPartState NewState)
 		RestoreOriginalMaterials();
 		if (MeshComponent)
 		{
+			// Fastened parts should always have physics disabled for stability
 			MeshComponent->SetSimulatePhysics(false);
 		}
 		break;
@@ -481,26 +516,17 @@ bool AConstructionPart::AreSnapPointsCompatible(UArrowComponent* MySnapPoint, AC
 	const FSnapPointFilter* MyFilter = SnapPointFilters.Find(MySnapPointName);
 	const FSnapPointFilter* OtherFilter = OtherPart->SnapPointFilters.Find(OtherSnapPointName);
 
-	// Check if my filter allows the other tag
-	if (MyFilter)
+	// If no filter is defined on the ghost (this object being placed), reject the connection
+	// This requires explicit setup - you must define filters to enable snapping
+	if (!MyFilter)
 	{
-		bool bAllows = MyFilter->AllowsTag(OtherTag);
-		if (!bAllows)
-		{
-			return false;
-		}
+		return false;
 	}
 
-	// Check if other filter allows my tag
-	if (OtherFilter)
-	{
-		bool bAllows = OtherFilter->AllowsTag(MyTag);
-		if (!bAllows)
-		{
-			return false;
-		}
-	}
+	// One-way filtering: Only check if the ghost's filter allows the target's tag
+	// This enables directional snapping (e.g., shelf can snap to rack, but rack can't snap to shelf)
+	// The target's filter is ignored - only the active/ghost object's filter determines compatibility
+	bool bMyFilterAllows = MyFilter->AllowsTag(OtherTag);
 
-	// Both filters passed (or no filters defined)
-	return true;
+	return bMyFilterAllows;
 }

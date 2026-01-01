@@ -81,6 +81,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part Properties")
 	bool bCanRelocate = true;
 
+	/** Enable physics simulation when part is placed or moved */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part Properties")
+	bool bHasPhysics = false;
+
 	/** Enable debug socket visualization */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Part Properties")
 	bool bDrawSocketDebug = false;
