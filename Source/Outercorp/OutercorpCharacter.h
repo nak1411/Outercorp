@@ -206,6 +206,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *DeleteItemAction;
 
+	/** Move Mode Toggle Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *MoveModeAction;
+
+	/** Pickup/Place Item in Move Mode Input Action (left click in move mode) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *MoveItemAction;
+
 	/** Right Click to Enable Rotation Mode Input Action */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *RightClickAction;
@@ -328,6 +336,22 @@ protected:
 	/** Material for highlighting parts in delete mode */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
 	class UMaterialInterface* DeleteHighlightMaterial;
+
+	/** Whether in move mode */
+	UPROPERTY(BlueprintReadOnly, Category = "Construction")
+	bool bIsInMoveMode;
+
+	/** Currently highlighted construction part for moving */
+	UPROPERTY()
+	class AConstructionPart* HighlightedPartForMove;
+
+	/** Currently held construction part in move mode */
+	UPROPERTY()
+	class AConstructionPart* HeldConstructionPart;
+
+	/** Material for highlighting parts in move mode */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
+	class UMaterialInterface* MoveHighlightMaterial;
 
 	/** Current construction part ghost (for socket-based placement) */
 	UPROPERTY()
@@ -481,6 +505,25 @@ protected:
 	/** Delete the highlighted construction part */
 	UFUNCTION(BlueprintCallable, Category = "Construction")
 	void DeleteHighlightedPart();
+
+	/** Toggle move mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void ToggleMoveMode();
+
+	/** Enter move mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void EnterMoveMode();
+
+	/** Exit move mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void ExitMoveMode();
+
+	/** Update move mode highlighting */
+	void UpdateMoveModeHighlight();
+
+	/** Pickup or place the construction part in move mode */
+	UFUNCTION(BlueprintCallable, Category = "Construction")
+	void PickupOrPlaceMovePart();
 
 	/** Switch to construction part slot by index (0-2) */
 	UFUNCTION(BlueprintCallable, Category = "Construction")

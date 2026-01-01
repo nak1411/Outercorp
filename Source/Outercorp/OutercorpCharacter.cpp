@@ -111,6 +111,10 @@ AOutercorpCharacter::AOutercorpCharacter()
 	bIsInDeleteMode = false;
 	HighlightedPartForDeletion = nullptr;
 	DeleteHighlightMaterial = nullptr;
+	bIsInMoveMode = false;
+	HighlightedPartForMove = nullptr;
+	HeldConstructionPart = nullptr;
+	MoveHighlightMaterial = nullptr;
 	ConstructionGhostPart = nullptr;
 	TargetConstructionPart = nullptr;
 	TargetSocketName = NAME_None;
@@ -121,8 +125,25 @@ void AOutercorpCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// Update move mode highlighting/preview if in move mode
+	if (bIsInMoveMode && FirstPersonCameraComponent)
+	{
+		if (HeldConstructionPart)
+		{
+			// Update preview of held construction part (similar to construction mode)
+			if (ConstructionGhostPart)
+			{
+				UpdateConstructionPreview();
+			}
+		}
+		else
+		{
+			// Highlight parts for potential pickup
+			UpdateMoveModeHighlight();
+		}
+	}
 	// Update delete mode highlighting if in delete mode
-	if (bIsInDeleteMode && FirstPersonCameraComponent)
+	else if (bIsInDeleteMode && FirstPersonCameraComponent)
 	{
 		UpdateDeleteModeHighlight();
 	}
@@ -308,11 +329,14 @@ void AOutercorpCharacter::BeginPlay()
 		else
 		{		}
 
-		// Ensure we start with construction mode and delete mode both OFF
+		// Ensure we start with construction mode, delete mode, and move mode all OFF
 		bIsInConstructionMode = false;
 		bIsInDeleteMode = false;
+		bIsInMoveMode = false;
 		ConstructionGhostPart = nullptr;
 		HighlightedPartForDeletion = nullptr;
+		HighlightedPartForMove = nullptr;
+		HeldConstructionPart = nullptr;
 
 		// Initialize construction controls text to hidden (now that bIsInConstructionMode is set)
 		UpdateConstructionControlsVisibility();
@@ -430,6 +454,18 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 			EnhancedInputComponent->BindAction(DeleteItemAction, ETriggerEvent::Started, this, &AOutercorpCharacter::DeleteHighlightedPart);
 		}
 
+		// Move Mode
+		if (MoveModeAction)
+		{
+			EnhancedInputComponent->BindAction(MoveModeAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleMoveMode);
+		}
+
+		// Move Item (left click in move mode)
+		if (MoveItemAction)
+		{
+			EnhancedInputComponent->BindAction(MoveItemAction, ETriggerEvent::Started, this, &AOutercorpCharacter::PickupOrPlaceMovePart);
+		}
+
 		// Right Click for Rotation Mode (press and release)
 		if (RightClickAction)
 		{
@@ -507,8 +543,8 @@ void AOutercorpCharacter::DoMove(float Right, float Forward)
 		return;
 	}
 
-	// If in construction mode and holding right-click, use A/D for rotation instead of movement
-	if (bIsInConstructionMode && bIsHoldingRightClick && ConstructionGhostPart)
+	// If in construction mode OR move mode and holding right-click, use A/D for rotation instead of movement
+	if ((bIsInConstructionMode || bIsInMoveMode) && bIsHoldingRightClick && ConstructionGhostPart)
 	{
 		// Use the Right input (A/D keys) for rotation
 		float RotationInput = Right;
@@ -2198,6 +2234,12 @@ void AOutercorpCharacter::EnterConstructionMode()
 		ExitDeleteMode();
 	}
 
+	// If in move mode, exit it first
+	if (bIsInMoveMode)
+	{
+		ExitMoveMode();
+	}
+
 	// Check if we have a construction part class assigned
 	if (!ConstructionPartClass)
 	{
@@ -2353,6 +2395,12 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		TraceParams.AddIgnoredActor(this);
 		TraceParams.AddIgnoredActor(ConstructionGhostPart);
 
+		// In move mode, also ignore the held construction part
+		if (HeldConstructionPart)
+		{
+			TraceParams.AddIgnoredActor(HeldConstructionPart);
+		}
+
 		bool bHitSomething = GetWorld()->LineTraceSingleByChannel(TraceHit, CameraLocation, TraceEnd, ECC_Visibility, TraceParams);
 
 		AConstructionPart* TargetPart = nullptr;
@@ -2380,7 +2428,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			for (AActor* Actor : FoundParts)
 			{
 				AConstructionPart* Part = Cast<AConstructionPart>(Actor);
-				if (!Part || Part == ConstructionGhostPart || Part->CurrentState == EConstructionPartState::InInventory)
+				if (!Part || Part == ConstructionGhostPart || Part == HeldConstructionPart || Part->CurrentState == EConstructionPartState::InInventory)
 				{
 					continue;
 				}
@@ -2974,8 +3022,8 @@ void AOutercorpCharacter::FastenConstructionPart()
 
 void AOutercorpCharacter::ToggleSnapMode()
 {
-	// Only allow toggling when in construction mode
-	if (!bIsInConstructionMode)
+	// Only allow toggling when in construction mode or move mode
+	if (!bIsInConstructionMode && !bIsInMoveMode)
 	{
 		return;
 	}
@@ -2996,8 +3044,8 @@ void AOutercorpCharacter::ToggleSnapMode()
 
 void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value)
 {
-	// Only allow adjustment when in construction mode
-	if (!bIsInConstructionMode || !ConstructionGhostPart)
+	// Only allow adjustment when in construction mode or move mode
+	if ((!bIsInConstructionMode && !bIsInMoveMode) || !ConstructionGhostPart)
 	{
 		return;
 	}
@@ -3045,8 +3093,8 @@ void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value
 
 void AOutercorpCharacter::RightClickPressed()
 {
-	// Only enable rotation mode when in construction mode
-	if (!bIsInConstructionMode || !ConstructionGhostPart)
+	// Only enable rotation mode when in construction mode or move mode
+	if ((!bIsInConstructionMode && !bIsInMoveMode) || !ConstructionGhostPart)
 	{
 		return;
 	}
@@ -3062,8 +3110,8 @@ void AOutercorpCharacter::RightClickReleased()
 
 void AOutercorpCharacter::ToggleRotationSnap()
 {
-	// Only allow toggling when in construction mode
-	if (!bIsInConstructionMode)
+	// Only allow toggling when in construction mode or move mode
+	if (!bIsInConstructionMode && !bIsInMoveMode)
 	{
 		return;
 	}
@@ -3226,6 +3274,12 @@ void AOutercorpCharacter::EnterDeleteMode()
 	if (bIsInConstructionMode)
 	{
 		ExitConstructionMode();
+	}
+
+	// If in move mode, exit it first
+	if (bIsInMoveMode)
+	{
+		ExitMoveMode();
 	}
 
 	bIsInDeleteMode = true;
@@ -3408,6 +3462,376 @@ void AOutercorpCharacter::DeleteHighlightedPart()
 			ENotificationType::Warning,
 			1.5f
 		);
+	}
+}
+
+void AOutercorpCharacter::ToggleMoveMode()
+{
+	if (bIsInMoveMode)
+	{
+		ExitMoveMode();
+	}
+	else
+	{
+		EnterMoveMode();
+	}
+}
+
+void AOutercorpCharacter::EnterMoveMode()
+{
+	// Can't enter move mode if UI is open
+	if (IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// Can't enter if holding an item
+	if (HeldItemData)
+	{
+		return;
+	}
+
+	// If in construction mode, exit it first
+	if (bIsInConstructionMode)
+	{
+		ExitConstructionMode();
+	}
+
+	// If in delete mode, exit it first
+	if (bIsInDeleteMode)
+	{
+		ExitDeleteMode();
+	}
+
+	bIsInMoveMode = true;
+
+	if (NotificationComponent)
+	{
+		NotificationComponent->ShowSimpleNotification(
+			FText::FromString("Move Mode: ON - Click to pick up parts"),
+			ENotificationType::Info,
+			2.0f
+		);
+	}
+
+	// Update construction controls visibility
+	UpdateConstructionControlsVisibility();
+}
+
+void AOutercorpCharacter::ExitMoveMode()
+{
+	bIsInMoveMode = false;
+
+	// If holding a construction part, drop it back
+	if (HeldConstructionPart)
+	{
+		// Restore visibility and collision
+		HeldConstructionPart->SetActorHiddenInGame(false);
+		HeldConstructionPart->SetActorEnableCollision(true);
+
+		// Restore materials and physics
+		HeldConstructionPart->SetPartState(EConstructionPartState::Placed);
+		HeldConstructionPart = nullptr;
+
+		// Destroy the ghost
+		if (ConstructionGhostPart)
+		{
+			ConstructionGhostPart->Destroy();
+			ConstructionGhostPart = nullptr;
+		}
+	}
+
+	// Clear any highlighted part
+	if (HighlightedPartForMove)
+	{
+		// Restore original materials
+		if (HighlightedPartForMove->MeshComponent)
+		{
+			HighlightedPartForMove->SetPartState(HighlightedPartForMove->CurrentState);
+		}
+		HighlightedPartForMove = nullptr;
+	}
+
+	if (NotificationComponent)
+	{
+		NotificationComponent->ShowSimpleNotification(
+			FText::FromString("Move Mode: OFF"),
+			ENotificationType::Info,
+			2.0f
+		);
+	}
+
+	// Update construction controls visibility
+	UpdateConstructionControlsVisibility();
+}
+
+void AOutercorpCharacter::UpdateMoveModeHighlight()
+{
+	if (!FirstPersonCameraComponent)
+	{
+		return;
+	}
+
+	FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+	FVector CameraForward = FirstPersonCameraComponent->GetForwardVector();
+
+	// Use a long trace distance to find all potential parts
+	float MaxTraceDistance = 2000.0f;
+	FVector TraceEnd = CameraLocation + (CameraForward * MaxTraceDistance);
+
+	// Raycast to find construction parts
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		CameraLocation,
+		TraceEnd,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	AConstructionPart* HitPart = nullptr;
+	if (bHit && HitResult.GetActor())
+	{
+		HitPart = Cast<AConstructionPart>(HitResult.GetActor());
+
+		// Check if the hit part is within pickup distance and can be relocated
+		if (HitPart && HitPart->PartData)
+		{
+			float DistanceToPart = FVector::Dist(CameraLocation, HitResult.Location);
+			if (DistanceToPart > HitPart->PartData->MaxDeleteDistance) // Reuse delete distance for now
+			{
+				// Too far to pick up this part
+				HitPart = nullptr;
+			}
+			else if (!HitPart->PartData->bCanRelocate)
+			{
+				// This part cannot be relocated
+				HitPart = nullptr;
+			}
+		}
+	}
+
+	// Update highlighting
+	if (HitPart != HighlightedPartForMove)
+	{
+		// Clear previous highlight
+		if (HighlightedPartForMove && HighlightedPartForMove->MeshComponent)
+		{
+			HighlightedPartForMove->SetPartState(HighlightedPartForMove->CurrentState);
+		}
+
+		// Set new highlight
+		HighlightedPartForMove = HitPart;
+
+		if (HighlightedPartForMove && HighlightedPartForMove->MeshComponent)
+		{
+			// Use the move highlight material (or valid placement material as highlight)
+			if (MoveHighlightMaterial)
+			{
+				// Apply move highlight material to all mesh elements
+				int32 NumMaterials = HighlightedPartForMove->MeshComponent->GetNumMaterials();
+				for (int32 i = 0; i < NumMaterials; i++)
+				{
+					HighlightedPartForMove->MeshComponent->SetMaterial(i, MoveHighlightMaterial);
+				}
+			}
+			else
+			{
+				// Fallback to ghost preview with valid state (green/blue)
+				HighlightedPartForMove->SetGhostPreview(true);
+			}
+		}
+	}
+}
+
+void AOutercorpCharacter::PickupOrPlaceMovePart()
+{
+	// Can't interact if not in move mode
+	if (!bIsInMoveMode)
+	{
+		return;
+	}
+
+	// If we're holding a part, place it
+	if (HeldConstructionPart)
+	{
+		// Similar to PlaceConstructionPart - place at current location
+		if (ConstructionGhostPart && bHasValidPlacement)
+		{
+			// Get the final transform from the ghost
+			FTransform FinalTransform = ConstructionGhostPart->GetActorTransform();
+
+			// IMPORTANT: Detach from any previous attachments first
+			// This ensures the actor can be repositioned freely
+			HeldConstructionPart->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+			// Update the held part's transform
+			HeldConstructionPart->SetActorTransform(FinalTransform);
+
+			// Restore visibility and collision
+			HeldConstructionPart->SetActorHiddenInGame(false);
+			HeldConstructionPart->SetActorEnableCollision(true);
+
+			// If snapped to socket, attach it
+			if (bIsCurrentlySnapped && TargetConstructionPart && TargetSocketName != NAME_None && GhostSocketName != NAME_None)
+			{
+				HeldConstructionPart->AttachToPart(TargetConstructionPart, TargetSocketName, GhostSocketName);
+			}
+			else
+			{
+				// Just set to placed state
+				HeldConstructionPart->SetPartState(EConstructionPartState::Placed);
+			}
+
+			// Show notification
+			if (NotificationComponent)
+			{
+				FString PartName = "Part";
+				if (HeldConstructionPart->PartData && !HeldConstructionPart->PartData->PartName.IsEmpty())
+				{
+					PartName = HeldConstructionPart->PartData->PartName.ToString();
+				}
+
+				NotificationComponent->ShowSimpleNotification(
+					FText::FromString(FString::Printf(TEXT("%s Placed"), *PartName)),
+					ENotificationType::Success,
+					1.5f
+				);
+			}
+
+			// Clear held part and ghost
+			HeldConstructionPart = nullptr;
+			ConstructionGhostPart->Destroy();
+			ConstructionGhostPart = nullptr;
+			bIsCurrentlySnapped = false;
+			TargetConstructionPart = nullptr;
+			TargetSocketName = NAME_None;
+			GhostSocketName = NAME_None;
+		}
+		else
+		{
+			// Invalid placement - drop back at original position
+			if (NotificationComponent)
+			{
+				NotificationComponent->ShowSimpleNotification(
+					FText::FromString("Invalid placement - part returned"),
+					ENotificationType::Warning,
+					1.5f
+				);
+			}
+
+			// Restore visibility and collision
+			HeldConstructionPart->SetActorHiddenInGame(false);
+			HeldConstructionPart->SetActorEnableCollision(true);
+
+			// Restore the part to its original state
+			HeldConstructionPart->SetPartState(EConstructionPartState::Placed);
+			HeldConstructionPart = nullptr;
+
+			// Destroy the ghost
+			if (ConstructionGhostPart)
+			{
+				ConstructionGhostPart->Destroy();
+				ConstructionGhostPart = nullptr;
+			}
+		}
+	}
+	// If we're not holding a part, try to pick one up
+	else if (HighlightedPartForMove)
+	{
+		// Pick up the highlighted part
+		HeldConstructionPart = HighlightedPartForMove;
+		HighlightedPartForMove = nullptr;
+
+		// IMPORTANT: Clear all socket connections before moving
+		// This disconnects the part from any attached parts
+		for (FAttachmentPoint& AttachPoint : HeldConstructionPart->AttachmentPoints)
+		{
+			if (AttachPoint.bIsOccupied || AttachPoint.Connections.Num() > 0)
+			{
+				HeldConstructionPart->DetachFromPart(AttachPoint.SocketName);
+			}
+		}
+
+		// Also detach from actor hierarchy (in case it's attached to world or another actor)
+		HeldConstructionPart->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+		// Store the original part data and transform
+		UConstructionPartData* PartData = HeldConstructionPart->PartData;
+		FVector OriginalScale = HeldConstructionPart->GetActorScale3D();
+
+		// Create a ghost copy for preview (using the same actor class)
+		if (PartData)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			// Spawn ghost at camera position initially
+			FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
+			FVector CameraForward = FirstPersonCameraComponent->GetForwardVector();
+			FVector InitialLocation = CameraLocation + (CameraForward * CurrentPlacementDistance);
+
+			// Use the Blueprint class from the PartData if specified, otherwise fallback to ConstructionPartClass
+			TSubclassOf<AConstructionPart> ClassToSpawn = PartData->PartBlueprintClass ? PartData->PartBlueprintClass : ConstructionPartClass;
+
+			ConstructionGhostPart = GetWorld()->SpawnActor<AConstructionPart>(
+				ClassToSpawn,
+				InitialLocation,
+				HeldConstructionPart->GetActorRotation(),
+				SpawnParams
+			);
+
+			if (ConstructionGhostPart)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Move Mode: Ghost spawned successfully"));
+
+				// Initialize with same data
+				ConstructionGhostPart->InitializeFromData(PartData);
+
+				// Match the scale
+				ConstructionGhostPart->SetActorScale3D(OriginalScale);
+
+				// Set to ghost preview state (this will apply the ghost material)
+				ConstructionGhostPart->SetPartState(EConstructionPartState::GhostPreview);
+
+				// Initially set as valid (will update each frame)
+				ConstructionGhostPart->SetGhostPreview(true);
+
+				// Copy the rotation from the held part
+				CurrentGhostRotation = HeldConstructionPart->GetActorRotation().Yaw;
+
+				// Hide the original part and disable collision
+				HeldConstructionPart->SetActorHiddenInGame(true);
+				HeldConstructionPart->SetActorEnableCollision(false);
+
+				// Move the held part far away to prevent overlap bounds from showing at old location
+				// We'll move it back to the correct position when placing
+				HeldConstructionPart->SetActorLocation(FVector(0, 0, -100000.0f));
+
+				// Initialize placement state
+				bHasValidPlacement = false;
+				bIsCurrentlySnapped = false;
+			}
+		}
+
+		// Show notification
+		if (NotificationComponent)
+		{
+			FString PartName = "Part";
+			if (HeldConstructionPart->PartData && !HeldConstructionPart->PartData->PartName.IsEmpty())
+			{
+				PartName = HeldConstructionPart->PartData->PartName.ToString();
+			}
+
+			NotificationComponent->ShowSimpleNotification(
+				FText::FromString(FString::Printf(TEXT("%s Picked Up - Move and rotate, click to place"), *PartName)),
+				ENotificationType::Info,
+				2.5f
+			);
+		}
 	}
 }
 

@@ -339,32 +339,47 @@ void AConstructionPart::DetachFromPart(FName MySocket)
 		return Point.SocketName == MySocket;
 	});
 
-	if (!MyAttachPoint || !MyAttachPoint->bIsOccupied)
+	if (!MyAttachPoint)
 	{
 		return;
 	}
 
-	// Get connected part info before clearing
-	AConstructionPart* ConnectedPart = Cast<AConstructionPart>(MyAttachPoint->ConnectedPart);
-	FName ConnectedSocket = MyAttachPoint->ConnectedSocket;
+	// Store all connections to iterate through them
+	TArray<FSocketConnection> ConnectionsCopy = MyAttachPoint->Connections;
 
-	// Clear this side
+	// Clear this socket's connections array
+	MyAttachPoint->Connections.Empty();
+
+	// Clear deprecated fields
 	MyAttachPoint->bIsOccupied = false;
 	MyAttachPoint->ConnectedPart = nullptr;
 	MyAttachPoint->ConnectedSocket = NAME_None;
 
-	// Clear other side
-	if (ConnectedPart)
+	// Clear the connection on the other side for each connected part
+	for (const FSocketConnection& Connection : ConnectionsCopy)
 	{
-		FAttachmentPoint* OtherAttachPoint = ConnectedPart->AttachmentPoints.FindByPredicate([ConnectedSocket](const FAttachmentPoint& Point) {
-			return Point.SocketName == ConnectedSocket;
-		});
-
-		if (OtherAttachPoint)
+		AConstructionPart* ConnectedPart = Cast<AConstructionPart>(Connection.ConnectedPart);
+		if (ConnectedPart)
 		{
-			OtherAttachPoint->bIsOccupied = false;
-			OtherAttachPoint->ConnectedPart = nullptr;
-			OtherAttachPoint->ConnectedSocket = NAME_None;
+			FAttachmentPoint* OtherAttachPoint = ConnectedPart->AttachmentPoints.FindByPredicate([Connection](const FAttachmentPoint& Point) {
+				return Point.SocketName == Connection.ConnectedSocket;
+			});
+
+			if (OtherAttachPoint)
+			{
+				// Remove this part from the other socket's connections
+				OtherAttachPoint->Connections.RemoveAll([this, MySocket](const FSocketConnection& Conn) {
+					return Conn.ConnectedPart == this && Conn.ConnectedSocket == MySocket;
+				});
+
+				// Update deprecated fields if no more connections
+				if (OtherAttachPoint->Connections.Num() == 0)
+				{
+					OtherAttachPoint->bIsOccupied = false;
+					OtherAttachPoint->ConnectedPart = nullptr;
+					OtherAttachPoint->ConnectedSocket = NAME_None;
+				}
+			}
 		}
 	}
 }
