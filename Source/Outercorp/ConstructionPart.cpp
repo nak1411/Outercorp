@@ -113,11 +113,6 @@ void AConstructionPart::InitializeOverlapBounds()
 		}
 	}
 
-	// Debug log
-	if (OverlapBounds.Num() > 0)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("%s: Initialized %d overlap bounds"), *GetName(), OverlapBounds.Num());
-	}
 }
 
 void AConstructionPart::InitializeFromData(UConstructionPartData* Data)
@@ -148,6 +143,36 @@ void AConstructionPart::InitializeFromData(UConstructionPartData* Data)
 void AConstructionPart::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// Debug draw overlap bounds
+	if (PartData && PartData->bDrawBoundsDebug)
+	{
+		for (UBoxComponent* BoundComp : OverlapBounds)
+		{
+			if (BoundComp)
+			{
+				FVector Center = BoundComp->GetComponentLocation();
+				FVector Extent = BoundComp->GetScaledBoxExtent();
+				FQuat Rotation = BoundComp->GetComponentQuat();
+
+				// Draw the actual bounds box in cyan for placed parts, yellow for ghost
+				FColor DrawColor = (CurrentState == EConstructionPartState::GhostPreview) ? FColor::Yellow : FColor::Cyan;
+				DrawDebugBox(GetWorld(), Center, Extent, Rotation, DrawColor, false, -1.0f, 0, 2.0f);
+
+				// Draw the padded bounds used for snap overlap detection
+				if (PartData->SnapOverlapPadding != 0.0f)
+				{
+					// Apply padding uniformly to all extents
+					FVector PaddedExtent = Extent + FVector(PartData->SnapOverlapPadding);
+
+					// Draw padded box showing the effective snap overlap detection bounds
+					// Red for positive padding (stricter), green for negative padding (more permissive)
+					FColor PaddingColor = PartData->SnapOverlapPadding > 0.0f ? FColor::Red : FColor::Green;
+					DrawDebugBox(GetWorld(), Center, PaddedExtent, Rotation, PaddingColor, false, -1.0f, 0, 1.0f);
+				}
+			}
+		}
+	}
 }
 
 // Deprecated - kept for backward compatibility

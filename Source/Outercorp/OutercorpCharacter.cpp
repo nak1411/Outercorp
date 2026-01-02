@@ -107,6 +107,8 @@ AOutercorpCharacter::AOutercorpCharacter()
 	bIsHoldingRightClick = false;
 	SnapTwistOffset = 0.0f; // Start with no twist offset
 	bIsCurrentlySnapped = false;
+	CurrentSnapTarget = nullptr;
+	CurrentTargetSnapPoint = nullptr;
 	RotationInputAccumulator = 0.0f;
 	bIsInDeleteMode = false;
 	HighlightedPartForDeletion = nullptr;
@@ -2421,7 +2423,8 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 	bool bFoundGroundPoint = false;
 	FVector PlacementPos;
 	FRotator PlacementRot = FRotator::ZeroRotator;
-	AConstructionPart* CurrentSnapTarget = nullptr; // Store the part we're snapping to for overlap checks
+	CurrentSnapTarget = nullptr; // Store the part we're snapping to for overlap checks
+	CurrentTargetSnapPoint = nullptr; // Store the target snap point for rotation testing
 
 	// Try snap point snapping using Arrow components (snapping.txt guide)
 	if (bSnapModeEnabled)
@@ -2537,7 +2540,10 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 			// CRITICAL: Reset ghost to zero rotation, then apply user's twist offset before choosing snap point
 			// FRotator is (Pitch, Yaw, Roll) - Yaw rotates around Z axis (world up/turntable rotation)
-			FRotator GhostBaseRotation = FRotator(0, SnapTwistOffset, 0);
+			// For items with snap-axis rotation, skip yaw pre-rotation (uses distance-based snap selection instead)
+			bool bUseSnapAxisRotation = ConstructionGhostPart->PartData && ConstructionGhostPart->PartData->bEnableSnapAxisRotation;
+			float YawRotation = bUseSnapAxisRotation ? 0.0f : SnapTwistOffset;
+			FRotator GhostBaseRotation = FRotator(0, YawRotation, 0);
 			ConstructionGhostPart->SetActorRotation(GhostBaseRotation);
 
 			// STEP 4: Choose best preview snap point (fixes perpendicular issues)
@@ -2548,6 +2554,8 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 				// Find ghost snap with best matching normal AND compatible filters
 				float BestDot = -1.0f;
+				float BestDistance = FLT_MAX;
+
 				for (UArrowComponent* GhostSnap : ConstructionGhostPart->SnapPoints)
 				{
 					if (!GhostSnap) continue;
@@ -2558,11 +2566,28 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 					// Check filter compatibility
 					bool bIsCompatible = ConstructionGhostPart->AreSnapPointsCompatible(GhostSnap, TargetPart, BestTargetSnapPoint);
 
-					// Only consider if within angle threshold AND filters allow it
-					if (Dot > 0.7f && Dot > BestDot && bIsCompatible)
+					if (bIsCompatible)
 					{
-						BestDot = Dot;
-						BestGhostSnapPoint = GhostSnap;
+						if (bUseSnapAxisRotation)
+						{
+							// For snap-axis rotation items: choose closest snap point, ignore alignment
+							// This allows railings to snap at any angle
+							float Distance = FVector::Dist(GhostSnap->GetComponentLocation(), BestTargetSnapPoint->GetComponentLocation());
+							if (Distance < BestDistance)
+							{
+								BestDistance = Distance;
+								BestGhostSnapPoint = GhostSnap;
+							}
+						}
+						else
+						{
+							// For normal items: require good alignment (facing each other)
+							if (Dot > 0.7f && Dot > BestDot)
+							{
+								BestDot = Dot;
+								BestGhostSnapPoint = GhostSnap;
+							}
+						}
 					}
 				}
 			}
@@ -2574,6 +2599,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			bFoundSnapPoint = true;
 			bIsCurrentlySnapped = true;
 			CurrentSnapTarget = TargetPart; // Store for overlap checking
+			CurrentTargetSnapPoint = BestTargetSnapPoint; // Store for rotation testing
 
 			// STEP 5: Compute rotation - align normals then apply 90° twist
 			// Get target snap point world transform vectors
@@ -2631,9 +2657,40 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				FinalRotation = BaseRotation * TwistRotation;
 			}
 
-			// Apply user's twist offset ONLY for top/bottom snaps (where yaw pre-rotation doesn't choose different faces)
-			if (SnapTwistOffset != 0.0f)
+			// Apply user's twist offset - behavior depends on item configuration
+			bool bUseSnapAxisRotation = ConstructionGhostPart->PartData && ConstructionGhostPart->PartData->bEnableSnapAxisRotation;
+
+			if (bUseSnapAxisRotation && SnapTwistOffset != 0.0f)
 			{
+				// NEW BEHAVIOR: Rotate around snap connection axis (for items like railings)
+				// The rotation axis is the snap point's UP vector (perpendicular to connection surface)
+				FVector RotationAxis = TargetUp;
+
+				// For snap-axis rotation, map twist offset to perpendicular angles only:
+				// 0° = straight, 90° = perpendicular right, 180° = back to straight, 270° = perpendicular left
+				// This prevents the railing from overlapping with the placed railing (no 180° flip)
+				float ActualRotation = 0.0f;
+				float NormalizedOffset = FMath::Fmod(SnapTwistOffset, 360.0f);
+				if (NormalizedOffset == 90.0f)
+				{
+					ActualRotation = 90.0f;  // Perpendicular right
+				}
+				else if (NormalizedOffset == 270.0f)
+				{
+					ActualRotation = -90.0f; // Perpendicular left (270° = -90°)
+				}
+				// 0° and 180° both map to 0° (straight) - prevents overlap
+
+				// Create rotation around the snap axis
+				FQuat SnapAxisRotation = FQuat(RotationAxis, ActualRotation * (PI / 180.0f));
+
+				// Apply rotation around snap axis AFTER base alignment
+				FinalRotation = FinalRotation * SnapAxisRotation;
+			}
+			else if (SnapTwistOffset != 0.0f)
+			{
+				// ORIGINAL BEHAVIOR: Apply yaw rotation for top/bottom snaps (for items like crates)
+				// This allows rotating when stacking items on top of each other
 				FString SnapName = BestGhostSnapPoint->GetName();
 				if (SnapName.Contains("Top") || SnapName.Contains("Bottom"))
 				{
@@ -2661,22 +2718,96 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			// Check overlap using OBB
 			ConstructionGhostPart->SetActorLocation(PlacementPos);
 
-			// Check for overlaps with other construction parts
+			// CRITICAL: Check for overlaps when rotating on top/bottom snaps
+			// This prevents crates from overlapping when rotated
+			// NOTE: We ALWAYS check top/bottom snaps regardless of bAllowOverlap setting
 			bool bHasExcessiveOverlap = false;
-			if (ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap)
-			{
-				// Get all overlapping actors
-				TArray<AActor*> OverlappingActors;
-				ConstructionGhostPart->GetOverlappingActors(OverlappingActors, AConstructionPart::StaticClass());
 
-				// Check if any overlapping parts are not the target we're snapping to
-				for (AActor* OverlapActor : OverlappingActors)
+			// Check if this is a top/bottom snap that could have rotation
+			FString SnapName = BestGhostSnapPoint->GetName();
+			bool bIsTopBottomSnap = SnapName.Contains("Top") || SnapName.Contains("Bottom");
+
+			// For top/bottom snaps, ALWAYS check overlaps (ignore bAllowOverlap)
+			// For other snaps, respect the bAllowOverlap setting
+			bool bShouldCheckOverlap = bIsTopBottomSnap ||
+				(ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap);
+
+			if (bShouldCheckOverlap)
+			{
+				if (bIsTopBottomSnap || ConstructionGhostPart->OverlapBounds.Num() > 0)
 				{
-					if (OverlapActor != TargetPart)
+					// Get all nearby construction parts
+					TArray<AActor*> AllParts;
+					UGameplayStatics::GetAllActorsOfClass(GetWorld(), AConstructionPart::StaticClass(), AllParts);
+
+					for (AActor* Actor : AllParts)
 					{
-						// Overlapping with a different part - invalid placement
-						bHasExcessiveOverlap = true;
-						break;
+						AConstructionPart* OtherPart = Cast<AConstructionPart>(Actor);
+						if (!OtherPart || OtherPart == ConstructionGhostPart || OtherPart == TargetPart)
+						{
+							continue;
+						}
+
+						if (OtherPart->CurrentState != EConstructionPartState::Placed)
+						{
+							continue;
+						}
+
+						// Check for overlap between ghost and this part
+						bool bPartsOverlap = false;
+
+						// Use overlap bounds if available on both parts
+						if (ConstructionGhostPart->OverlapBounds.Num() > 0 && OtherPart->OverlapBounds.Num() > 0)
+						{
+							// Detailed bounds checking
+							for (UBoxComponent* GhostBound : ConstructionGhostPart->OverlapBounds)
+							{
+								if (!GhostBound) continue;
+
+								FVector GhostCenter = PlacementPos + PlacementRot.RotateVector(GhostBound->GetRelativeLocation());
+								FVector GhostExtent = GhostBound->GetScaledBoxExtent();
+
+								for (UBoxComponent* OtherBound : OtherPart->OverlapBounds)
+								{
+									if (!OtherBound) continue;
+
+									FVector OtherCenter = OtherPart->GetActorLocation() + OtherPart->GetActorRotation().RotateVector(OtherBound->GetRelativeLocation());
+									FVector OtherExtent = OtherBound->GetScaledBoxExtent();
+
+									// AABB intersection test
+									FBox GhostBox(GhostCenter - GhostExtent, GhostCenter + GhostExtent);
+									FBox OtherBox(OtherCenter - OtherExtent, OtherCenter + OtherExtent);
+
+									if (GhostBox.Intersect(OtherBox))
+									{
+										bPartsOverlap = true;
+										break;
+									}
+								}
+
+								if (bPartsOverlap) break;
+							}
+						}
+						else if (ConstructionGhostPart->MeshComponent && OtherPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
+						{
+							// Fallback to mesh bounds - calculate at PlacementPos with PlacementRot
+							FBox LocalGhostBounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+							FVector GhostExtent = LocalGhostBounds.GetExtent() * ConstructionGhostPart->GetActorScale3D();
+							FBox GhostBounds(PlacementPos - GhostExtent, PlacementPos + GhostExtent);
+
+							FBox OtherBounds = OtherPart->MeshComponent->Bounds.GetBox();
+
+							if (GhostBounds.Intersect(OtherBounds))
+							{
+								bPartsOverlap = true;
+							}
+						}
+
+						if (bPartsOverlap)
+						{
+							bHasExcessiveOverlap = true;
+							break;
+						}
 					}
 				}
 			}
@@ -2706,8 +2837,11 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 	bool bHasOverlap = false;
 	AActor* GroundActor = nullptr; // Track the ground/surface actor to exclude from overlap checks
 
-	// Always try ground snapping if no socket snap found
-	if (!bFoundSnapPoint)
+	// Check if we should skip ground snapping when bAllowFloorOverlap is enabled
+	bool bSkipGroundSnap = ConstructionGhostPart && ConstructionGhostPart->PartData && ConstructionGhostPart->PartData->bAllowFloorOverlap;
+
+	// Always try ground snapping if no socket snap found (unless bAllowFloorOverlap is true)
+	if (!bFoundSnapPoint && !bSkipGroundSnap)
 	{
 		bIsCurrentlySnapped = false;
 		FHitResult HitResult;
@@ -2873,19 +3007,30 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		}
 	}
 
-	// If no ground point found and no snap point, placement is invalid
+	// If no ground point found and no snap point, check if we should allow free placement
 	if (!bFoundSnapPoint && !bFoundGroundPoint)
 	{
-		// No valid placement found - show ghost in invalid state
-		if (ConstructionGhostPart)
+		// If bAllowFloorOverlap is enabled, allow free placement at the target position
+		if (bSkipGroundSnap)
 		{
-			// Position ghost at camera forward distance anyway for visual feedback
-			ConstructionGhostPart->SetActorLocation(FreePlacementPos);
-			ConstructionGhostPart->SetActorRotation(FRotator(0.0f, CurrentGhostRotation, 0.0f));
-			ConstructionGhostPart->SetGhostPreview(false); // Red/invalid material
-			bHasValidPlacement = false;
+			PlacementPos = FreePlacementPos;
+			PlacementRot = FRotator(0.0f, CurrentGhostRotation, 0.0f);
+			// Mark as found so placement is considered valid
+			bFoundGroundPoint = true;
 		}
-		return;
+		else
+		{
+			// No valid placement found - show ghost in invalid state
+			if (ConstructionGhostPart)
+			{
+				// Position ghost at camera forward distance anyway for visual feedback
+				ConstructionGhostPart->SetActorLocation(FreePlacementPos);
+				ConstructionGhostPart->SetActorRotation(FRotator(0.0f, CurrentGhostRotation, 0.0f));
+				ConstructionGhostPart->SetGhostPreview(false); // Red/invalid material
+				bHasValidPlacement = false;
+			}
+			return;
+		}
 	}
 
 	// Check if placement should be marked invalid due to overlap
@@ -2924,7 +3069,12 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		// Final overlap check after positioning and rotation
 		bool bHasFinalOverlap = false;
 
-		if (ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap)
+		// OVERRIDE: For snapped placements, ALWAYS check overlaps regardless of bAllowOverlap
+		// This ensures rotated crates don't overlap with adjacent crates
+		bool bShouldDoFinalCheck = (ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap) ||
+			bIsCurrentlySnapped;
+
+		if (bShouldDoFinalCheck)
 		{
 
 			// Check all overlap bounds (supports multiple bounds for complex shapes)
@@ -2956,12 +3106,6 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				OverlapCheckCenter += PlacementRot.RotateVector(OverlapBound->GetRelativeLocation());
 
 				FCollisionShape CollisionShape = FCollisionShape::MakeBox(BoxExtent);
-
-				// Debug visualization if enabled
-				if (ConstructionGhostPart->PartData->bDrawBoundsDebug)
-				{
-					DrawDebugBox(GetWorld(), OverlapCheckCenter, BoxExtent, PlacementRot.Quaternion(), FColor::Yellow, false, -1.0f, 0, 2.0f);
-				}
 
 				// Query against multiple channels to catch all construction parts
 				// Some parts may use WorldStatic, others WorldDynamic, or Visibility
@@ -3005,6 +3149,65 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 						AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
 						if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
 						{
+							// For snapped placements, verify overlap with bounds checking to avoid false positives
+							if (bIsCurrentlySnapped)
+							{
+								bool bHasRealOverlap = false;
+
+								// If BOTH parts have overlap bounds, do precise checking
+								if (ConstructionGhostPart->OverlapBounds.Num() > 0 && OverlapPart->OverlapBounds.Num() > 0)
+								{
+									// Detailed bounds checking
+									for (UBoxComponent* GhostBound : ConstructionGhostPart->OverlapBounds)
+									{
+										if (!GhostBound) continue;
+
+										FVector GhostCenter = PlacementPos + PlacementRot.RotateVector(GhostBound->GetRelativeLocation());
+										FVector GhostExtent = GhostBound->GetScaledBoxExtent();
+
+										for (UBoxComponent* OtherBound : OverlapPart->OverlapBounds)
+										{
+											if (!OtherBound) continue;
+
+											FVector OtherCenter = OverlapPart->GetActorLocation() + OverlapPart->GetActorRotation().RotateVector(OtherBound->GetRelativeLocation());
+											FVector OtherExtent = OtherBound->GetScaledBoxExtent();
+
+											// Distance check - rotation-independent bounding sphere test
+											// Apply SnapOverlapPadding to adjust tolerance (negative = more permissive, positive = stricter)
+											float GhostPadding = ConstructionGhostPart->PartData ? ConstructionGhostPart->PartData->SnapOverlapPadding : 0.0f;
+											float OtherPadding = OverlapPart->PartData ? OverlapPart->PartData->SnapOverlapPadding : 0.0f;
+
+											float GhostMaxExtent = FMath::Max3(GhostExtent.X, GhostExtent.Y, GhostExtent.Z) + GhostPadding;
+											float OtherMaxExtent = FMath::Max3(OtherExtent.X, OtherExtent.Y, OtherExtent.Z) + OtherPadding;
+											float Distance = FVector::Dist(GhostCenter, OtherCenter);
+
+											if (Distance < (GhostMaxExtent + OtherMaxExtent))
+											{
+												bHasRealOverlap = true;
+												break;
+											}
+										}
+
+										if (bHasRealOverlap) break;
+									}
+								}
+								else
+								{
+									// If either part lacks overlap bounds, trust the collision query
+									bHasRealOverlap = true;
+								}
+
+								if (bHasRealOverlap)
+								{
+									bHasFinalOverlap = true;
+									break;
+								}
+
+								// Skip the rest of the checks for snapped placements
+								continue;
+							}
+
+							// For non-snapped placements, do detailed bounds checking
 							// If the overlapped part has custom overlap bounds, check against those instead
 							if (OverlapPart->OverlapBounds.Num() > 0)
 							{
@@ -3068,12 +3271,6 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 				FCollisionShape CollisionShape = FCollisionShape::MakeBox(BoxExtent);
 
-				// Debug visualization if enabled
-				if (ConstructionGhostPart->PartData->bDrawBoundsDebug)
-				{
-					DrawDebugBox(GetWorld(), OverlapCheckCenter, BoxExtent, PlacementRot.Quaternion(), FColor::Yellow, false, -1.0f, 0, 2.0f);
-				}
-
 				// Query against multiple channels to catch all construction parts
 				// Some parts may use WorldStatic, others WorldDynamic, or Visibility
 				TArray<ECollisionChannel> ChannelsToCheck = { ECC_WorldStatic, ECC_WorldDynamic, ECC_Visibility };
@@ -3116,6 +3313,65 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 						AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
 						if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
 						{
+							// For snapped placements, verify overlap with bounds checking to avoid false positives
+							if (bIsCurrentlySnapped)
+							{
+								bool bHasRealOverlap = false;
+
+								// If BOTH parts have overlap bounds, do precise checking
+								if (ConstructionGhostPart->OverlapBounds.Num() > 0 && OverlapPart->OverlapBounds.Num() > 0)
+								{
+									// Detailed bounds checking
+									for (UBoxComponent* GhostBound : ConstructionGhostPart->OverlapBounds)
+									{
+										if (!GhostBound) continue;
+
+										FVector GhostCenter = PlacementPos + PlacementRot.RotateVector(GhostBound->GetRelativeLocation());
+										FVector GhostExtent = GhostBound->GetScaledBoxExtent();
+
+										for (UBoxComponent* OtherBound : OverlapPart->OverlapBounds)
+										{
+											if (!OtherBound) continue;
+
+											FVector OtherCenter = OverlapPart->GetActorLocation() + OverlapPart->GetActorRotation().RotateVector(OtherBound->GetRelativeLocation());
+											FVector OtherExtent = OtherBound->GetScaledBoxExtent();
+
+											// Distance check - rotation-independent bounding sphere test
+											// Apply SnapOverlapPadding to adjust tolerance (negative = more permissive, positive = stricter)
+											float GhostPadding = ConstructionGhostPart->PartData ? ConstructionGhostPart->PartData->SnapOverlapPadding : 0.0f;
+											float OtherPadding = OverlapPart->PartData ? OverlapPart->PartData->SnapOverlapPadding : 0.0f;
+
+											float GhostMaxExtent = FMath::Max3(GhostExtent.X, GhostExtent.Y, GhostExtent.Z) + GhostPadding;
+											float OtherMaxExtent = FMath::Max3(OtherExtent.X, OtherExtent.Y, OtherExtent.Z) + OtherPadding;
+											float Distance = FVector::Dist(GhostCenter, OtherCenter);
+
+											if (Distance < (GhostMaxExtent + OtherMaxExtent))
+											{
+												bHasRealOverlap = true;
+												break;
+											}
+										}
+
+										if (bHasRealOverlap) break;
+									}
+								}
+								else
+								{
+									// If either part lacks overlap bounds, trust the collision query
+									bHasRealOverlap = true;
+								}
+
+								if (bHasRealOverlap)
+								{
+									bHasFinalOverlap = true;
+									break;
+								}
+
+								// Skip the rest of the checks for snapped placements
+								continue;
+							}
+
+							// For non-snapped placements, do detailed bounds checking
 							// If the overlapped part has custom overlap bounds, check against those instead
 							if (OverlapPart->OverlapBounds.Num() > 0)
 							{
@@ -3252,6 +3508,7 @@ void AOutercorpCharacter::PlaceConstructionPart()
 	// Reset ghost rotation for next placement
 	CurrentGhostRotation = 0.0f;
 	RotationInputAccumulator = 0.0f;
+	SnapTwistOffset = 0.0f; // Reset snap twist offset
 
 	// Clear snap targets
 	TargetConstructionPart = nullptr;
@@ -3297,6 +3554,215 @@ void AOutercorpCharacter::ToggleSnapMode()
 	}
 }
 
+bool AOutercorpCharacter::TestRotationForValidSnap(float TestRotationOffset, AConstructionPart* TargetPart, UArrowComponent* TargetSnapPoint) const
+{
+	if (!ConstructionGhostPart || !TargetPart || !TargetSnapPoint)
+	{
+		return false;
+	}
+
+	// Apply test rotation to ghost (temporarily, in local space)
+	FRotator TestRotation = FRotator(0, TestRotationOffset, 0);
+	FQuat TestQuat = TestRotation.Quaternion();
+
+	// Get the desired normal from the target snap point
+	FVector DesiredNormal = -TargetSnapPoint->GetForwardVector();
+
+	// Find a compatible snap point at this rotation
+	UArrowComponent* CompatibleGhostSnap = nullptr;
+
+	// Test each ghost snap point at this rotation to see if any would be compatible
+	for (UArrowComponent* GhostSnap : ConstructionGhostPart->SnapPoints)
+	{
+		if (!GhostSnap) continue;
+
+		// Get the ghost snap's forward vector as if rotated by TestRotationOffset
+		// We need to rotate the snap point's RELATIVE forward by the test rotation
+		FVector GhostSnapRelativeForward = GhostSnap->GetForwardVector();
+
+		// Remove current actor rotation to get local forward, then apply test rotation
+		FQuat ActorRot = ConstructionGhostPart->GetActorQuat();
+		FVector LocalForward = ActorRot.Inverse().RotateVector(GhostSnapRelativeForward);
+		FVector TestForward = TestQuat.RotateVector(LocalForward);
+
+		// Check alignment with desired normal
+		float Dot = FVector::DotProduct(TestForward, DesiredNormal);
+
+		// Check filter compatibility
+		bool bIsCompatible = ConstructionGhostPart->AreSnapPointsCompatible(GhostSnap, TargetPart, TargetSnapPoint);
+
+		// If this snap point would align well AND is compatible, remember it for overlap testing
+		if (Dot > 0.7f && bIsCompatible)
+		{
+			CompatibleGhostSnap = GhostSnap;
+			break;
+		}
+	}
+
+	// If no compatible snap point found, rotation is invalid
+	if (!CompatibleGhostSnap)
+	{
+		return false;
+	}
+
+	// Now perform overlap check at this rotation to ensure it doesn't collide with other parts
+	// This is critical for top/bottom snaps where multiple items can be on the same surface
+
+	// Store current actor state to restore later
+	FVector OriginalLocation = ConstructionGhostPart->GetActorLocation();
+	FRotator OriginalRotation = ConstructionGhostPart->GetActorRotation();
+
+	// Calculate the rotation and position for this test
+	// We need to replicate the rotation logic from UpdateConstructionPreview for top/bottom snaps
+	FString SnapName = CompatibleGhostSnap->GetName();
+	bool bIsTopBottomSnap = SnapName.Contains("Top") || SnapName.Contains("Bottom");
+
+	if (bIsTopBottomSnap)
+	{
+		// Get target snap rotation
+		FQuat TargetSnapRot = TargetSnapPoint->GetComponentQuat();
+		FQuat TargetUp = TargetSnapRot.GetUpVector().ToOrientationQuat();
+		FQuat TargetSnapWorldRot = TargetSnapRot;
+
+		// Get ghost snap rotation
+		FQuat GhostActorRotation = ConstructionGhostPart->GetActorQuat();
+		FQuat GhostSnapWorldRot = CompatibleGhostSnap->GetComponentQuat();
+		FQuat GhostSnapRelativeRot = GhostActorRotation.Inverse() * GhostSnapWorldRot;
+
+		// Align snap points (face opposite)
+		FQuat DesiredSnapRot = TargetSnapWorldRot * FQuat(FVector(0, 0, 1), PI);
+		FQuat BaseRotation = DesiredSnapRot * GhostSnapRelativeRot.Inverse();
+
+		// Apply the test yaw rotation for top/bottom
+		FQuat AdditionalYaw = FQuat(FVector(0, 0, 1), TestRotationOffset * (PI / 180.0f));
+		FQuat TestFinalRotation = BaseRotation * AdditionalYaw;
+
+		// Set test rotation
+		ConstructionGhostPart->SetActorRotation(TestFinalRotation.Rotator());
+
+		// Calculate test position by aligning snap points
+		FVector GhostSnapWorldLoc = CompatibleGhostSnap->GetComponentLocation();
+		FVector TargetSnapWorldLoc = TargetSnapPoint->GetComponentLocation();
+		FVector Delta = TargetSnapWorldLoc - GhostSnapWorldLoc;
+		FVector TestPosition = ConstructionGhostPart->GetActorLocation() + Delta;
+
+		// Set test position
+		ConstructionGhostPart->SetActorLocation(TestPosition);
+
+		// Perform overlap check
+		bool bHasOverlap = false;
+		FRotator TestPlacementRot = TestFinalRotation.Rotator();
+
+		// Check overlap using the same logic as main placement
+		TArray<UBoxComponent*> BoundsToCheck = ConstructionGhostPart->OverlapBounds;
+
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(ConstructionGhostPart);
+		QueryParams.AddIgnoredActor(this);
+
+		for (UBoxComponent* OverlapBound : BoundsToCheck)
+		{
+			if (!OverlapBound) continue;
+
+			TArray<FOverlapResult> Overlaps;
+			FVector OverlapCheckCenter = TestPosition;
+			FVector BoxExtent = OverlapBound->GetScaledBoxExtent();
+			OverlapCheckCenter += TestPlacementRot.RotateVector(OverlapBound->GetRelativeLocation());
+
+			FCollisionShape CollisionShape = FCollisionShape::MakeBox(BoxExtent);
+
+			TArray<ECollisionChannel> ChannelsToCheck = { ECC_WorldStatic, ECC_WorldDynamic, ECC_Visibility };
+
+			for (ECollisionChannel Channel : ChannelsToCheck)
+			{
+				TArray<FOverlapResult> ChannelOverlaps;
+				GetWorld()->OverlapMultiByChannel(
+					ChannelOverlaps,
+					OverlapCheckCenter,
+					TestPlacementRot.Quaternion(),
+					Channel,
+					CollisionShape,
+					QueryParams
+				);
+				Overlaps.Append(ChannelOverlaps);
+			}
+
+			if (Overlaps.Num() > 0)
+			{
+				for (const FOverlapResult& Overlap : Overlaps)
+				{
+					AActor* OverlapActor = Overlap.GetActor();
+					if (!OverlapActor) continue;
+
+					// Skip the part we're snapping to
+					if (OverlapActor == TargetPart)
+					{
+						continue;
+					}
+
+					// Check if it's a placed construction part
+					AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
+					if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
+					{
+						// Check against overlap bounds
+						if (OverlapPart->OverlapBounds.Num() > 0)
+						{
+							bool bOverlapsWithTargetBounds = false;
+							for (UBoxComponent* TargetBound : OverlapPart->OverlapBounds)
+							{
+								if (TargetBound)
+								{
+									FVector TargetCenter = OverlapPart->GetActorLocation() + OverlapPart->GetActorRotation().RotateVector(TargetBound->GetRelativeLocation());
+									FVector TargetExtent = TargetBound->GetScaledBoxExtent();
+
+									FBox GhostBox(OverlapCheckCenter - BoxExtent, OverlapCheckCenter + BoxExtent);
+									FBox TargetBox(TargetCenter - TargetExtent, TargetCenter + TargetExtent);
+
+									if (GhostBox.Intersect(TargetBox))
+									{
+										bOverlapsWithTargetBounds = true;
+										break;
+									}
+								}
+							}
+
+							if (bOverlapsWithTargetBounds)
+							{
+								bHasOverlap = true;
+								break;
+							}
+						}
+						else
+						{
+							// No custom bounds, treat as overlap
+							bHasOverlap = true;
+							break;
+						}
+					}
+				}
+			}
+
+			if (bHasOverlap)
+			{
+				break;
+			}
+		}
+
+		// Restore original position and rotation
+		ConstructionGhostPart->SetActorLocation(OriginalLocation);
+		ConstructionGhostPart->SetActorRotation(OriginalRotation);
+
+		// If we found an overlap, this rotation is invalid
+		if (bHasOverlap)
+		{
+			return false;
+		}
+	}
+
+	// Rotation is valid (snap point compatible and no overlaps)
+	return true;
+}
+
 void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value)
 {
 	// Only allow adjustment when in construction mode or move mode
@@ -3308,22 +3774,79 @@ void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value
 	// Get the scroll wheel axis value (positive = scroll up, negative = scroll down)
 	float ScrollValue = Value.Get<float>();
 
-	// If currently snapped, toggle snap twist instead of adjusting distance
-	if (bIsCurrentlySnapped)
+	// If currently snapped, rotate based on item type
+	if (bIsCurrentlySnapped && CurrentSnapTarget && CurrentTargetSnapPoint)
 	{
-		// Increment/decrement snap twist by 90° per scroll notch
-		if (ScrollValue > 0)
-		{
-			SnapTwistOffset += 90.0f;
-		}
-		else if (ScrollValue < 0)
-		{
-			SnapTwistOffset -= 90.0f;
-		}
+		// Check if this item uses snap-axis rotation
+		bool bUseSnapAxisRotation = ConstructionGhostPart->PartData && ConstructionGhostPart->PartData->bEnableSnapAxisRotation;
 
-		// Wrap around 0-360
-		while (SnapTwistOffset >= 360.0f) SnapTwistOffset -= 360.0f;
-		while (SnapTwistOffset < 0.0f) SnapTwistOffset += 360.0f;
+		if (bUseSnapAxisRotation)
+		{
+			// SNAP-AXIS ROTATION: Simply increment/decrement twist offset
+			// The validation happens in the rendering code, not here
+			if (ScrollValue > 0)
+			{
+				SnapTwistOffset += 90.0f;
+			}
+			else if (ScrollValue < 0)
+			{
+				SnapTwistOffset -= 90.0f;
+			}
+
+			// Wrap around 0-360
+			while (SnapTwistOffset >= 360.0f) SnapTwistOffset -= 360.0f;
+			while (SnapTwistOffset < 0.0f) SnapTwistOffset += 360.0f;
+		}
+		else
+		{
+			// SMART ROTATION: Only apply rotations that maintain a valid snap (for crates with multiple snap points)
+			float RotationDirection = (ScrollValue > 0) ? 90.0f : -90.0f;
+
+			// Try rotations in 90° increments until we find a valid one (max 4 attempts = full circle)
+			float OriginalOffset = SnapTwistOffset;
+			bool bFoundValidRotation = false;
+
+			for (int32 i = 0; i < 4; i++)
+			{
+				// Calculate test rotation
+				float TestOffset = OriginalOffset + (RotationDirection * (i + 1));
+
+				// Wrap to 0-360 range
+				while (TestOffset >= 360.0f) TestOffset -= 360.0f;
+				while (TestOffset < 0.0f) TestOffset += 360.0f;
+
+				// Test if this rotation would result in a valid snap
+				if (TestRotationForValidSnap(TestOffset, CurrentSnapTarget, CurrentTargetSnapPoint))
+				{
+					SnapTwistOffset = TestOffset;
+					bFoundValidRotation = true;
+					break;
+				}
+			}
+
+			// If no valid rotation found in the scroll direction, try the opposite direction
+			if (!bFoundValidRotation)
+			{
+				RotationDirection = -RotationDirection; // Reverse direction
+
+				for (int32 i = 0; i < 4; i++)
+				{
+					float TestOffset = OriginalOffset + (RotationDirection * (i + 1));
+
+					while (TestOffset >= 360.0f) TestOffset -= 360.0f;
+					while (TestOffset < 0.0f) TestOffset += 360.0f;
+
+					if (TestRotationForValidSnap(TestOffset, CurrentSnapTarget, CurrentTargetSnapPoint))
+					{
+						SnapTwistOffset = TestOffset;
+						bFoundValidRotation = true;
+						break;
+					}
+				}
+			}
+
+			// If still no valid rotation found, keep current rotation (prevents breaking snap)
+		}
 
 		return;
 	}
@@ -3459,6 +3982,39 @@ void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
 	{
 		ConstructionGhostPart->InitializeFromData(DataToUse);
 		CurrentPlacementDistance = DataToUse->MaxPlacementDistance;
+
+		// Calculate and cache ground offset ONCE to prevent jitter
+		CachedGroundOffset = 0.0f;
+		if (ConstructionGhostPart->OverlapBounds.Num() > 0 && ConstructionGhostPart->MeshComponent)
+		{
+			float LowestZ = FLT_MAX;
+
+			// Get MeshComponent's offset from actor root
+			FVector MeshRelLoc = ConstructionGhostPart->MeshComponent->GetRelativeLocation();
+
+			for (UBoxComponent* BoundComp : ConstructionGhostPart->OverlapBounds)
+			{
+				if (BoundComp)
+				{
+					// Boundary is child of MeshComponent, so we need to add MeshComponent's offset
+					FVector BoundRelLoc = BoundComp->GetRelativeLocation();
+					FVector BoundExtent = BoundComp->GetScaledBoxExtent();
+					float LocalBottom = MeshRelLoc.Z + BoundRelLoc.Z - BoundExtent.Z;
+
+					LowestZ = FMath::Min(LowestZ, LocalBottom);
+				}
+			}
+			if (LowestZ != FLT_MAX)
+			{
+				CachedGroundOffset = LowestZ;
+			}
+		}
+		else if (ConstructionGhostPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
+		{
+			FBox Bounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+			FVector ScaledMin = Bounds.Min * ConstructionGhostPart->GetActorScale3D();
+			CachedGroundOffset = ScaledMin.Z;
+		}
 
 		// Set to ghost preview state
 		ConstructionGhostPart->SetPartState(EConstructionPartState::GhostPreview);
@@ -4024,30 +4580,58 @@ void AOutercorpCharacter::PickupOrPlaceMovePart()
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-			// Spawn ghost at camera position initially
-			FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
-			FVector CameraForward = FirstPersonCameraComponent->GetForwardVector();
-			FVector InitialLocation = CameraLocation + (CameraForward * CurrentPlacementDistance);
-
 			// Use the Blueprint class from the PartData if specified, otherwise fallback to ConstructionPartClass
 			TSubclassOf<AConstructionPart> ClassToSpawn = PartData->PartBlueprintClass ? PartData->PartBlueprintClass : ConstructionPartClass;
 
+			// Spawn at zero initially (same as construction mode) to calculate offsets correctly
 			ConstructionGhostPart = GetWorld()->SpawnActor<AConstructionPart>(
 				ClassToSpawn,
-				InitialLocation,
-				HeldConstructionPart->GetActorRotation(),
+				FVector::ZeroVector,
+				FRotator::ZeroRotator,
 				SpawnParams
 			);
 
 			if (ConstructionGhostPart)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Move Mode: Ghost spawned successfully"));
-
 				// Initialize with same data
 				ConstructionGhostPart->InitializeFromData(PartData);
 
 				// Match the scale
 				ConstructionGhostPart->SetActorScale3D(OriginalScale);
+
+				// Calculate and cache ground offset ONCE to prevent jitter
+				// This is the same calculation as construction mode
+				CachedGroundOffset = 0.0f;
+				if (ConstructionGhostPart->OverlapBounds.Num() > 0 && ConstructionGhostPart->MeshComponent)
+				{
+					float LowestZ = FLT_MAX;
+
+					// Get MeshComponent's offset from actor root
+					FVector MeshRelLoc = ConstructionGhostPart->MeshComponent->GetRelativeLocation();
+
+					for (UBoxComponent* BoundComp : ConstructionGhostPart->OverlapBounds)
+					{
+						if (BoundComp)
+						{
+							// Boundary is child of MeshComponent, so we need to add MeshComponent's offset
+							FVector BoundRelLoc = BoundComp->GetRelativeLocation();
+							FVector BoundExtent = BoundComp->GetScaledBoxExtent();
+							float LocalBottom = MeshRelLoc.Z + BoundRelLoc.Z - BoundExtent.Z;
+
+							LowestZ = FMath::Min(LowestZ, LocalBottom);
+						}
+					}
+					if (LowestZ != FLT_MAX)
+					{
+						CachedGroundOffset = LowestZ;
+					}
+				}
+				else if (ConstructionGhostPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
+				{
+					FBox Bounds = ConstructionGhostPart->MeshComponent->GetStaticMesh()->GetBoundingBox();
+					FVector ScaledMin = Bounds.Min * ConstructionGhostPart->GetActorScale3D();
+					CachedGroundOffset = ScaledMin.Z;
+				}
 
 				// Set to ghost preview state (this will apply the ghost material)
 				ConstructionGhostPart->SetPartState(EConstructionPartState::GhostPreview);

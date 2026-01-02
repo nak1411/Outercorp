@@ -316,6 +316,14 @@ protected:
 	/** Whether the ghost is currently snapped to a snap point */
 	bool bIsCurrentlySnapped;
 
+	/** Currently snapped target part (cached for rotation testing) */
+	UPROPERTY()
+	class AConstructionPart* CurrentSnapTarget;
+
+	/** Currently active target snap point (cached for rotation testing) */
+	UPROPERTY()
+	class UArrowComponent* CurrentTargetSnapPoint;
+
 	/** Current placement distance from camera */
 	UPROPERTY(BlueprintReadWrite, Category = "Construction")
 	float CurrentPlacementDistance;
@@ -557,6 +565,9 @@ protected:
 
 	/** Helper function to check if two socket types are compatible for snapping */
 	bool AreSocketTypesCompatible(FName SocketType1, FName SocketType2) const;
+
+	/** Helper function to test if a rotation offset will result in a valid snap */
+	bool TestRotationForValidSnap(float TestRotationOffset, class AConstructionPart* TargetPart, class UArrowComponent* TargetSnapPoint) const;
 
 	/** Toggle inventory display */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
