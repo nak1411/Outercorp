@@ -3,8 +3,11 @@
 #include "ItemPreviewController.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/SkeletalMesh.h"
+#include "EquippableTool.h"
 
 AItemPreviewController::AItemPreviewController()
 {
@@ -95,10 +98,14 @@ void AItemPreviewController::Tick(float DeltaTime)
 		CurrentRotationQuat = FQuat::Slerp(CurrentRotationQuat, TargetRotationQuat, FMath::Clamp(DeltaTime * RotationInterpolationSpeed, 0.0f, 1.0f));
 		CurrentRotationQuat.Normalize();
 
-		// Apply rotation to the item mesh if it exists
-		if (CurrentItemMesh)
+		// Apply rotation to the active mesh (static or skeletal)
+		if (CurrentItemMesh && CurrentItemMesh->GetStaticMesh())
 		{
 			CurrentItemMesh->SetRelativeRotation(CurrentRotationQuat.Rotator());
+		}
+		else if (CurrentSkeletalMesh && CurrentSkeletalMesh->GetSkeletalMeshAsset())
+		{
+			CurrentSkeletalMesh->SetRelativeRotation(CurrentRotationQuat.Rotator());
 		}
 	}
 
@@ -204,47 +211,90 @@ void AItemPreviewController::SetPreviewItem(const FInventoryItem& Item)
 	// Reset view when changing items
 	ResetView();
 
-	// Create mesh component if needed
-	if (!CurrentItemMesh)
-	{
-		CurrentItemMesh = NewObject<UStaticMeshComponent>(this, TEXT("ItemMesh"));
-		CurrentItemMesh->SetupAttachment(PreviewRoot);
-		CurrentItemMesh->RegisterComponent();
-		CurrentItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	}
+	// Check if this is an equippable item with a skeletal mesh
+	bool bIsSkeletalMesh = false;
+	USkeletalMesh* LoadedSkeletalMesh = nullptr;
+	UStaticMesh* LoadedStaticMesh = nullptr;
+	UPrimitiveComponent* ActiveMeshComponent = nullptr;
 
-	// Load and set the mesh from item data
-	UStaticMesh* LoadedMesh = nullptr;
-	if (Item.ItemData->ItemMesh.IsValid())
+	// Try to get skeletal mesh from equippable tool class
+	if (Item.ItemData->bIsEquippable && Item.ItemData->EquippableToolClass)
 	{
-		LoadedMesh = Item.ItemData->ItemMesh.Get();
-		CurrentItemMesh->SetStaticMesh(LoadedMesh);
-	}
-	else if (!Item.ItemData->ItemMesh.IsNull())
-	{
-		LoadedMesh = Item.ItemData->ItemMesh.LoadSynchronous();
-		if (LoadedMesh)
+		// Get the default object to inspect its properties
+		AEquippableTool* ToolCDO = Item.ItemData->EquippableToolClass->GetDefaultObject<AEquippableTool>();
+		if (ToolCDO)
 		{
-			CurrentItemMesh->SetStaticMesh(LoadedMesh);
+			// Prefer third-person skeletal mesh for preview (more complete view)
+			// Fall back to first-person mesh if third-person isn't available
+			USkeletalMesh* SkeletalMeshToUse = ToolCDO->ThirdPersonSkeletalMesh;
+			if (!SkeletalMeshToUse)
+			{
+				SkeletalMeshToUse = ToolCDO->FirstPersonSkeletalMesh;
+			}
+
+			if (SkeletalMeshToUse)
+			{
+				LoadedSkeletalMesh = SkeletalMeshToUse;
+				bIsSkeletalMesh = true;
+			}
 		}
 	}
 
-	// Set up the mesh - it will rotate around its pivot point (as set in the mesh asset)
-	if (LoadedMesh && CurrentItemMesh)
+	// If no skeletal mesh found, try to load static mesh from item data
+	if (!bIsSkeletalMesh)
 	{
+		if (Item.ItemData->ItemMesh.IsValid())
+		{
+			LoadedStaticMesh = Item.ItemData->ItemMesh.Get();
+		}
+		else if (!Item.ItemData->ItemMesh.IsNull())
+		{
+			LoadedStaticMesh = Item.ItemData->ItemMesh.LoadSynchronous();
+		}
+	}
+
+	// Create and set up the appropriate mesh component
+	if (bIsSkeletalMesh && LoadedSkeletalMesh)
+	{
+		// Create skeletal mesh component if needed
+		if (!CurrentSkeletalMesh)
+		{
+			CurrentSkeletalMesh = NewObject<USkeletalMeshComponent>(this, TEXT("ItemSkeletalMesh"));
+			CurrentSkeletalMesh->SetupAttachment(PreviewRoot);
+			CurrentSkeletalMesh->RegisterComponent();
+			CurrentSkeletalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+
+		CurrentSkeletalMesh->SetSkeletalMesh(LoadedSkeletalMesh);
+		CurrentSkeletalMesh->SetRelativeLocation(FVector::ZeroVector);
+		ActiveMeshComponent = CurrentSkeletalMesh;
+	}
+	else if (LoadedStaticMesh)
+	{
+		// Create static mesh component if needed
+		if (!CurrentItemMesh)
+		{
+			CurrentItemMesh = NewObject<UStaticMeshComponent>(this, TEXT("ItemMesh"));
+			CurrentItemMesh->SetupAttachment(PreviewRoot);
+			CurrentItemMesh->RegisterComponent();
+			CurrentItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+
+		CurrentItemMesh->SetStaticMesh(LoadedStaticMesh);
 		CurrentItemMesh->SetRelativeLocation(FVector::ZeroVector);
+		ActiveMeshComponent = CurrentItemMesh;
 	}
 
 	// Set initial rotation from item data and calculate zoom
-	if (Item.ItemData && LoadedMesh && CurrentItemMesh)
+	if (Item.ItemData && ActiveMeshComponent)
 	{
-		CurrentItemMesh->SetRelativeRotation(Item.ItemData->DefaultPreviewRotation);
+		ActiveMeshComponent->SetRelativeRotation(Item.ItemData->DefaultPreviewRotation);
 		TargetRotationQuat = FQuat(Item.ItemData->DefaultPreviewRotation);
 		CurrentRotationQuat = FQuat(Item.ItemData->DefaultPreviewRotation);
 
 		// Update bounds with the rotation applied
-		CurrentItemMesh->UpdateBounds();
-		FBoxSphereBounds MeshBounds = CurrentItemMesh->Bounds;
+		ActiveMeshComponent->UpdateBounds();
+		FBoxSphereBounds MeshBounds = ActiveMeshComponent->Bounds;
 
 		// Calculate zoom distance
 		float ItemZoomDistance = DefaultZoomDistance;
@@ -291,9 +341,9 @@ void AItemPreviewController::SetPreviewItem(const FInventoryItem& Item)
 	}
 
 	// Add to scene capture show only list
-	if (SceneCaptureComponent && CurrentItemMesh)
+	if (SceneCaptureComponent && ActiveMeshComponent)
 	{
-		SceneCaptureComponent->ShowOnlyComponents.Add(CurrentItemMesh);
+		SceneCaptureComponent->ShowOnlyComponents.Add(ActiveMeshComponent);
 	}
 }
 
@@ -376,5 +426,17 @@ void AItemPreviewController::ClearCurrentItem()
 
 		// Clear the mesh
 		CurrentItemMesh->SetStaticMesh(nullptr);
+	}
+
+	if (CurrentSkeletalMesh)
+	{
+		// Remove skeletal mesh from show only list
+		if (SceneCaptureComponent)
+		{
+			SceneCaptureComponent->ShowOnlyComponents.Remove(CurrentSkeletalMesh);
+		}
+
+		// Clear the skeletal mesh
+		CurrentSkeletalMesh->SetSkeletalMesh(nullptr);
 	}
 }

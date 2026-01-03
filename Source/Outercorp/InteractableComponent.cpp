@@ -12,7 +12,7 @@ UInteractableComponent::UInteractableComponent()
 	// Default values
 	InteractionName = FText::FromString(TEXT("Interactable Object"));
 	InteractionPrompt = FText::FromString(TEXT("Press E to Interact"));
-	InteractionRange = 300.0f; // 3 meters
+	InteractionRange = 500.0f; // Default interaction range - can be overridden in Blueprint
 	bShouldHighlight = true;
 	bCanInteract = true;
 	HighlightColor = FLinearColor::Yellow;

@@ -32,6 +32,7 @@ enum class EItemCategory : uint8
 	Blueprint UMETA(DisplayName = "Blueprint"),
 	Module UMETA(DisplayName = "Module"),
 	Ammunition UMETA(DisplayName = "Ammunition"),
+	Tool UMETA(DisplayName = "Tool"),
 	Misc UMETA(DisplayName = "Miscellaneous")
 };
 
@@ -103,6 +104,22 @@ public:
 	/** Should this item have physics enabled when placed (only applies to free placement items) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Placement", meta = (EditCondition = "bCanFreePlacement"))
 	bool bEnablePhysicsOnPlacement = true;
+
+	/** Interaction range for picking up this item in the world (in centimeters) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Interaction")
+	float InteractionRange = 500.0f;
+
+	/** Is this item equippable as a tool */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment")
+	bool bIsEquippable = false;
+
+	/** Tool actor class to spawn when equipped (must inherit from AEquippableTool) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment", meta = (EditCondition = "bIsEquippable"))
+	TSubclassOf<class AEquippableTool> EquippableToolClass;
+
+	/** Saved relative transform for equipped tool (position/rotation when equipped) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Equipment", meta = (EditCondition = "bIsEquippable"))
+	FTransform EquippedRelativeTransform;
 
 	/** Item metadata (for custom properties) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")

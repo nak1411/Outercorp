@@ -21,8 +21,11 @@
 #include "ItemInfoWidget.h"
 #include "InteractionPromptWidget.h"
 #include "InteractionManagerComponent.h"
+#include "InteractableComponent.h"
 #include "NotificationComponent.h"
 #include "PickupableItem.h"
+#include "EquippableTool.h"
+#include "ToolTransformWidget.h"
 #include "Outercorp.h"
 #include "Window.h"
 #include "OutercorpSaveGame.h"
@@ -121,6 +124,13 @@ AOutercorpCharacter::AOutercorpCharacter()
 	TargetConstructionPart = nullptr;
 	TargetSocketName = NAME_None;
 	GhostSocketName = NAME_None;
+
+	// Initialize equipment variables
+	EquippedTool = nullptr;
+	EquippedToolItemData = nullptr;
+
+	// Initialize widget pointers
+	ToolTransformWidget = nullptr;
 }
 
 void AOutercorpCharacter::Tick(float DeltaTime)
@@ -505,6 +515,31 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 			EnhancedInputComponent->BindAction(ConstructionSlot3Action, ETriggerEvent::Started, this, &AOutercorpCharacter::SelectConstructionSlot3);
 		}
 
+		// Toggle Tool Transform Widget
+		if (ToggleToolTransformWidgetAction)
+		{
+			EnhancedInputComponent->BindAction(ToggleToolTransformWidgetAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleToolTransformWidget);
+		}
+
+		// Equip/Unequip Tool
+		if (EquipToolAction)
+		{
+			EnhancedInputComponent->BindAction(EquipToolAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleEquipTool);
+		}
+
+		// Tool Use Actions
+		if (ToolUseAction)
+		{
+			EnhancedInputComponent->BindAction(ToolUseAction, ETriggerEvent::Started, this, &AOutercorpCharacter::StartToolUse);
+			EnhancedInputComponent->BindAction(ToolUseAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::StopToolUse);
+		}
+
+		if (ToolSecondaryUseAction)
+		{
+			EnhancedInputComponent->BindAction(ToolSecondaryUseAction, ETriggerEvent::Started, this, &AOutercorpCharacter::StartToolSecondaryUse);
+			EnhancedInputComponent->BindAction(ToolSecondaryUseAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::StopToolSecondaryUse);
+		}
+
 		// Interact - bind both press and release
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AOutercorpCharacter::InteractPressed);
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::InteractReleased);
@@ -781,6 +816,16 @@ void AOutercorpCharacter::PickupAndHoldItem()
 	HeldItemData = PickupItem->ItemData;
 	HeldItemQuantity = PickupItem->Quantity;
 	OriginalItemLocation = PickupItem->GetActorLocation();
+
+	// Store the original interaction range
+	if (PickupItem->InteractableComponent)
+	{
+		OriginalInteractionRange = PickupItem->InteractableComponent->InteractionRange;
+	}
+	else
+	{
+		OriginalInteractionRange = 500.0f; // Default fallback
+	}
 	// Copy the item's mesh to the ghost for preview BEFORE destroying the item
 	if (PickupItem->ItemMesh && PlacementGhost)
 	{
@@ -789,6 +834,17 @@ void AOutercorpCharacter::PickupAndHoldItem()
 
 		PlacementGhost->SetStaticMesh(PickupItem->ItemMesh->GetStaticMesh());
 		PlacementGhost->SetWorldScale3D(HeldItemScale);
+
+		// Copy the original materials from the pickup item to the ghost
+		int32 NumMaterials = PickupItem->ItemMesh->GetNumMaterials();
+		for (int32 i = 0; i < NumMaterials; i++)
+		{
+			UMaterialInterface* OriginalMaterial = PickupItem->ItemMesh->GetMaterial(i);
+			if (OriginalMaterial)
+			{
+				PlacementGhost->SetMaterial(i, OriginalMaterial);
+			}
+		}
 
 		// Position ghost at camera forward BEFORE making it visible to prevent flicker
 		if (FirstPersonCameraComponent)
@@ -799,17 +855,6 @@ void AOutercorpCharacter::PickupAndHoldItem()
 			PlacementGhost->SetWorldLocation(InitialGhostPosition);
 			PlacementGhost->SetWorldRotation(FRotator::ZeroRotator);
 		}
-
-		// Apply the valid placement material
-		if (ValidPlacementMaterial)
-		{
-			int32 NumMaterials = PlacementGhost->GetNumMaterials();
-			for (int32 i = 0; i < NumMaterials; i++)
-			{
-				PlacementGhost->SetMaterial(i, ValidPlacementMaterial);
-			}		}
-		else
-		{		}
 
 		// NOW make it visible after positioning
 		PlacementGhost->SetVisibility(true);	}
@@ -829,8 +874,11 @@ void AOutercorpCharacter::DropHeldItem()
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
+		// Use the configured PickupableItemClass if set, otherwise fall back to base class
+		TSubclassOf<APickupableItem> ClassToSpawn = PickupableItemClass ? PickupableItemClass : TSubclassOf<APickupableItem>(APickupableItem::StaticClass());
+
 		APickupableItem* RestoredItem = GetWorld()->SpawnActor<APickupableItem>(
-			APickupableItem::StaticClass(),
+			ClassToSpawn,
 			OriginalItemLocation,
 			FRotator::ZeroRotator,
 			SpawnParams
@@ -840,6 +888,12 @@ void AOutercorpCharacter::DropHeldItem()
 		{
 			// Initialize with the stored data
 			RestoredItem->InitializeItem(HeldItemData, HeldItemQuantity);
+
+			// Restore the original interaction range
+			if (RestoredItem->InteractableComponent)
+			{
+				RestoredItem->InteractableComponent->InteractionRange = OriginalInteractionRange;
+			}
 
 			// Restore the original scale
 			if (RestoredItem->ItemMesh)
@@ -851,6 +905,7 @@ void AOutercorpCharacter::DropHeldItem()
 			if (RestoredItem->ItemMesh)
 			{
 				RestoredItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+				RestoredItem->ItemMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 				RestoredItem->ItemMesh->SetEnableGravity(true);
 
 				FTimerHandle PhysicsEnableTimer;
@@ -888,8 +943,11 @@ void AOutercorpCharacter::DropHeldItem()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
+	// Use the configured PickupableItemClass if set, otherwise fall back to base class
+	TSubclassOf<APickupableItem> ClassToSpawn = PickupableItemClass ? PickupableItemClass : TSubclassOf<APickupableItem>(APickupableItem::StaticClass());
+
 	APickupableItem* NewItem = GetWorld()->SpawnActor<APickupableItem>(
-		APickupableItem::StaticClass(),
+		ClassToSpawn,
 		PlacementLocation,
 		FRotator::ZeroRotator,
 		SpawnParams
@@ -899,6 +957,12 @@ void AOutercorpCharacter::DropHeldItem()
 	{
 		// Initialize the new item with the stored data
 		NewItem->InitializeItem(HeldItemData, HeldItemQuantity);
+
+		// Restore the original interaction range
+		if (NewItem->InteractableComponent)
+		{
+			NewItem->InteractableComponent->InteractionRange = OriginalInteractionRange;
+		}
 
 		// Apply the stored scale to match the original item
 		if (NewItem->ItemMesh)
@@ -922,6 +986,7 @@ void AOutercorpCharacter::DropHeldItem()
 			{
 				// Enable physics after a small delay to ensure position is stable
 				NewItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+				NewItem->ItemMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 				NewItem->ItemMesh->SetEnableGravity(true);
 
 				FTimerHandle PhysicsEnableTimer;
@@ -939,7 +1004,8 @@ void AOutercorpCharacter::DropHeldItem()
 				// Disable physics - item will be static in mid-air
 				NewItem->ItemMesh->SetSimulatePhysics(false);
 				NewItem->ItemMesh->SetEnableGravity(false);
-				NewItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);			}
+				NewItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+				NewItem->ItemMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);			}
 		}
 
 		// Start drop cooldown so player can't immediately pick it up again
@@ -967,7 +1033,9 @@ void AOutercorpCharacter::UpdatePlacementPreview()
 	// Perform trace from camera forward
 	FVector CameraLocation = FirstPersonCameraComponent->GetComponentLocation();
 	FVector CameraForward = FirstPersonCameraComponent->GetForwardVector();
-	FVector TraceEnd = CameraLocation + (CameraForward * MaxPlacementDistance);
+
+	// Use CurrentPlacementDistance instead of MaxPlacementDistance for adjustable distance
+	FVector TraceEnd = CameraLocation + (CameraForward * CurrentPlacementDistance);
 
 	FHitResult HitResult;
 	FCollisionQueryParams QueryParams;
@@ -1005,15 +1073,7 @@ void AOutercorpCharacter::UpdatePlacementPreview()
 		PlacementGhost->SetWorldLocation(PlacementLocation);
 		PlacementGhost->SetWorldRotation(FRotator::ZeroRotator);
 
-		// Apply valid (blue/green) material
-		if (ValidPlacementMaterial)
-		{
-			int32 NumMaterials = PlacementGhost->GetNumMaterials();
-			for (int32 i = 0; i < NumMaterials; i++)
-			{
-				PlacementGhost->SetMaterial(i, ValidPlacementMaterial);
-			}
-		}
+		// No material changes for pickupable items - they keep their original appearance
 	}
 	else
 	{
@@ -1027,15 +1087,7 @@ void AOutercorpCharacter::UpdatePlacementPreview()
 			PlacementGhost->SetWorldLocation(PlacementLocation);
 			PlacementGhost->SetWorldRotation(FRotator::ZeroRotator);
 
-			// Apply valid (blue/green) material - free placement is valid
-			if (ValidPlacementMaterial)
-			{
-				int32 NumMaterials = PlacementGhost->GetNumMaterials();
-				for (int32 i = 0; i < NumMaterials; i++)
-				{
-					PlacementGhost->SetMaterial(i, ValidPlacementMaterial);
-				}
-			}
+			// No material changes for pickupable items - they keep their original appearance
 		}
 		else
 		{
@@ -1046,15 +1098,7 @@ void AOutercorpCharacter::UpdatePlacementPreview()
 			PlacementGhost->SetWorldLocation(PlacementLocation);
 			PlacementGhost->SetWorldRotation(FRotator::ZeroRotator);
 
-			// Apply invalid (red) material
-			if (InvalidPlacementMaterial)
-			{
-				int32 NumMaterials = PlacementGhost->GetNumMaterials();
-				for (int32 i = 0; i < NumMaterials; i++)
-				{
-					PlacementGhost->SetMaterial(i, InvalidPlacementMaterial);
-				}
-			}
+			// No material changes for pickupable items - they keep their original appearance
 		}
 	}
 }
@@ -1074,6 +1118,49 @@ void AOutercorpCharacter::ToggleInventory()
 	else
 	{
 		OpenInventory();
+	}
+}
+
+void AOutercorpCharacter::ToggleToolTransformWidget()
+{
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	// If widget doesn't exist yet, create it
+	if (!ToolTransformWidget && ToolTransformWidgetClass)
+	{
+		ToolTransformWidget = CreateWidget<UToolTransformWidget>(GetWorld(), ToolTransformWidgetClass);
+		if (ToolTransformWidget)
+		{
+			ToolTransformWidget->AddToViewport();
+			UE_LOG(LogTemp, Log, TEXT("Tool Transform Widget created and added to viewport"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Failed to create Tool Transform Widget"));
+		}
+		return;
+	}
+
+	// Toggle visibility
+	if (ToolTransformWidget)
+	{
+		if (ToolTransformWidget->IsInViewport())
+		{
+			ToolTransformWidget->RemoveFromParent();
+			UE_LOG(LogTemp, Log, TEXT("Tool Transform Widget hidden"));
+		}
+		else
+		{
+			ToolTransformWidget->AddToViewport();
+			UE_LOG(LogTemp, Log, TEXT("Tool Transform Widget shown"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ToolTransformWidgetClass not set in Blueprint. Please assign WBP_ToolTransformAdjuster to the character Blueprint."));
 	}
 }
 
@@ -3765,8 +3852,11 @@ bool AOutercorpCharacter::TestRotationForValidSnap(float TestRotationOffset, ACo
 
 void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value)
 {
-	// Only allow adjustment when in construction mode or move mode
-	if ((!bIsInConstructionMode && !bIsInMoveMode) || !ConstructionGhostPart)
+	// Allow adjustment when in construction mode, move mode, OR holding a pickupable item
+	bool bHoldingPickupableItem = (HeldItemData != nullptr && PlacementGhost && PlacementGhost->IsVisible());
+
+	if ((!bIsInConstructionMode && !bIsInMoveMode && !bHoldingPickupableItem) ||
+	    (!ConstructionGhostPart && !bHoldingPickupableItem))
 	{
 		return;
 	}
@@ -3774,7 +3864,18 @@ void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value
 	// Get the scroll wheel axis value (positive = scroll up, negative = scroll down)
 	float ScrollValue = Value.Get<float>();
 
-	// If currently snapped, rotate based on item type
+	// If holding a pickupable item, simply adjust distance (no snap rotation logic)
+	if (bHoldingPickupableItem)
+	{
+		float DistanceStep = 50.0f;
+		CurrentPlacementDistance += ScrollValue * DistanceStep;
+
+		// Clamp to reasonable values
+		CurrentPlacementDistance = FMath::Clamp(CurrentPlacementDistance, MinPlacementDistance, MaxPlacementDistance);
+		return;
+	}
+
+	// If currently snapped (construction parts only), rotate based on item type
 	if (bIsCurrentlySnapped && CurrentSnapTarget && CurrentTargetSnapPoint)
 	{
 		// Check if this item uses snap-axis rotation
@@ -4679,4 +4780,214 @@ bool AOutercorpCharacter::AreSocketTypesCompatible(FName SocketType1, FName Sock
 	// Deprecated - compatibility is now handled by whitelist in socket definitions
 	// This is kept for backward compatibility only
 	return true;
+}
+
+// ============================================================================
+// Equipment/Tool System Implementation
+// ============================================================================
+
+void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& InventoryItem)
+{
+	if (!InventoryItem.IsValid() || !InventoryItem.ItemData)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EquipToolFromInventory: Invalid inventory item"));
+		return;
+	}
+
+	// Check if item is equippable
+	if (!InventoryItem.ItemData->bIsEquippable || !InventoryItem.ItemData->EquippableToolClass)
+	{
+		if (NotificationComponent)
+		{
+			NotificationComponent->ShowNotification(FText::FromString(TEXT("This item cannot be equipped")));
+		}
+		UE_LOG(LogTemp, Warning, TEXT("EquipToolFromInventory: Item '%s' is not equippable"),
+			*InventoryItem.ItemData->ItemName.ToString());
+		return;
+	}
+
+	// Unequip current tool if any
+	if (EquippedTool)
+	{
+		UnequipCurrentTool();
+	}
+
+	// Spawn the tool actor
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
+
+	EquippedTool = GetWorld()->SpawnActor<AEquippableTool>(
+		InventoryItem.ItemData->EquippableToolClass,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		SpawnParams
+	);
+
+	if (EquippedTool)
+	{
+		// Equip the tool
+		EquippedTool->EquipTool(this);
+
+		// Load saved transform from item data
+		if (InventoryItem.ItemData->EquippedRelativeTransform.GetLocation() != FVector::ZeroVector ||
+			!InventoryItem.ItemData->EquippedRelativeTransform.GetRotation().Equals(FQuat::Identity))
+		{
+			// Has a saved transform, apply it
+			FTransform SavedTransform = InventoryItem.ItemData->EquippedRelativeTransform;
+			EquippedTool->SetToolRelativeTransform(
+				SavedTransform.GetLocation(),
+				SavedTransform.GetRotation().Rotator(),
+				SavedTransform.GetScale3D()
+			);
+			UE_LOG(LogTemp, Log, TEXT("Loaded saved transform for tool"));
+		}
+
+		// Store the item data for tracking
+		EquippedToolItemData = InventoryItem.ItemData;
+
+		// Show notification
+		if (NotificationComponent)
+		{
+			FText NotificationText = FText::Format(
+				FText::FromString(TEXT("{0} Equipped")),
+				InventoryItem.ItemData->ItemName
+			);
+			NotificationComponent->ShowNotification(NotificationText);
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("Equipped tool: %s"), *InventoryItem.ItemData->ItemName.ToString());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to spawn tool actor for: %s"),
+			*InventoryItem.ItemData->ItemName.ToString());
+	}
+}
+
+void AOutercorpCharacter::UnequipCurrentTool()
+{
+	if (!EquippedTool)
+	{
+		return;
+	}
+
+	// Unequip the tool
+	EquippedTool->UnequipTool();
+
+	// Destroy the tool actor
+	EquippedTool->Destroy();
+	EquippedTool = nullptr;
+
+	// Show notification
+	if (NotificationComponent && EquippedToolItemData)
+	{
+		FText NotificationText = FText::Format(
+			FText::FromString(TEXT("{0} Unequipped")),
+			EquippedToolItemData->ItemName
+		);
+		NotificationComponent->ShowNotification(NotificationText);
+	}
+
+	EquippedToolItemData = nullptr;
+
+	UE_LOG(LogTemp, Log, TEXT("Unequipped tool"));
+}
+
+void AOutercorpCharacter::ToggleEquipTool()
+{
+	// If we have a tool equipped, unequip it
+	if (EquippedTool)
+	{
+		UnequipCurrentTool();
+		return;
+	}
+
+	// Otherwise, try to find and equip the first tool in inventory
+	if (!InventoryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No inventory component found"));
+		return;
+	}
+
+	// Get all items from inventory
+	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
+
+	// Find the first equippable tool
+	for (const FInventoryItem& Item : AllItems)
+	{
+		if (Item.ItemData && Item.ItemData->bIsEquippable && Item.ItemData->Category == EItemCategory::Tool)
+		{
+			// Found a tool, equip it
+			EquipToolFromInventory(Item);
+
+			if (NotificationComponent)
+			{
+				FText Message = FText::Format(FText::FromString(TEXT("Equipped {0}")), Item.ItemData->ItemName);
+				NotificationComponent->ShowNotification(Message);
+			}
+
+			UE_LOG(LogTemp, Log, TEXT("Equipped tool: %s"), *Item.ItemData->ItemName.ToString());
+			return;
+		}
+	}
+
+	// No tool found in inventory
+	if (NotificationComponent)
+	{
+		NotificationComponent->ShowNotification(
+			FText::FromString(TEXT("No tools in inventory to equip"))
+		);
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("No equippable tools found in inventory"));
+}
+
+void AOutercorpCharacter::StartToolUse()
+{
+	if (!EquippedTool)
+	{
+		return;
+	}
+
+	// Delegate to the equipped tool
+	EquippedTool->StartPrimaryUse();
+}
+
+void AOutercorpCharacter::StopToolUse()
+{
+	if (!EquippedTool)
+	{
+		return;
+	}
+
+	// Delegate to the equipped tool
+	EquippedTool->StopPrimaryUse();
+}
+
+void AOutercorpCharacter::StartToolSecondaryUse()
+{
+	if (!EquippedTool)
+	{
+		return;
+	}
+
+	// Delegate to the equipped tool
+	EquippedTool->StartSecondaryUse();
+}
+
+void AOutercorpCharacter::StopToolSecondaryUse()
+{
+	if (!EquippedTool)
+	{
+		return;
+	}
+
+	// Delegate to the equipped tool
+	EquippedTool->StopSecondaryUse();
+}
+
+bool AOutercorpCharacter::HasToolEquipped() const
+{
+	return EquippedTool != nullptr;
 }

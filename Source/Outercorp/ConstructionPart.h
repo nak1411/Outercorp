@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "WrenchTool.h"
 #include "ConstructionPart.generated.h"
 
 UENUM(BlueprintType)
@@ -151,7 +152,7 @@ struct FAttachmentPoint
 };
 
 UCLASS()
-class OUTERCORP_API AConstructionPart : public AActor
+class OUTERCORP_API AConstructionPart : public AActor, public IConnectableInterface
 {
 	GENERATED_BODY()
 
@@ -275,6 +276,23 @@ public:
 	/** Check if two snap points are compatible based on their tags and filters */
 	UFUNCTION(BlueprintPure, Category = "Snap Filtering")
 	bool AreSnapPointsCompatible(UArrowComponent* MySnapPoint, AConstructionPart* OtherPart, UArrowComponent* OtherSnapPoint) const;
+
+	// === IConnectableInterface Implementation ===
+
+	/** Check if this construction part can be connected/fastened with wrench */
+	virtual bool CanBeConnected_Implementation() const override;
+
+	/** Get the prompt text for wrench interaction */
+	virtual FText GetConnectionPrompt_Implementation() const override;
+
+	/** Called when wrench connects/fastens this part */
+	virtual void OnConnected_Implementation() override;
+
+	/** Check if this part is already connected/fastened */
+	virtual bool IsConnected_Implementation() const override;
+
+	/** Called when wrench disconnects/unfastens this part */
+	virtual void OnDisconnected_Implementation() override;
 
 private:
 	EAttachmentType DetermineAttachmentType(const FName& SocketName);

@@ -26,7 +26,7 @@ APickupableItem::APickupableItem()
 
 	// Create interactable component
 	InteractableComponent = CreateDefaultSubobject<UInteractableComponent>(TEXT("InteractableComponent"));
-	InteractableComponent->InteractionRange = 150.0f; // Reasonable pickup range
+	// Don't set InteractionRange here - let Blueprint defaults apply
 
 	// Default values
 	Quantity = 1;
@@ -60,6 +60,7 @@ void APickupableItem::BeginPlay()
 			InteractableComponent->InteractionPrompt = FText::Format(
 				FText::FromString(TEXT("Pick Up(E)")),
 				ItemData->ItemName);
+			InteractableComponent->InteractionRange = ItemData->InteractionRange;
 		}
 	}
 }
@@ -251,6 +252,7 @@ void APickupableItem::InitializeItem(UInventoryItemData *InItemData, int32 InQua
 			InteractableComponent->InteractionPrompt = FText::Format(
 				FText::FromString(TEXT("Press E to Pick Up {0}")),
 				ItemData->ItemName);
+			InteractableComponent->InteractionRange = ItemData->InteractionRange;
 		}
 	}
 	else

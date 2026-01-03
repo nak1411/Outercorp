@@ -555,3 +555,57 @@ bool AConstructionPart::AreSnapPointsCompatible(UArrowComponent* MySnapPoint, AC
 
 	return bMyFilterAllows;
 }
+
+// ============================================================================
+// IConnectableInterface Implementation
+// ============================================================================
+
+bool AConstructionPart::CanBeConnected_Implementation() const
+{
+	// Only placed (not ghost) parts can be connected/fastened
+	if (CurrentState == EConstructionPartState::GhostPreview)
+	{
+		return false;
+	}
+
+	// Can connect if in Placed state (not yet fastened)
+	// Can also "reconnect" fastened parts to unfasten them
+	return true;
+}
+
+FText AConstructionPart::GetConnectionPrompt_Implementation() const
+{
+	if (CurrentState == EConstructionPartState::Fastened)
+	{
+		return FText::FromString(TEXT("Unfasten"));
+	}
+	else
+	{
+		return FText::FromString(TEXT("Fasten"));
+	}
+}
+
+void AConstructionPart::OnConnected_Implementation()
+{
+	// Change state to Fastened
+	if (CurrentState == EConstructionPartState::Placed)
+	{
+		SetPartState(EConstructionPartState::Fastened);
+		UE_LOG(LogTemp, Log, TEXT("ConstructionPart '%s' fastened with wrench"), *GetName());
+	}
+}
+
+bool AConstructionPart::IsConnected_Implementation() const
+{
+	return CurrentState == EConstructionPartState::Fastened;
+}
+
+void AConstructionPart::OnDisconnected_Implementation()
+{
+	// Change state back to Placed (unfastened)
+	if (CurrentState == EConstructionPartState::Fastened)
+	{
+		SetPartState(EConstructionPartState::Placed);
+		UE_LOG(LogTemp, Log, TEXT("ConstructionPart '%s' unfastened with wrench"), *GetName());
+	}
+}

@@ -22,6 +22,8 @@ class UInteractionPromptWidget;
 class UInteractionManagerComponent;
 class UNotificationComponent;
 class UConstructionPartData;
+class AEquippableTool;
+class UToolTransformWidget;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -138,6 +140,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> ConstructionModeBorderWidgetClass;
 
+	/** Tool transform adjuster widget class */
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UToolTransformWidget> ToolTransformWidgetClass;
+
 	/** Inventory window capabilities */
 	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
 	bool bInventoryCanMove = true;
@@ -242,6 +248,22 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *ConstructionSlot3Action;
 
+	/** Tool Use Input Action (primary action - left click or trigger) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ToolUseAction;
+
+	/** Tool Secondary Use Input Action (secondary action - right click) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ToolSecondaryUseAction;
+
+	/** Equip/Unequip Tool Input Action (e.g., hotkey to toggle equipped tool) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *EquipToolAction;
+
+	/** Toggle Tool Transform Widget Input Action (for adjusting tool transforms) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ToggleToolTransformWidgetAction;
+
 	/** Time player must hold interact key before picking up item */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	float InteractHoldDelay = 0.5f;
@@ -265,6 +287,10 @@ protected:
 	/** Construction part slots for hotkey switching (index 0 = hotkey 1, index 1 = hotkey 2, etc.) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
 	TArray<class UConstructionPartData*> ConstructionPartSlots;
+
+	/** Pickupable item class to spawn when dropping items (set to Blueprint class in BP_FirstPersonCharacter) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+	TSubclassOf<class APickupableItem> PickupableItemClass;
 
 protected:
 	/** Ghost/preview mesh for placement */
@@ -402,11 +428,26 @@ protected:
 	/** Stored location where item was originally picked up (for restore on invalid placement) */
 	FVector OriginalItemLocation;
 
+	/** Stored interaction range from original picked up item */
+	float OriginalInteractionRange;
+
 	/** Whether interact key is currently being held */
 	bool bIsHoldingInteract;
 
 	/** Timer handle for interact hold */
 	FTimerHandle InteractHoldTimerHandle;
+
+	/** Currently equipped tool */
+	UPROPERTY(BlueprintReadOnly, Category = "Equipment")
+	AEquippableTool* EquippedTool;
+
+	/** Item data of currently equipped tool (for re-equipping after save/load) */
+	UPROPERTY()
+	UInventoryItemData* EquippedToolItemData;
+
+	/** Tool transform adjuster widget */
+	UPROPERTY()
+	UToolTransformWidget* ToolTransformWidget;
 
 public:
 	AOutercorpCharacter();
@@ -569,9 +610,56 @@ protected:
 	/** Helper function to test if a rotation offset will result in a valid snap */
 	bool TestRotationForValidSnap(float TestRotationOffset, class AConstructionPart* TargetPart, class UArrowComponent* TargetSnapPoint) const;
 
+public:
+	// === Equipment/Tool Functions ===
+
+	/** Equip a tool from inventory */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void EquipToolFromInventory(const FInventoryItem& InventoryItem);
+
+	/** Unequip currently equipped tool and return it to inventory */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void UnequipCurrentTool();
+
+	/** Toggle equip/unequip for the currently selected inventory item */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void ToggleEquipTool();
+
+	/** Start using equipped tool (primary action) */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void StartToolUse();
+
+	/** Stop using equipped tool (primary action) */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void StopToolUse();
+
+	/** Start using equipped tool (secondary action) */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void StartToolSecondaryUse();
+
+	/** Stop using equipped tool (secondary action) */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void StopToolSecondaryUse();
+
+	/** Check if player has a tool equipped */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment")
+	bool HasToolEquipped() const;
+
+	/** Get currently equipped tool */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment")
+	AEquippableTool* GetEquippedTool() const { return EquippedTool; }
+
+	/** Get equipped tool's item data */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment")
+	UInventoryItemData* GetEquippedToolItemData() const { return EquippedToolItemData; }
+
 	/** Toggle inventory display */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	virtual void ToggleInventory();
+
+	/** Toggle tool transform adjuster widget */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void ToggleToolTransformWidget();
 
 	/** Open inventory (BlueprintNativeEvent allows Blueprint override) */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Inventory")

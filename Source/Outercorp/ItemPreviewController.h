@@ -35,9 +35,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview")
 	TObjectPtr<USceneCaptureComponent2D> SceneCaptureComponent;
 
-	/** Current spawned item mesh component */
+	/** Current spawned static mesh component */
 	UPROPERTY(BlueprintReadOnly, Category = "Preview")
 	TObjectPtr<UStaticMeshComponent> CurrentItemMesh;
+
+	/** Current spawned skeletal mesh component (for equippable tools) */
+	UPROPERTY(BlueprintReadOnly, Category = "Preview")
+	TObjectPtr<USkeletalMeshComponent> CurrentSkeletalMesh;
 
 	/** Background color for the preview (change this for different background colors) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview")
