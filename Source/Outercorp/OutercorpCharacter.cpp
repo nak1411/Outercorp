@@ -26,6 +26,7 @@
 #include "PickupableItem.h"
 #include "EquippableTool.h"
 #include "ToolTransformWidget.h"
+#include "FabricationBase.h"
 #include "Outercorp.h"
 #include "Window.h"
 #include "OutercorpSaveGame.h"
@@ -538,6 +539,12 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 		{
 			EnhancedInputComponent->BindAction(ToolSecondaryUseAction, ETriggerEvent::Started, this, &AOutercorpCharacter::StartToolSecondaryUse);
 			EnhancedInputComponent->BindAction(ToolSecondaryUseAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::StopToolSecondaryUse);
+		}
+
+		// Exit Crafting Mode (ESC key)
+		if (ExitCraftingAction)
+		{
+			EnhancedInputComponent->BindAction(ExitCraftingAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ExitCraftingMode);
 		}
 
 		// Interact - bind both press and release
@@ -1161,6 +1168,17 @@ void AOutercorpCharacter::ToggleToolTransformWidget()
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ToolTransformWidgetClass not set in Blueprint. Please assign WBP_ToolTransformAdjuster to the character Blueprint."));
+	}
+}
+
+void AOutercorpCharacter::ExitCraftingMode()
+{
+	// Exit crafting mode on the active fabrication station
+	if (ActiveFabricationStation)
+	{
+		ActiveFabricationStation->StopUsing();
+		ActiveFabricationStation = nullptr;
+		UE_LOG(LogTemp, Log, TEXT("Exited crafting mode via ESC key"));
 	}
 }
 
@@ -2235,6 +2253,20 @@ void AOutercorpCharacter::SetupNotificationCanvas()
 	{	}
 }
 
+void AOutercorpCharacter::SetCrosshairVisibility(bool bVisible)
+{
+	if (!BaseHUDWidget)
+	{
+		return;
+	}
+
+	UWidget* HUDCrosshair = BaseHUDWidget->GetWidgetFromName(FName("WBP_Crosshair"));
+	if (HUDCrosshair)
+	{
+		HUDCrosshair->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+}
+
 void AOutercorpCharacter::UpdateConstructionControlsVisibility()
 {
 	if (!BaseHUDWidget)
@@ -2318,6 +2350,12 @@ void AOutercorpCharacter::EnterConstructionMode()
 {
 	// Can't enter construction mode if UI is open
 	if (IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// Can't enter if in crafting mode
+	if (ActiveFabricationStation)
 	{
 		return;
 	}
@@ -4176,6 +4214,12 @@ void AOutercorpCharacter::EnterDeleteMode()
 		return;
 	}
 
+	// Can't enter if in crafting mode
+	if (ActiveFabricationStation)
+	{
+		return;
+	}
+
 	// Can't enter if holding an item
 	if (HeldItemData)
 	{
@@ -4393,6 +4437,12 @@ void AOutercorpCharacter::EnterMoveMode()
 {
 	// Can't enter move mode if UI is open
 	if (IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// Can't enter if in crafting mode
+	if (ActiveFabricationStation)
 	{
 		return;
 	}

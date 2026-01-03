@@ -264,6 +264,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *ToggleToolTransformWidgetAction;
 
+	/** Exit Crafting Mode Input Action (ESC key) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ExitCraftingAction;
+
 	/** Time player must hold interact key before picking up item */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	float InteractHoldDelay = 0.5f;
@@ -450,6 +454,10 @@ protected:
 	UToolTransformWidget* ToolTransformWidget;
 
 public:
+	/** Currently active fabrication station (for exiting crafting mode) */
+	UPROPERTY()
+	class AFabricationBase* ActiveFabricationStation;
+
 	AOutercorpCharacter();
 
 	/** Called when the game starts or when spawned */
@@ -661,6 +669,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void ToggleToolTransformWidget();
 
+	/** Exit crafting mode (called by ESC key) */
+	UFUNCTION(BlueprintCallable, Category = "Crafting")
+	void ExitCraftingMode();
+
 	/** Open inventory (BlueprintNativeEvent allows Blueprint override) */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Inventory")
 	void OpenInventory();
@@ -806,6 +818,22 @@ public:
 
 	/** Returns notification component **/
 	UNotificationComponent *GetNotificationComponent() const { return NotificationComponent; }
+
+	/** Returns interaction manager component **/
+	UInteractionManagerComponent *GetInteractionManagerComponent() const { return InteractionManagerComponent; }
+
+	/** Returns interaction prompt widget **/
+	UInteractionPromptWidget *GetInteractionPromptWidget() const { return InteractionPromptWidget; }
+
+	/** Returns crosshair widget **/
+	UUserWidget *GetCrosshairWidget() const { return CrosshairWidget; }
+
+	/** Returns base HUD widget **/
+	UUserWidget *GetBaseHUDWidget() const { return BaseHUDWidget; }
+
+	/** Set crosshair visibility */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void SetCrosshairVisibility(bool bVisible);
 
 	/** Setup notification canvas to use the HUD canvas */
 	UFUNCTION(BlueprintCallable, Category = "UI")

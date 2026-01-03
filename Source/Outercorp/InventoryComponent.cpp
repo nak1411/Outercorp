@@ -430,6 +430,36 @@ int32 UInventoryComponent::FindItemByID(FName ItemID) const
 	return -1;
 }
 
+bool UInventoryComponent::HasItem(UInventoryItemData* ItemData, int32 MinQuantity) const
+{
+	if (!ItemData || MinQuantity <= 0)
+	{
+		return false;
+	}
+
+	int32 TotalQuantity = GetItemQuantity(ItemData);
+	return TotalQuantity >= MinQuantity;
+}
+
+int32 UInventoryComponent::GetItemQuantity(UInventoryItemData* ItemData) const
+{
+	if (!ItemData)
+	{
+		return 0;
+	}
+
+	int32 TotalQuantity = 0;
+	for (const FInventoryItem& Item : Items)
+	{
+		if (Item.IsValid() && Item.ItemData == ItemData)
+		{
+			TotalQuantity += Item.Quantity;
+		}
+	}
+
+	return TotalQuantity;
+}
+
 void UInventoryComponent::SetMaxSlots(int32 NewMaxSlots)
 {
 	if (NewMaxSlots < MaxSlots)

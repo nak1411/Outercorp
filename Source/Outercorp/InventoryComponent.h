@@ -113,6 +113,14 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	int32 FindItemByID(FName ItemID) const;
 
+	/** Check if inventory has a specific item with at least the specified quantity */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	bool HasItem(UInventoryItemData* ItemData, int32 MinQuantity = 1) const;
+
+	/** Get total quantity of a specific item across all slots */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	int32 GetItemQuantity(UInventoryItemData* ItemData) const;
+
 	/** Set max slots */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void SetMaxSlots(int32 NewMaxSlots);
