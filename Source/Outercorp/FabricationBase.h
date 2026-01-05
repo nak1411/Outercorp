@@ -56,20 +56,36 @@ public:
 	class UCameraComponent* CraftingCameraPosition;
 
 	// ============================================================================
-	// Interaction Zones (Set in Blueprint)
+	// Dynamic Zone System
 	// ============================================================================
 
-	/** Interaction zone for toolbox */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crafting Zones")
-	class UBoxComponent* ToolboxZone;
+	/**
+	 * Discovered zones at runtime
+	 * Key = Zone type (e.g., "Toolbox", "MaterialBin")
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Crafting Zones")
+	TMap<FName, class UBoxComponent*> DiscoveredZones;
 
-	/** Interaction zone for material/hardware bin */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crafting Zones")
-	class UBoxComponent* MaterialBinZone;
+	/**
+	 * Meshes associated with each zone
+	 * Key = Zone type (e.g., "Toolbox", "MaterialBin")
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Crafting Zones")
+	TMap<FName, class UStaticMeshComponent*> ZoneMeshes;
 
-	/** Interaction zone for work surface */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crafting Zones")
-	class UBoxComponent* WorkSurfaceZone;
+	/**
+	 * Inventory components for each zone (dynamically created)
+	 * Key = Zone type (e.g., "Toolbox", "MaterialBin")
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Crafting Zones")
+	TMap<FName, class UInventoryComponent*> ZoneInventories;
+
+	/**
+	 * Currently installed module for each zone
+	 * Key = Zone type, Value = Module ID
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Crafting Zones")
+	TMap<FName, FName> InstalledModules;
 
 	// ============================================================================
 	// Data Asset
@@ -78,6 +94,14 @@ public:
 	/** Fabrication data asset defining gameplay properties */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Fabrication")
 	class UFabricationData* FabricationData;
+
+	// ============================================================================
+	// Container Widgets
+	// ============================================================================
+
+	/** Base window class (WBP_Base_Window) - used for all zone container windows */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Crafting Zones|Widgets")
+	TSubclassOf<class UUserWidget> BaseWindowClass;
 
 	// ============================================================================
 	// State
@@ -102,15 +126,43 @@ public:
 	UPROPERTY()
 	FRotator StoredCameraRotation;
 
-	/** Store original materials for zones to restore after highlighting */
+	/** Currently hovered mesh component */
 	UPROPERTY()
-	TArray<UMaterialInterface*> ToolboxOriginalMaterials;
+	UStaticMeshComponent* CurrentlyHoveredMesh;
 
-	UPROPERTY()
-	TArray<UMaterialInterface*> MaterialBinOriginalMaterials;
+	/** Cache for storing original materials during highlighting (non-UPROPERTY, transient runtime data) */
+	TMap<UStaticMeshComponent*, TArray<UMaterialInterface*>> OriginalMaterialsCache;
 
+	// DEPRECATED: Legacy cached pointers for backward compatibility
+	// These are populated from DiscoveredZones at runtime to support old code
+	UPROPERTY(Transient)
+	class UBoxComponent* ToolboxZone;
+
+	UPROPERTY(Transient)
+	class UBoxComponent* MaterialBinZone;
+
+	UPROPERTY(Transient)
+	class UBoxComponent* WorkSurfaceZone;
+
+	UPROPERTY(Transient)
+	class UStaticMeshComponent* ToolboxMesh;
+
+	UPROPERTY(Transient)
+	class UStaticMeshComponent* MaterialBinMesh;
+
+	UPROPERTY(Transient)
+	class UInventoryComponent* ToolboxInventory;
+
+	UPROPERTY(Transient)
+	class UInventoryComponent* MaterialBinInventory;
+
+	/** Currently open toolbox window instance */
 	UPROPERTY()
-	TArray<UMaterialInterface*> WorkSurfaceOriginalMaterials;
+	class UUserWidget* CurrentToolboxWindow;
+
+	/** Currently open material bin window instance */
+	UPROPERTY()
+	class UUserWidget* CurrentMaterialBinWindow;
 
 	// ============================================================================
 	// Functions
@@ -156,6 +208,50 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Fabrication|Interactive Mode")
 	void ExitCraftingMode();
 
+	/** Create toolbox container content widget */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Interactive Mode")
+	class UContainerWidget* CreateToolboxContent();
+
+	/** Create material bin container content widget */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Interactive Mode")
+	class UContainerWidget* CreateMaterialBinContent();
+
+	/** Close the toolbox window */
+	UFUNCTION()
+	void CloseToolboxWindow();
+
+	/** Close the material bin window */
+	UFUNCTION()
+	void CloseMaterialBinWindow();
+
+	/** Add test items to toolbox for debugging */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Debug")
+	void AddTestItemsToToolbox();
+
+	// ============================================================================
+	// Auto-Discovery System
+	// ============================================================================
+
+	/** Discover and configure all zones from Blueprint components */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Zone System")
+	void DiscoverZones();
+
+	/** Extract zone type from component name (e.g., "ToolboxZone" -> "Toolbox") */
+	FName ExtractZoneType(const FString& ComponentName) const;
+
+	/** Find mesh component associated with a zone by proximity or naming */
+	UStaticMeshComponent* FindAssociatedMesh(UBoxComponent* ZoneComponent, FName ZoneType) const;
+
+	/** Install a module in a zone */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Zone System")
+	void InstallModule(FName ZoneType, FName ModuleID);
+
+	/** Get zone type config from data asset */
+	const struct FFabricationZoneTypeConfig* GetZoneTypeConfig(FName ZoneType) const;
+
+	/** Setup zone events (hover, click) */
+	void SetupZoneEvents(UBoxComponent* ZoneComponent, FName ZoneType);
+
 	/** Called when player clicks on toolbox zone */
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "Fabrication|Interactive Mode")
 	void OnToolboxClicked();
@@ -191,8 +287,30 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Fabrication|Interactive Mode")
 	void DebugDrawZones();
 
+	/** Highlight a static mesh component (for hover feedback) */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Interactive Mode")
+	void HighlightMesh(UStaticMeshComponent* Mesh);
+
+	/** Remove highlight from a static mesh component */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Interactive Mode")
+	void UnhighlightMesh(UStaticMeshComponent* Mesh);
+
+	/** Check for mesh hover using cursor ray trace (called on tick when in crafting mode) */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Interactive Mode")
+	void CheckMeshHover();
+
 private:
-	/** Internal click handlers bound to component OnClicked events */
+	/** Generic zone event handlers (used by auto-discovery system) */
+	UFUNCTION()
+	void OnZoneClicked(UPrimitiveComponent* TouchedComponent, FKey ButtonPressed);
+
+	UFUNCTION()
+	void OnZoneBeginHover(UPrimitiveComponent* TouchedComponent);
+
+	UFUNCTION()
+	void OnZoneEndHover(UPrimitiveComponent* TouchedComponent);
+
+	/** DEPRECATED: Legacy zone-specific handlers for backward compatibility */
 	UFUNCTION()
 	void OnToolboxZoneClicked(UPrimitiveComponent* TouchedComponent, FKey ButtonPressed);
 
@@ -201,6 +319,18 @@ private:
 
 	UFUNCTION()
 	void OnWorkSurfaceZoneClicked(UPrimitiveComponent* TouchedComponent, FKey ButtonPressed);
+
+	UFUNCTION()
+	void OnToolboxZoneBeginHover(UPrimitiveComponent* TouchedComponent);
+
+	UFUNCTION()
+	void OnToolboxZoneEndHover(UPrimitiveComponent* TouchedComponent);
+
+	UFUNCTION()
+	void OnMaterialBinZoneBeginHover(UPrimitiveComponent* TouchedComponent);
+
+	UFUNCTION()
+	void OnMaterialBinZoneEndHover(UPrimitiveComponent* TouchedComponent);
 
 public:
 	// ============================================================================
