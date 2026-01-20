@@ -217,8 +217,9 @@ void UInteractionManagerComponent::CheckForInteractables()
 		UpdateISMHighlight(PendingISMComponent.Get(), PendingInstanceIndex);
 		bLookingAtHarvestableISM = true;
 	}
-	else if (NewInteractable.GetObject() || !bHit)
+	else
 	{
+		// Clear ISM state whenever we're not looking at a harvestable ISM
 		PendingISMComponent = nullptr;
 		PendingInstanceIndex = INDEX_NONE;
 		ClearISMHighlight();

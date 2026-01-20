@@ -142,17 +142,32 @@ struct FHarvestableSourceMesh
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health", meta = (ClampMin = "1.0"))
 	float MaxHealth = 100.0f;
 
+	/** If true, interacting picks up the item directly instead of harvesting for yields */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup")
+	bool bDirectPickup = false;
+
+	/** Item to give when directly picked up (only used if bDirectPickup is true) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup", meta = (EditCondition = "bDirectPickup"))
+	UInventoryItemData* DirectPickupItem = nullptr;
+
+	/** Quantity to give on direct pickup */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup", meta = (EditCondition = "bDirectPickup", ClampMin = "1"))
+	int32 DirectPickupQuantity = 1;
+
 	/** Items yielded when harvesting */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Yields")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Yields", meta = (EditCondition = "!bDirectPickup"))
 	TArray<FHarvestYield> HarvestYields;
 
 	/** Bonus yields when fully depleted (final hit) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Yields")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Yields", meta = (EditCondition = "!bDirectPickup"))
 	TArray<FHarvestYield> DepletionBonusYields;
 
 	FHarvestableSourceMesh()
 		: Mesh(nullptr)
 		, MaxHealth(100.0f)
+		, bDirectPickup(false)
+		, DirectPickupItem(nullptr)
+		, DirectPickupQuantity(1)
 	{}
 };
 

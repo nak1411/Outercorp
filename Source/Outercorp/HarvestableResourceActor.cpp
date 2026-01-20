@@ -6,6 +6,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "InteractableComponent.h"
 #include "OutercorpCharacter.h"
+#include "InventoryComponent.h"
 #include "PickupableItem.h"
 #include "EquippableTool.h"
 #include "NotificationComponent.h"
@@ -47,6 +48,9 @@ AHarvestableResourceActor::AHarvestableResourceActor()
 	CurrentStageIndex = INDEX_NONE;
 	OriginalScale = FVector(1.0f);
 	MeshMaxHealth = 100.0f;
+	bIsDirectPickup = false;
+	DirectPickupItem = nullptr;
+	DirectPickupQuantity = 1;
 }
 
 void AHarvestableResourceActor::BeginPlay()
@@ -94,6 +98,22 @@ void AHarvestableResourceActor::OnInteract_Implementation(AActor* InteractingAct
 	AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(InteractingActor);
 	if (!Character || !ResourceData || bIsDepleted)
 	{
+		return;
+	}
+
+	// Handle direct pickup mode
+	if (bIsDirectPickup && DirectPickupItem)
+	{
+		UInventoryComponent* Inventory = Character->GetInventoryComponent();
+		if (Inventory)
+		{
+			int32 OutSlotIndex;
+			if (Inventory->AddItem(DirectPickupItem, DirectPickupQuantity, OutSlotIndex))
+			{
+				// InventoryComponent::AddItem already shows pickup notification
+				Destroy();
+			}
+		}
 		return;
 	}
 
@@ -151,6 +171,11 @@ FText AHarvestableResourceActor::GetInteractionPrompt_Implementation() const
 	if (bIsDepleted)
 	{
 		return FText::FromString(TEXT("Depleted"));
+	}
+
+	if (bIsDirectPickup)
+	{
+		return FText::FromString(TEXT("Pick Up"));
 	}
 
 	if (ResourceData && !ResourceData->InteractionPrompt.IsEmpty())
@@ -436,6 +461,9 @@ void AHarvestableResourceActor::InitializeFromPCGInstance(UHarvestableResourceDa
 	MeshMaxHealth = 100.0f;
 	MeshHarvestYields.Empty();
 	MeshDepletionBonusYields.Empty();
+	bIsDirectPickup = false;
+	DirectPickupItem = nullptr;
+	DirectPickupQuantity = 1;
 	if (Data && ISMComponent)
 	{
 		UStaticMesh* SourceMesh = ISMComponent->GetStaticMesh();
@@ -446,6 +474,9 @@ void AHarvestableResourceActor::InitializeFromPCGInstance(UHarvestableResourceDa
 			MeshMaxHealth = MeshEntry->MaxHealth;
 			MeshHarvestYields = MeshEntry->HarvestYields;
 			MeshDepletionBonusYields = MeshEntry->DepletionBonusYields;
+			bIsDirectPickup = MeshEntry->bDirectPickup;
+			DirectPickupItem = MeshEntry->DirectPickupItem;
+			DirectPickupQuantity = MeshEntry->DirectPickupQuantity;
 		}
 	}
 

@@ -109,6 +109,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PCG")
 	TArray<FHarvestYield> MeshDepletionBonusYields;
 
+	/** If true, this resource is picked up directly instead of harvested */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PCG")
+	bool bIsDirectPickup;
+
+	/** Item to give on direct pickup */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PCG")
+	UInventoryItemData* DirectPickupItem;
+
+	/** Quantity to give on direct pickup */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PCG")
+	int32 DirectPickupQuantity;
+
 	// ============================================
 	// VISUAL STATE
 	// ============================================
