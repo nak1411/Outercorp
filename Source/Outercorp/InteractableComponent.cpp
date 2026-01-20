@@ -18,18 +18,12 @@ UInteractableComponent::UInteractableComponent()
 	HighlightColor = FLinearColor::Yellow;
 	HighlightIntensity = 3.0f;
 	bIsHighlighted = false;
-	bOriginalCustomDepthEnabled = false;
+	HighlightOverlayMaterial = nullptr;
 }
 
 void UInteractableComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// Store original custom depth state
-	if (UMeshComponent* Mesh = GetMeshComponent())
-	{
-		bOriginalCustomDepthEnabled = Mesh->bRenderCustomDepth;
-	}
 }
 
 void UInteractableComponent::OnLookAt_Implementation(AActor* LookingActor)
@@ -99,17 +93,12 @@ void UInteractableComponent::SetHighlighted(bool bHighlighted)
 
 	if (bHighlighted)
 	{
-		// Enable custom depth rendering for highlight
 		Mesh->SetRenderCustomDepth(true);
 		Mesh->SetCustomDepthStencilValue(1);
-
-		// Set custom depth stencil write mask (if needed for post-process outline)
-		Mesh->SetCustomDepthStencilWriteMask(ERendererStencilMask::ERSM_Default);
 	}
 	else
 	{
-		// Restore original custom depth state
-		Mesh->SetRenderCustomDepth(bOriginalCustomDepthEnabled);
+		Mesh->SetRenderCustomDepth(false);
 		Mesh->SetCustomDepthStencilValue(0);
 	}
 }

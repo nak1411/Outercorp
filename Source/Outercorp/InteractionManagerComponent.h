@@ -7,6 +7,11 @@
 #include "InteractableInterface.h"
 #include "InteractionManagerComponent.generated.h"
 
+class APCGHarvestableManager;
+class UInstancedStaticMeshComponent;
+class UStaticMeshComponent;
+class UMaterialInterface;
+
 /**
  * Component that handles interaction for a character
  * Performs line traces to detect interactable objects and manages interaction state
@@ -21,6 +26,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 public:
@@ -35,6 +41,10 @@ public:
 	/** Trace channel to use for interaction traces */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	TEnumAsByte<ECollisionChannel> InteractionTraceChannel;
+
+	/** Radius of the interaction trace sphere (0 = line trace, >0 = sphere sweep) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction", meta = (ClampMin = "0.0", ClampMax = "50.0"))
+	float InteractionTraceRadius;
 
 	/** Should we draw debug lines for interaction traces? */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction|Debug")
@@ -76,4 +86,57 @@ protected:
 
 	/** Previous interactable (for detecting changes) */
 	TScriptInterface<IInteractableInterface> PreviousInteractable;
+
+	// ============================================
+	// ISM/HARVESTABLE SUPPORT
+	// ============================================
+
+	/** Cached PCG harvestable manager */
+	UPROPERTY()
+	mutable TWeakObjectPtr<APCGHarvestableManager> CachedHarvestableManager;
+
+	/** Find the PCG harvestable manager in the level */
+	APCGHarvestableManager* GetHarvestableManager() const;
+
+	/** Pending ISM component for conversion */
+	UPROPERTY()
+	TWeakObjectPtr<UInstancedStaticMeshComponent> PendingISMComponent;
+
+	/** Pending instance index for conversion */
+	int32 PendingInstanceIndex;
+
+	/** Pending hit location for ISM interaction */
+	FVector PendingISMHitLocation;
+
+	/** Whether we're looking at a harvestable ISM instance */
+	bool bLookingAtHarvestableISM;
+
+	/** Highlight mesh component for ISM instances */
+	UPROPERTY()
+	UStaticMeshComponent* ISMHighlightMesh;
+
+	/** Currently highlighted instance index */
+	int32 HighlightedInstanceIndex;
+
+	/** Currently highlighted ISM component */
+	TWeakObjectPtr<UInstancedStaticMeshComponent> HighlightedISMComponent;
+
+	/** Create or update the ISM highlight mesh */
+	void UpdateISMHighlight(UInstancedStaticMeshComponent* ISMComp, int32 InstanceIndex);
+
+	/** Clear the ISM highlight mesh */
+	void ClearISMHighlight();
+
+	/** Overlay material to apply when highlighting ISM instances */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction|Highlight")
+	UMaterialInterface* HighlightOverlayMaterial;
+
+public:
+	/** Check if looking at a harvestable ISM instance */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Interaction")
+	bool IsLookingAtHarvestableInstance() const { return bLookingAtHarvestableISM; }
+
+	/** Get the name of the harvestable being looked at */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Interaction")
+	FText GetPendingHarvestableName() const;
 };

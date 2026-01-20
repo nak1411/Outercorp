@@ -99,6 +99,22 @@ void UNotificationComponent::ShowItemPickupNotification(const FText& ItemName, i
 	ShowNotification(NotificationData);
 }
 
+void UNotificationComponent::ShowItemHarvestedNotification(const FText& ItemName, int32 Quantity, UTexture2D* ItemIcon)
+{
+	FText Message;
+	if (Quantity > 1)
+	{
+		Message = FText::Format(FText::FromString(TEXT("Harvested {0} x{1}")), ItemName, FText::AsNumber(Quantity));
+	}
+	else
+	{
+		Message = FText::Format(FText::FromString(TEXT("Harvested {0}")), ItemName);
+	}
+
+	FNotificationData NotificationData(Message, ENotificationType::Success, 2.5f, ItemIcon);
+	ShowNotification(NotificationData);
+}
+
 void UNotificationComponent::ShowItemDestroyedNotification(const FText& ItemName, int32 Quantity)
 {
 	FText Message;

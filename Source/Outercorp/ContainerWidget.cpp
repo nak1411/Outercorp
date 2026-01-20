@@ -35,6 +35,56 @@ void UContainerWidget::NativeConstruct()
 		ViewModeSwitcher->SetActiveWidgetIndex(0);
 		bIsListView = false;
 	}
+
+	// Initialize cached size
+	CachedSize = FVector2D::ZeroVector;
+}
+
+void UContainerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// Check for resize
+	FVector2D CurrentSize = MyGeometry.GetLocalSize();
+
+	// If size changed significantly (more than 5 pixels)
+	if (!CachedSize.Equals(CurrentSize, 5.0f))
+	{
+		CachedSize = CurrentSize;
+
+		// Debounce the resize handling to avoid calling it every frame
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(ResizeDebounceTimerHandle);
+			World->GetTimerManager().SetTimer(
+				ResizeDebounceTimerHandle,
+				this,
+				&UContainerWidget::ExecuteDebouncedResize,
+				0.2f,  // 200ms delay
+				false
+			);
+		}
+	}
+}
+
+void UContainerWidget::ExecuteDebouncedResize()
+{
+	// Compress items when window is resized
+	if (ContainerInventory)
+	{
+		ContainerInventory->StackAllItems();  // Merge same items together
+		ContainerInventory->CompressItems();  // Move items to fill gaps
+	}
+
+	// Refresh the display
+	if (bIsListView)
+	{
+		PopulateTableView();
+	}
+	else
+	{
+		RefreshContainer();
+	}
 }
 
 FReply UContainerWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
@@ -92,6 +142,16 @@ void UContainerWidget::OnInventoryUpdate(int32 SlotIndex, const FInventoryItem& 
 {
 	// Trigger a full refresh when inventory changes
 	RefreshContainer();
+
+	// Also refresh list view if it exists, even if not currently visible
+	// This prevents duplication bugs when items are dragged from list view to other inventories
+	if (bIsListView)
+	{
+		if (ListViewRowContainer)
+		{
+			PopulateTableView();
+		}
+	}
 }
 
 void UContainerWidget::RefreshContainer()
@@ -117,8 +177,12 @@ void UContainerWidget::RefreshContainer()
 	int32 Column = 0;
 	int32 SlotIndexCounter = 0;
 
-	// Create slot widgets - populate all slots up to MaxSlots
-	for (int32 i = 0; i < MaxSlots; i++)
+	// Use the container inventory's MaxSlots instead of the widget's MaxSlots
+	// This ensures we only show the actual capacity of the container
+	int32 SlotsToCreate = ContainerInventory->MaxSlots;
+
+	// Create slot widgets - populate all slots up to the container's capacity
+	for (int32 i = 0; i < SlotsToCreate; i++)
 	{
 		UInventorySlotWidget* SlotWidget = CreateWidget<UInventorySlotWidget>(this, SlotWidgetClass);
 		if (SlotWidget)
@@ -126,6 +190,7 @@ void UContainerWidget::RefreshContainer()
 			// Set up slot with inventory component and slot index
 			SlotWidget->SetInventoryComponent(ContainerInventory);
 			SlotWidget->SetSlotIndex(i);
+			SlotWidget->bDisableWorldDrop = true;  // Disable world dropping in containers (crafting mode)
 
 			// If we have an item for this slot, set it
 			if (i < Items.Num() && Items[i].IsValid())
@@ -277,6 +342,13 @@ void UContainerWidget::SetViewMode(bool bListView)
 	bIsListView = bListView;
 
 	UE_LOG(LogTemp, Log, TEXT("SetViewMode called - switching to %s view"), bListView ? TEXT("LIST") : TEXT("GRID"));
+
+	// Compress items before switching views to ensure proper layout
+	if (ContainerInventory)
+	{
+		ContainerInventory->StackAllItems();  // Merge same items together
+		ContainerInventory->CompressItems();  // Move items to fill gaps
+	}
 
 	// If using WidgetSwitcher (preferred method)
 	if (ViewModeSwitcher)

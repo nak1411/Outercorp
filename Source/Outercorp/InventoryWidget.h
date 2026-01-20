@@ -286,6 +286,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void PopulateTableView();
 
+	/** Enable or disable world dropping for all inventory slots (e.g., disable when in crafting mode) */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void SetWorldDropEnabled(bool bEnabled);
+
 	/** Synchronize selections from grid view to list view */
 	void SyncSelectionsGridToList();
 

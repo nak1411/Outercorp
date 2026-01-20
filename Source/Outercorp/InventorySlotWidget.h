@@ -50,6 +50,10 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = "Inventory")
 	bool bWasDroppedOnValidTarget = false;
 
+	/** Disable dropping items to world (e.g., when in crafting mode) */
+	UPROPERTY(BlueprintReadWrite, Category = "Inventory")
+	bool bDisableWorldDrop = false;
+
 	/** Override Drop to track if dropped on valid target */
 	virtual void Drop_Implementation(const FPointerEvent& PointerEvent) override;
 
@@ -153,6 +157,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
 	FLinearColor DragHoverColor = FLinearColor(0.2f, 0.5f, 1.0f, 0.5f);
 
+	/** Color for invalid drop (when item category is not allowed) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
+	FLinearColor InvalidDropColor = FLinearColor(1.0f, 0.0f, 0.0f, 0.5f);
+
 	/** Hover overlay color - shown when slot is hovered (use semi-transparent white to lighten) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Visuals")
 	FLinearColor HoverOverlayColor = FLinearColor(1.0f, 1.0f, 1.0f, 0.2f);
@@ -221,6 +229,14 @@ public:
 	/** Check if slot is empty */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	bool IsSlotEmpty() const { return !CurrentItem.IsValid(); }
+
+	/** Check if this slot can accept an item (based on category filter) */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	bool CanAcceptItem(const FInventoryItem& Item) const;
+
+	/** Disable dropping items to world (set to true when in crafting/fabrication mode) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Behavior")
+	bool bDisableWorldDrop = false;
 
 protected:
 	/** Called when slot is clicked */

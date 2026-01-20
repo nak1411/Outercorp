@@ -187,7 +187,18 @@ public:
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+private:
+	/** Cached size for detecting resize */
+	FVector2D CachedSize;
+
+	/** Timer handle for debounced resize handling */
+	FTimerHandle ResizeDebounceTimerHandle;
+
+	/** Execute the debounced resize/compress */
+	void ExecuteDebouncedResize();
 
 private:
 	/** Grid view button clicked */

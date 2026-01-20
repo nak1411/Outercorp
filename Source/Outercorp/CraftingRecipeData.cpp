@@ -39,16 +39,24 @@ bool UCraftingRecipeData::HasRequiredTools(UInventoryComponent* Inventory) const
 	}
 
 	// Check each required tool
-	for (const FName& ToolName : RequiredTools)
+	for (const TObjectPtr<UInventoryItemData>& Tool : RequiredTools)
 	{
-		// TODO: Implement tool checking once we have a tool system
-		// For now, assume tools are available if inventory exists
+		if (!Tool)
+		{
+			continue;
+		}
+
+		// Check if inventory has this tool (quantity = 1)
+		if (!Inventory->HasItem(Tool, 1))
+		{
+			return false;
+		}
 	}
 
 	return true;
 }
 
-bool UCraftingRecipeData::CanCraftAtStation(FName StationType) const
+bool UCraftingRecipeData::CanCraftAtStation(EStationType StationType) const
 {
 	// If no stations specified, can be crafted anywhere
 	if (AllowedStations.Num() == 0)

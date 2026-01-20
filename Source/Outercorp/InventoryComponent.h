@@ -41,6 +41,11 @@ public:
 	/** Maximum volume capacity (0 = unlimited) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
 	float MaxVolume = 0.0f;
+
+	/** Item categories allowed in this inventory (bitmask, 0 = allow all) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Filter")
+	int32 AllowedItemCategories = 0;
+
 	/** Called when inventory is updated */
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
 	FOnInventoryUpdated OnInventoryUpdated;
@@ -52,6 +57,10 @@ public:
 	/** Add an item to the inventory */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool AddItem(UInventoryItemData* ItemData, int32 Quantity, int32& OutSlotIndex);
+
+	/** Add an item to a specific slot (for cross-inventory transfers) */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool AddItemToSlot(int32 SlotIndex, UInventoryItemData* ItemData, int32 Quantity);
 
 	/** Remove item from specific slot */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -100,6 +109,10 @@ public:
 	/** Check if can add item */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	bool CanAddItem(UInventoryItemData* ItemData, int32 Quantity = 1) const;
+
+	/** Check if item category is allowed in this inventory */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	bool IsItemCategoryAllowed(UInventoryItemData* ItemData) const;
 
 	/** Find first empty slot */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
@@ -155,6 +168,14 @@ public:
 	/** Destroy item at slot and show notification */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool DestroyItem(int32 SlotIndex, int32 Quantity);
+
+	/** Stack all stackable items together */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void StackAllItems();
+
+	/** Compress items to fill gaps (move all items to earliest available slots) */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void CompressItems();
 
 	/** Class to spawn when dropping items */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Drop")

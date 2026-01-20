@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "InventoryItemData.h"
+#include "CraftingRecipeData.h"
 #include "FabricationData.generated.h"
 
 /**
@@ -19,6 +20,43 @@ enum class EFabricationZoneType : uint8
 	PowerSupply UMETA(DisplayName = "Power Supply"),
 	Storage UMETA(DisplayName = "Storage"),
 	Custom UMETA(DisplayName = "Custom (Use Custom Name)")
+};
+
+/**
+ * Work surface size determines crafting complexity
+ */
+UENUM(BlueprintType)
+enum class EWorkSurfaceSize : uint8
+{
+	Small UMETA(DisplayName = "Small"),
+	Medium UMETA(DisplayName = "Medium"),
+	Large UMETA(DisplayName = "Large")
+};
+
+/**
+ * Work surface configuration for crafting
+ * Determines complexity of items that can be crafted
+ */
+USTRUCT(BlueprintType)
+struct FWorkSurfaceConfig
+{
+	GENERATED_BODY()
+
+	/** Size of work surface (determines crafting complexity) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Work Surface")
+	EWorkSurfaceSize SurfaceSize = EWorkSurfaceSize::Small;
+
+	/** Maximum number of ingredient slots (e.g., Small=2, Medium=4, Large=6+) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Work Surface")
+	int32 MaxIngredientSlots = 2;
+
+	/** Maximum number of required tools (e.g., Small=2, Medium=3, Large=5+) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Work Surface")
+	int32 MaxRequiredTools = 2;
+
+	/** Is this work surface enabled? (allows for modular upgrades) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Work Surface")
+	bool bIsEnabled = true;
 };
 
 /**
@@ -45,17 +83,49 @@ struct FFabricationZoneModule
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module")
 	UTexture2D* ModuleIcon;
 
-	/** Widget class for this module's container (if it has storage) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Container")
+	/** Is this a storage module (Toolbox, MaterialBin, Storage)? */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module")
+	bool bIsStorageModule = false;
+
+	/** Is this a work surface module? */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module")
+	bool bIsWorkSurface = false;
+
+	/** Widget class for this module's container (only for storage modules) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Container", meta = (EditCondition = "bIsStorageModule", EditConditionHides))
 	TSubclassOf<class UContainerWidget> ContainerWidgetClass;
 
-	/** Inventory size for this module (0 if not a storage module) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Container")
+	/** Inventory size for this module (only for storage modules) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Container", meta = (EditCondition = "bIsStorageModule", EditConditionHides))
 	int32 InventorySlots = 0;
 
-	/** Item categories allowed in this container (empty = allow all) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Container", meta = (Bitmask, BitmaskEnum = "/Script/Outercorp.EItemCategory"))
+	/** Item categories allowed in this container (empty = allow all, only for storage modules) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Container", meta = (EditCondition = "bIsStorageModule", EditConditionHides, Bitmask, BitmaskEnum = "/Script/Outercorp.EItemCategory"))
 	int32 AllowedItemCategories = 0;
+
+	/** Content widget class for work surface (only for work surface modules) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Work Surface", meta = (EditCondition = "bIsWorkSurface", EditConditionHides))
+	TSubclassOf<class UUserWidget> ContentWidgetClass;
+
+	/** Work surface configuration (only for work surface modules) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Work Surface", meta = (EditCondition = "bIsWorkSurface", EditConditionHides))
+	FWorkSurfaceConfig WorkSurfaceConfig;
+
+	// ============================================================================
+	// Widget Positioning
+	// ============================================================================
+
+	/** Should widget position be anchored to the zone mesh location? */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Widget Positioning")
+	bool bAnchorToMesh = false;
+
+	/** Offset from mesh screen position (if bAnchorToMesh is true) or absolute screen position (if false) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Widget Positioning")
+	FVector2D WidgetPositionOffset = FVector2D(200, 150);
+
+	/** Widget window size */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Module|Widget Positioning")
+	FVector2D WidgetSize = FVector2D(500, 400);
 };
 
 /**
@@ -132,9 +202,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Station Info", meta = (MultiLine = true))
 	FText Description;
 
-	/** Type/category of station (e.g., "Workbench", "Forge", "Assembler") */
+	/** Type of fabrication station (used to match with recipe requirements) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Station Info")
-	FString StationType;
+	EStationType StationType = EStationType::Workbench;
 
 	/** Icon for UI display */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Station Info")
@@ -164,9 +234,17 @@ public:
 	// Crafting Properties
 	// ============================================================================
 
-	/** List of recipe categories this station can craft (e.g., "BasicTools", "Weapons", "Electronics") */
+	/** Recipe database reference (optional - provides default recipes for this station) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crafting")
-	TArray<FName> SupportedRecipeCategories;
+	TObjectPtr<class UCraftingRecipeDatabase> RecipeDatabase;
+
+	/** Default recipes that are always available at this station (in addition to database) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crafting")
+	TArray<TObjectPtr<UCraftingRecipeData>> DefaultRecipes;
+
+	/** Recipe categories this station can craft (empty = allows all categories) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crafting")
+	TArray<ERecipeCategory> SupportedRecipeCategories;
 
 	/** Does this station consume power/fuel while crafting? */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crafting")

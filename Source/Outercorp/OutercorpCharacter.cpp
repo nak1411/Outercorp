@@ -176,6 +176,16 @@ void AOutercorpCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Ensure InteractionManagerComponent exists (may be missing if Blueprint doesn't have it)
+	if (!InteractionManagerComponent)
+	{
+		InteractionManagerComponent = NewObject<UInteractionManagerComponent>(this, TEXT("InteractionManager"));
+		if (InteractionManagerComponent)
+		{
+			InteractionManagerComponent->RegisterComponent();
+		}
+	}
+
 	if (IsLocallyControlled())
 	{
 		// Create and display the base HUD widget first
@@ -754,7 +764,8 @@ void AOutercorpCharacter::InteractReleased()
 		// If no held item and timer hasn't fired, do instant interact
 		if (!HeldItemData)
 		{
-			// Timer hasn't fired yet (quick tap), do instant interact			if (GetWorld())
+			// Timer hasn't fired yet (quick tap), do instant interact
+			if (GetWorld())
 			{
 				GetWorld()->GetTimerManager().ClearTimer(InteractHoldTimerHandle);
 			}
@@ -877,7 +888,7 @@ void AOutercorpCharacter::DropHeldItem()
 
 	if (!bHasValidPlacement)
 	{
-		// Spawn the item back at the original pickup location
+		// Spawn the item at the current ghost position (where player is holding it)
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
@@ -886,7 +897,7 @@ void AOutercorpCharacter::DropHeldItem()
 
 		APickupableItem* RestoredItem = GetWorld()->SpawnActor<APickupableItem>(
 			ClassToSpawn,
-			OriginalItemLocation,
+			PlacementLocation,
 			FRotator::ZeroRotator,
 			SpawnParams
 		);
@@ -1142,11 +1153,6 @@ void AOutercorpCharacter::ToggleToolTransformWidget()
 		if (ToolTransformWidget)
 		{
 			ToolTransformWidget->AddToViewport();
-			UE_LOG(LogTemp, Log, TEXT("Tool Transform Widget created and added to viewport"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Failed to create Tool Transform Widget"));
 		}
 		return;
 	}
@@ -1157,17 +1163,11 @@ void AOutercorpCharacter::ToggleToolTransformWidget()
 		if (ToolTransformWidget->IsInViewport())
 		{
 			ToolTransformWidget->RemoveFromParent();
-			UE_LOG(LogTemp, Log, TEXT("Tool Transform Widget hidden"));
 		}
 		else
 		{
 			ToolTransformWidget->AddToViewport();
-			UE_LOG(LogTemp, Log, TEXT("Tool Transform Widget shown"));
 		}
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ToolTransformWidgetClass not set in Blueprint. Please assign WBP_ToolTransformAdjuster to the character Blueprint."));
 	}
 }
 
@@ -1178,7 +1178,6 @@ void AOutercorpCharacter::ExitCraftingMode()
 	{
 		ActiveFabricationStation->StopUsing();
 		ActiveFabricationStation = nullptr;
-		UE_LOG(LogTemp, Log, TEXT("Exited crafting mode via ESC key"));
 	}
 }
 
@@ -4840,7 +4839,6 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& Inventory
 {
 	if (!InventoryItem.IsValid() || !InventoryItem.ItemData)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("EquipToolFromInventory: Invalid inventory item"));
 		return;
 	}
 
@@ -4851,8 +4849,6 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& Inventory
 		{
 			NotificationComponent->ShowNotification(FText::FromString(TEXT("This item cannot be equipped")));
 		}
-		UE_LOG(LogTemp, Warning, TEXT("EquipToolFromInventory: Item '%s' is not equippable"),
-			*InventoryItem.ItemData->ItemName.ToString());
 		return;
 	}
 
@@ -4890,7 +4886,6 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& Inventory
 				SavedTransform.GetRotation().Rotator(),
 				SavedTransform.GetScale3D()
 			);
-			UE_LOG(LogTemp, Log, TEXT("Loaded saved transform for tool"));
 		}
 
 		// Store the item data for tracking
@@ -4905,13 +4900,6 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& Inventory
 			);
 			NotificationComponent->ShowNotification(NotificationText);
 		}
-
-		UE_LOG(LogTemp, Log, TEXT("Equipped tool: %s"), *InventoryItem.ItemData->ItemName.ToString());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to spawn tool actor for: %s"),
-			*InventoryItem.ItemData->ItemName.ToString());
 	}
 }
 
@@ -4940,8 +4928,6 @@ void AOutercorpCharacter::UnequipCurrentTool()
 	}
 
 	EquippedToolItemData = nullptr;
-
-	UE_LOG(LogTemp, Log, TEXT("Unequipped tool"));
 }
 
 void AOutercorpCharacter::ToggleEquipTool()
@@ -4956,7 +4942,6 @@ void AOutercorpCharacter::ToggleEquipTool()
 	// Otherwise, try to find and equip the first tool in inventory
 	if (!InventoryComponent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No inventory component found"));
 		return;
 	}
 
@@ -4976,8 +4961,6 @@ void AOutercorpCharacter::ToggleEquipTool()
 				FText Message = FText::Format(FText::FromString(TEXT("Equipped {0}")), Item.ItemData->ItemName);
 				NotificationComponent->ShowNotification(Message);
 			}
-
-			UE_LOG(LogTemp, Log, TEXT("Equipped tool: %s"), *Item.ItemData->ItemName.ToString());
 			return;
 		}
 	}
@@ -4989,8 +4972,6 @@ void AOutercorpCharacter::ToggleEquipTool()
 			FText::FromString(TEXT("No tools in inventory to equip"))
 		);
 	}
-
-	UE_LOG(LogTemp, Warning, TEXT("No equippable tools found in inventory"));
 }
 
 void AOutercorpCharacter::StartToolUse()

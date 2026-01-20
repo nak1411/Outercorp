@@ -164,6 +164,18 @@ public:
 	UPROPERTY()
 	class UUserWidget* CurrentMaterialBinWindow;
 
+	/** Currently open work surface window instance */
+	UPROPERTY()
+	class UUserWidget* CurrentWorkSurfaceWindow;
+
+	/** Saved window positions for each zone type */
+	UPROPERTY()
+	TMap<FName, FVector2D> SavedWindowPositions;
+
+	/** Saved window sizes for each zone type */
+	UPROPERTY()
+	TMap<FName, FVector2D> SavedWindowSizes;
+
 	// ============================================================================
 	// Functions
 	// ============================================================================
@@ -216,6 +228,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Fabrication|Interactive Mode")
 	class UContainerWidget* CreateMaterialBinContent();
 
+	/** Create work surface content widget */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Interactive Mode")
+	class UUserWidget* CreateWorkSurfaceContent();
+
 	/** Close the toolbox window */
 	UFUNCTION()
 	void CloseToolboxWindow();
@@ -223,6 +239,42 @@ public:
 	/** Close the material bin window */
 	UFUNCTION()
 	void CloseMaterialBinWindow();
+
+	/** Close the work surface window */
+	UFUNCTION()
+	void CloseWorkSurfaceWindow();
+
+	/** Get work surface configuration for the currently installed module */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Work Surface")
+	bool GetWorkSurfaceConfig(FWorkSurfaceConfig& OutConfig) const;
+
+	/** Check if a recipe can be crafted on the current work surface (based on size constraints) */
+	UFUNCTION(BlueprintCallable, Category = "Fabrication|Work Surface")
+	bool CanCraftRecipe(const class UCraftingRecipeData* Recipe) const;
+
+	/** Get station type for recipe validation */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Fabrication")
+	EStationType GetStationType() const;
+
+	/** Get crafting speed multiplier */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Fabrication")
+	float GetCraftingSpeedMultiplier() const;
+
+	/** Get player inventory (current user's inventory) */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Fabrication")
+	class UInventoryComponent* GetPlayerInventory() const;
+
+	/** Get toolbox inventory */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Fabrication")
+	class UInventoryComponent* GetToolboxInventory() const { return ToolboxInventory; }
+
+	/** Get material bin inventory */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Fabrication")
+	class UInventoryComponent* GetMaterialBinInventory() const { return MaterialBinInventory; }
+
+	/** Get station data asset */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Fabrication")
+	class UFabricationData* GetStationData() const { return FabricationData; }
 
 	/** Add test items to toolbox for debugging */
 	UFUNCTION(BlueprintCallable, Category = "Fabrication|Debug")

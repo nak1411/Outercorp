@@ -610,9 +610,10 @@ void UInventoryWidget::OnInventoryUpdated(int32 SlotIndex, const FInventoryItem 
 		PreviouslyOccupiedSlots.Remove(SlotIndex);
 	}
 
-	// Schedule a debounced list view refresh if we're in list view mode
-	// This prevents multiple rapid updates from causing performance issues
-	if (bIsListView && !bListViewRefreshPending)
+	// Schedule a debounced list view refresh regardless of current view mode
+	// This prevents duplication bugs when dragging from list view to other inventories
+	// while in grid view mode, and ensures list view data is always up-to-date
+	if (!bListViewRefreshPending)
 	{
 		bListViewRefreshPending = true;
 
@@ -794,6 +795,7 @@ void UInventoryWidget::CreateSlotWidgets()
 		{
 			SlotWidget->SetSlotIndex(i);
 			SlotWidget->SetInventoryComponent(InventoryComponent);
+			SlotWidget->bDisableWorldDrop = false;  // Enable world dropping by default
 
 			int32 Row = i / ColumnsToUse;
 			int32 Column = i % ColumnsToUse;
@@ -1204,11 +1206,8 @@ void UInventoryWidget::ExecuteDebouncedListViewRefresh()
 {
 	bListViewRefreshPending = false;
 
-	if (!bIsListView)
-	{
-		return;
-	}
-
+	// Always refresh list view data, even if not currently visible
+	// This prevents duplication bugs when switching between view modes
 	// Refresh the appropriate list view
 	if (ListViewRowContainer)
 	{
@@ -1532,6 +1531,23 @@ void UInventoryWidget::PopulateListView()
 
 	// Force refresh the list view
 	ItemListView->RequestRefresh();
+}
+
+void UInventoryWidget::SetWorldDropEnabled(bool bEnabled)
+{
+	UE_LOG(LogTemp, Warning, TEXT("SetWorldDropEnabled called: bEnabled=%s, SlotWidgets count=%d"),
+		bEnabled ? TEXT("true") : TEXT("false"), SlotWidgets.Num());
+
+	// Update all slot widgets
+	for (UInventorySlotWidget* SlotWidget : SlotWidgets)
+	{
+		if (SlotWidget)
+		{
+			SlotWidget->bDisableWorldDrop = !bEnabled;
+			UE_LOG(LogTemp, Log, TEXT("  Set slot bDisableWorldDrop = %s"),
+				SlotWidget->bDisableWorldDrop ? TEXT("true") : TEXT("false"));
+		}
+	}
 }
 
 void UInventoryWidget::PopulateTableView()

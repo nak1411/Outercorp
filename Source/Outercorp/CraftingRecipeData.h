@@ -8,6 +8,42 @@
 #include "CraftingRecipeData.generated.h"
 
 /**
+ * Recipe category for organizing and filtering crafting recipes
+ */
+UENUM(BlueprintType)
+enum class ERecipeCategory : uint8
+{
+	BasicTools UMETA(DisplayName = "Basic Tools"),
+	AdvancedTools UMETA(DisplayName = "Advanced Tools"),
+	Weapons UMETA(DisplayName = "Weapons"),
+	Armor UMETA(DisplayName = "Armor"),
+	Ammunition UMETA(DisplayName = "Ammunition"),
+	Electronics UMETA(DisplayName = "Electronics"),
+	Construction UMETA(DisplayName = "Construction"),
+	Consumables UMETA(DisplayName = "Consumables"),
+	Components UMETA(DisplayName = "Components"),
+	Misc UMETA(DisplayName = "Miscellaneous")
+};
+
+/**
+ * Fabrication station types for recipe requirements
+ */
+UENUM(BlueprintType)
+enum class EStationType : uint8
+{
+	Workbench UMETA(DisplayName = "Workbench"),
+	Forge UMETA(DisplayName = "Forge"),
+	Anvil UMETA(DisplayName = "Anvil"),
+	ChemistryStation UMETA(DisplayName = "Chemistry Station"),
+	ElectronicsWorkbench UMETA(DisplayName = "Electronics Workbench"),
+	GunsmithTable UMETA(DisplayName = "Gunsmith Table"),
+	MachineLathe UMETA(DisplayName = "Machine Lathe"),
+	AssemblyStation UMETA(DisplayName = "Assembly Station"),
+	CookingStation UMETA(DisplayName = "Cooking Station"),
+	Smelter UMETA(DisplayName = "Smelter")
+};
+
+/**
  * Ingredient for a crafting recipe
  */
 USTRUCT(BlueprintType)
@@ -62,9 +98,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recipe", meta = (MultiLine = true))
 	FText Description;
 
-	/** Category for filtering recipes (e.g., "BasicTools", "Weapons", "Electronics") */
+	/** Category for filtering and organizing recipes */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recipe")
-	FName Category;
+	ERecipeCategory Category = ERecipeCategory::Misc;
 
 	/** Icon to display in UI */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recipe")
@@ -78,13 +114,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recipe|Requirements")
 	TArray<FCraftingIngredient> Ingredients;
 
-	/** Tools required (e.g., "Wrench", "Welder") - checks if player has tool in inventory */
+	/** Tools required (as item data assets) - checks if player has tool in toolbox inventory */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recipe|Requirements")
-	TArray<FName> RequiredTools;
+	TArray<TObjectPtr<UInventoryItemData>> RequiredTools;
 
-	/** Fabrication stations that can craft this recipe (e.g., "Workbench", "Forge") */
+	/** Fabrication stations that can craft this recipe (empty = can be crafted at any station) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recipe|Requirements")
-	TArray<FName> AllowedStations;
+	TArray<EStationType> AllowedStations;
 
 	/** Minimum skill level required (0 = no requirement) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recipe|Requirements")
@@ -148,7 +184,7 @@ public:
 
 	/** Check if this recipe can be crafted at the given station */
 	UFUNCTION(BlueprintPure, Category = "Crafting Recipe")
-	bool CanCraftAtStation(FName StationType) const;
+	bool CanCraftAtStation(EStationType StationType) const;
 
 	/** Get total crafting time including station modifiers */
 	UFUNCTION(BlueprintPure, Category = "Crafting Recipe")

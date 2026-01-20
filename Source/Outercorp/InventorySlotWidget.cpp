@@ -6,6 +6,7 @@
 #include "InventoryListRowWidget.h"
 #include "TooltipWidget.h"
 #include "QuantityInputDialog.h"
+#include "FabricationBase.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
@@ -25,17 +26,23 @@ void UInventoryDragDropOperation::Drop_Implementation(const FPointerEvent& Point
 {
 	Super::Drop_Implementation(PointerEvent);
 
-	UE_LOG(LogTemp, Log, TEXT("Drop_Implementation called, bWasDroppedOnValidTarget: %s"), bWasDroppedOnValidTarget ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Log, TEXT("Drop_Implementation called, bWasDroppedOnValidTarget: %s, bDisableWorldDrop: %s"),
+		bWasDroppedOnValidTarget ? TEXT("true") : TEXT("false"),
+		bDisableWorldDrop ? TEXT("true") : TEXT("false"));
 
 	// If not dropped on a valid inventory target, assume it was dropped outside
 	// The key insight: if an item is dropped and bWasDroppedOnValidTarget is false,
 	// it means it wasn't dropped on another slot/row, so we should drop to world.
 	// The engine only calls Drop_Implementation when the mouse button is released,
 	// so if it's not on a valid target, it must be outside the inventory UI.
-	if (!bWasDroppedOnValidTarget)
+	if (!bWasDroppedOnValidTarget && !bDisableWorldDrop)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Dropping to world"));
 		HandleDropToWorld();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("Not dropping to world (target valid or world drop disabled)"));
 	}
 }
 
@@ -43,15 +50,17 @@ void UInventoryDragDropOperation::DragCancelled_Implementation(const FPointerEve
 {
 	Super::DragCancelled_Implementation(PointerEvent);
 
-	UE_LOG(LogTemp, Log, TEXT("DragCancelled_Implementation called, bWasDroppedOnValidTarget: %s"), bWasDroppedOnValidTarget ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogTemp, Log, TEXT("DragCancelled_Implementation called, bWasDroppedOnValidTarget: %s, bDisableWorldDrop: %s"),
+		bWasDroppedOnValidTarget ? TEXT("true") : TEXT("false"),
+		bDisableWorldDrop ? TEXT("true") : TEXT("false"));
 	UE_LOG(LogTemp, Log, TEXT("Mouse buttons down - Left: %s, Right: %s"),
 		PointerEvent.IsMouseButtonDown(EKeys::LeftMouseButton) ? TEXT("true") : TEXT("false"),
 		PointerEvent.IsMouseButtonDown(EKeys::RightMouseButton) ? TEXT("true") : TEXT("false"));
 
 	// If the item was NOT dropped on a valid target, it means the drag ended without hitting any inventory widget
 	// This happens when dragging outside the inventory window (mouse button released) OR when pressing Escape
-	// Check if a mouse button was just released (not Escape) by checking if NO mouse buttons are down
-	if (!bWasDroppedOnValidTarget)
+	// Don't drop to world if world dropping is disabled (e.g., in crafting mode)
+	if (!bWasDroppedOnValidTarget && !bDisableWorldDrop)
 	{
 		// If no mouse buttons are down, Escape was probably pressed - don't drop
 		// If mouse buttons ARE down, we're still dragging - this shouldn't happen
@@ -62,12 +71,19 @@ void UInventoryDragDropOperation::DragCancelled_Implementation(const FPointerEve
 	}
 	else
 	{
-		UE_LOG(LogTemp, Log, TEXT("Item was dropped on valid target or drag was cancelled - not dropping"));
+		UE_LOG(LogTemp, Log, TEXT("Not dropping to world (target valid or world drop disabled)"));
 	}
 }
 
 void UInventoryDragDropOperation::HandleDropToWorld()
 {
+	// Don't drop to world if disabled (e.g., in crafting mode)
+	if (bDisableWorldDrop)
+	{
+		UE_LOG(LogTemp, Log, TEXT("HandleDropToWorld: World drop is disabled, item will return to inventory"));
+		return;
+	}
+
 	if (!InventoryComponent || !DraggedItem.IsValid())
 	{
 		return;
@@ -383,6 +399,7 @@ void UInventorySlotWidget::NativeOnDragDetected(const FGeometry &InGeometry, con
 	DragDropOp->SourceSlotIndex = SlotIndex;
 	DragDropOp->DraggedItem = CurrentItem;
 	DragDropOp->InventoryComponent = InventoryComponent;
+	DragDropOp->bDisableWorldDrop = bDisableWorldDrop;
 
 	// Check if shift is held for split operation
 	DragDropOp->bIsSplitOperation = InMouseEvent.IsShiftDown() && CurrentItem.Quantity > 1;
@@ -430,6 +447,17 @@ bool UInventorySlotWidget::NativeOnDrop(const FGeometry &InGeometry, const FDrag
 		return false;
 	}
 
+	// Check if this slot can accept the dragged item (category filter)
+	if (!CanAcceptItem(DragDropOp->DraggedItem))
+	{
+		bDragStarted = false;
+		// Mark as valid target to prevent world drop, but don't actually move the item
+		DragDropOp->bWasDroppedOnValidTarget = true;
+		// Return TRUE to indicate we handled the drop (even though we rejected it)
+		// This prevents the drag from being cancelled and dropping to world
+		return true;
+	}
+
 	// Mark that the item was dropped on a valid target
 	DragDropOp->bWasDroppedOnValidTarget = true;
 
@@ -453,6 +481,47 @@ bool UInventorySlotWidget::NativeOnDrop(const FGeometry &InGeometry, const FDrag
 		return true;
 	}
 
+	// Check if we're moving between different inventories
+	if (DragDropOp->InventoryComponent != InventoryComponent)
+	{
+		// Cross-inventory transfer: Remove from source, add to destination
+		FInventoryItem ItemToTransfer = DragDropOp->DraggedItem;
+
+		// Remove from source inventory
+		if (DragDropOp->InventoryComponent)
+		{
+			DragDropOp->InventoryComponent->RemoveItemAtSlot(DragDropOp->SourceSlotIndex, ItemToTransfer.Quantity);
+		}
+
+		// Add to destination inventory
+		if (IsSlotEmpty())
+		{
+			// Target slot is empty - place item directly
+			InventoryComponent->AddItemToSlot(SlotIndex, ItemToTransfer.ItemData, ItemToTransfer.Quantity);
+		}
+		else
+		{
+			// Target slot has an item - try to swap by moving target item to source
+			FInventoryItem TargetItem = CurrentItem;
+
+			// Remove target item from this slot
+			InventoryComponent->RemoveItemAtSlot(SlotIndex, TargetItem.Quantity);
+
+			// Add dragged item to this slot
+			InventoryComponent->AddItemToSlot(SlotIndex, ItemToTransfer.ItemData, ItemToTransfer.Quantity);
+
+			// Add target item to source slot (if source inventory accepts it)
+			if (DragDropOp->InventoryComponent)
+			{
+				DragDropOp->InventoryComponent->AddItemToSlot(DragDropOp->SourceSlotIndex, TargetItem.ItemData, TargetItem.Quantity);
+			}
+		}
+
+		bDragStarted = false;
+		return true;
+	}
+
+	// Same inventory - handle normally
 	// When moving items, update selection to follow the item BEFORE moving
 	// This ensures bIsSelected is correct when UpdateAppearance is called during MoveItem
 	TSet<int32> &SelectionSet = InventorySelections.FindOrAdd(InventoryComponent);
@@ -482,15 +551,28 @@ void UInventorySlotWidget::NativeOnDragEnter(const FGeometry &InGeometry, const 
 {
 	Super::NativeOnDragEnter(InGeometry, InDragDropEvent, InOperation);
 
+	// Determine highlight color based on whether we can accept this item
+	FLinearColor HighlightColor = DragHoverColor;
+
+	UInventoryDragDropOperation* DragDropOp = Cast<UInventoryDragDropOperation>(InOperation);
+	if (DragDropOp)
+	{
+		// Check if this slot can accept the dragged item
+		if (!CanAcceptItem(DragDropOp->DraggedItem))
+		{
+			HighlightColor = InvalidDropColor;
+		}
+	}
+
 	// Highlight slot when dragging over
 	if (SelectionHighlight)
 	{
-		SelectionHighlight->SetColorAndOpacity(DragHoverColor);
+		SelectionHighlight->SetColorAndOpacity(HighlightColor);
 		SelectionHighlight->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	else if (SelectionBorder)
 	{
-		SelectionBorder->SetBrushColor(DragHoverColor);
+		SelectionBorder->SetBrushColor(HighlightColor);
 		SelectionBorder->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	}
 }
@@ -564,6 +646,33 @@ void UInventorySlotWidget::SetItem(const FInventoryItem &Item)
 void UInventorySlotWidget::OnSlotClicked()
 {
 	// This is called by the button, but we handle selection in NativeOnMouseButtonDown instead
+}
+
+bool UInventorySlotWidget::CanAcceptItem(const FInventoryItem& Item) const
+{
+	// Check if item is valid
+	if (!Item.IsValid() || !Item.ItemData)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CanAcceptItem: Item is invalid or has no ItemData"));
+		return false;
+	}
+
+	// Use the inventory component's category filter
+	if (!InventoryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CanAcceptItem: No InventoryComponent set, cannot check category filter"));
+		return false;
+	}
+
+	bool bCanAccept = InventoryComponent->IsItemCategoryAllowed(Item.ItemData);
+
+	UE_LOG(LogTemp, Log, TEXT("CanAcceptItem: Item '%s' (Category '%s'), InventoryFilter=0x%X, Result=%s"),
+		*Item.ItemData->ItemName.ToString(),
+		*UEnum::GetValueAsString(Item.ItemData->Category),
+		InventoryComponent->AllowedItemCategories,
+		bCanAccept ? TEXT("ACCEPT") : TEXT("REJECT"));
+
+	return bCanAccept;
 }
 
 void UInventorySlotWidget::HandleContextMenuAction_Implementation(FName ActionID)
@@ -840,8 +949,11 @@ void UInventorySlotWidget::HandleDropItem()
 
 void UInventorySlotWidget::HandleDropItemConfirmed(int32 Quantity)
 {
+	UE_LOG(LogTemp, Warning, TEXT("HandleDropItemConfirmed called - Quantity: %d"), Quantity);
+
 	if (!CurrentItem.IsValid() || !InventoryComponent)
 	{
+		UE_LOG(LogTemp, Error, TEXT("HandleDropItemConfirmed: CurrentItem invalid or InventoryComponent null"));
 		return;
 	}
 
@@ -850,12 +962,15 @@ void UInventorySlotWidget::HandleDropItemConfirmed(int32 Quantity)
 	int32 CachedQuantity = FMath::Clamp(Quantity, 1, CurrentItem.Quantity);
 	UInventoryComponent* CachedInventoryComponent = InventoryComponent;
 
+	UE_LOG(LogTemp, Warning, TEXT("HandleDropItemConfirmed: Scheduling drop for slot %d, quantity %d"), CachedSlotIndex, CachedQuantity);
+
 	// Defer the drop operation until the next frame
 	// This prevents issues with the context menu still processing the click event
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().SetTimerForNextTick([CachedInventoryComponent, CachedSlotIndex, CachedQuantity]()
 		{
+			UE_LOG(LogTemp, Warning, TEXT("HandleDropItemConfirmed: Timer fired, executing drop"));
 			if (IsValid(CachedInventoryComponent))
 			{
 				// Drop the item in front of the owner (uses default drop distance)
@@ -863,10 +978,22 @@ void UInventorySlotWidget::HandleDropItemConfirmed(int32 Quantity)
 
 				if (!bSuccess)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("Failed to drop item from slot %d"), CachedSlotIndex);
+					UE_LOG(LogTemp, Error, TEXT("HandleDropItemConfirmed: Failed to drop item from slot %d"), CachedSlotIndex);
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("HandleDropItemConfirmed: Successfully dropped item from slot %d"), CachedSlotIndex);
 				}
 			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("HandleDropItemConfirmed: InventoryComponent became invalid before timer fired"));
+			}
 		});
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("HandleDropItemConfirmed: GetWorld() returned null"));
 	}
 }
 

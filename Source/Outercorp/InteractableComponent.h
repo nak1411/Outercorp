@@ -55,6 +55,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction|Highlight", meta = (ClampMin = "0.0", ClampMax = "10.0"))
 	float HighlightIntensity;
 
+	/** Overlay material to apply when highlighted */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction|Highlight")
+	UMaterialInterface* HighlightOverlayMaterial;
+
 	/** Blueprint event called when player looks at this object */
 	UPROPERTY(BlueprintAssignable, Category = "Interaction")
 	FInteractionDelegate OnLookedAt;
@@ -88,7 +92,4 @@ public:
 protected:
 	/** Currently highlighted state */
 	bool bIsHighlighted;
-
-	/** Original render custom depth state */
-	bool bOriginalCustomDepthEnabled;
 };

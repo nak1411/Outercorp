@@ -20,7 +20,8 @@ public class Outercorp : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			"NX_ModularWindow"
+			"NX_ModularWindow",
+			"Niagara"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

@@ -737,6 +737,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	UUserWidget *GetModularWindowChild(UUserWidget *ModularWindow) const;
 
+	/** Get the inventory widget */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	UInventoryWidget* GetInventoryWidget() const { return InventoryWidget; }
+
 	/** Debug helper to print widget type */
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void DebugPrintWidgetType(UUserWidget *Widget) const;

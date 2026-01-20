@@ -127,6 +127,39 @@ bool UInventoryComponent::AddItem(UInventoryItemData* ItemData, int32 Quantity, 
 	return true;
 }
 
+bool UInventoryComponent::AddItemToSlot(int32 SlotIndex, UInventoryItemData* ItemData, int32 Quantity)
+{
+	if (!ItemData || Quantity <= 0 || !Items.IsValidIndex(SlotIndex))
+	{
+		return false;
+	}
+
+	// If slot is empty, place item directly
+	if (!Items[SlotIndex].IsValid())
+	{
+		Items[SlotIndex] = FInventoryItem(ItemData, Quantity);
+		OnInventoryUpdated.Broadcast(SlotIndex, Items[SlotIndex]);
+		return true;
+	}
+
+	// If slot has the same item type and can stack, add to stack
+	if (Items[SlotIndex].ItemData == ItemData && Items[SlotIndex].ItemData->MaxStackSize > 1)
+	{
+		int32 SpaceAvailable = Items[SlotIndex].ItemData->MaxStackSize - Items[SlotIndex].Quantity;
+		int32 AmountToAdd = FMath::Min(Quantity, SpaceAvailable);
+
+		if (AmountToAdd > 0)
+		{
+			Items[SlotIndex].Quantity += AmountToAdd;
+			OnInventoryUpdated.Broadcast(SlotIndex, Items[SlotIndex]);
+			return true;
+		}
+	}
+
+	// Slot is occupied with different item or can't stack
+	return false;
+}
+
 bool UInventoryComponent::RemoveItemAtSlot(int32 SlotIndex, int32 Quantity)
 {
 	if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].IsValid())
@@ -355,9 +388,33 @@ float UInventoryComponent::GetCurrentVolume() const
 	return 0.0f;
 }
 
+bool UInventoryComponent::IsItemCategoryAllowed(UInventoryItemData* ItemData) const
+{
+	if (!ItemData)
+	{
+		return false;
+	}
+
+	// If no category filter is set (0), allow all items
+	if (AllowedItemCategories == 0)
+	{
+		return true;
+	}
+
+	// Check if the item's category bit is set in the bitmask
+	int32 CategoryBit = 1 << static_cast<int32>(ItemData->Category);
+	return (AllowedItemCategories & CategoryBit) != 0;
+}
+
 bool UInventoryComponent::CanAddItem(UInventoryItemData* ItemData, int32 Quantity) const
 {
 	if (!ItemData || Quantity <= 0)
+	{
+		return false;
+	}
+
+	// Check category filter first
+	if (!IsItemCategoryAllowed(ItemData))
 	{
 		return false;
 	}
@@ -663,20 +720,24 @@ void UInventoryComponent::EndBatchUpdate()
 
 bool UInventoryComponent::DropItem(int32 SlotIndex, int32 Quantity, FVector DropLocation, FRotator DropRotation)
 {
+	UE_LOG(LogTemp, Warning, TEXT("DropItem called - SlotIndex: %d, Quantity: %d, Location: %s"), SlotIndex, Quantity, *DropLocation.ToString());
+
 	// Validate inputs
 	if (!Items.IsValidIndex(SlotIndex) || !Items[SlotIndex].IsValid())
 	{
+		UE_LOG(LogTemp, Error, TEXT("DropItem: Invalid slot index %d or item not valid"), SlotIndex);
 		return false;
 	}
 
 	if (Quantity <= 0 || Quantity > Items[SlotIndex].Quantity)
 	{
+		UE_LOG(LogTemp, Error, TEXT("DropItem: Invalid quantity %d (item has %d)"), Quantity, Items[SlotIndex].Quantity);
 		return false;
 	}
 
 	if (!PickupableItemClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("PickupableItemClass not set on InventoryComponent!"));
+		UE_LOG(LogTemp, Error, TEXT("DropItem: PickupableItemClass not set on InventoryComponent!"));
 		return false;
 	}
 
@@ -708,6 +769,8 @@ bool UInventoryComponent::DropItem(int32 SlotIndex, int32 Quantity, FVector Drop
 		}
 
 		// Spawn the pickup actor
+		UE_LOG(LogTemp, Warning, TEXT("DropItem: Attempting to spawn at %s with class %s"), *CurrentDropLocation.ToString(), *PickupableItemClass->GetName());
+
 		APickupableItem* DroppedItem = GetWorld()->SpawnActor<APickupableItem>(
 			PickupableItemClass,
 			CurrentDropLocation,
@@ -717,9 +780,11 @@ bool UInventoryComponent::DropItem(int32 SlotIndex, int32 Quantity, FVector Drop
 
 		if (!DroppedItem)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Failed to spawn dropped item %d!"), i);
+			UE_LOG(LogTemp, Error, TEXT("DropItem: Failed to spawn dropped item %d! SpawnActor returned null"), i);
 			continue;
 		}
+
+		UE_LOG(LogTemp, Warning, TEXT("DropItem: Successfully spawned %s at %s"), *DroppedItem->GetName(), *DroppedItem->GetActorLocation().ToString());
 
 		// Initialize the dropped item with quantity 1
 		DroppedItem->InitializeItem(ItemToDrop.ItemData, 1);
@@ -797,9 +862,12 @@ bool UInventoryComponent::DropItem(int32 SlotIndex, int32 Quantity, FVector Drop
 
 bool UInventoryComponent::DropItemInFront(int32 SlotIndex, int32 Quantity, float DropDistance)
 {
+	UE_LOG(LogTemp, Warning, TEXT("DropItemInFront called - SlotIndex: %d, Quantity: %d, DropDistance: %.1f"), SlotIndex, Quantity, DropDistance);
+
 	AActor* Owner = GetOwner();
 	if (!Owner)
 	{
+		UE_LOG(LogTemp, Error, TEXT("DropItemInFront: Owner is null!"));
 		return false;
 	}
 
@@ -876,4 +944,125 @@ bool UInventoryComponent::DestroyItem(int32 SlotIndex, int32 Quantity)
 	}
 
 	return bSuccess;
+}
+
+void UInventoryComponent::StackAllItems()
+{
+	// Group items by ItemID to find stackable groups
+	TMap<FName, TArray<int32>> ItemGroups;
+	for (int32 i = 0; i < Items.Num(); i++)
+	{
+		if (Items[i].IsValid() && Items[i].ItemData && Items[i].ItemData->MaxStackSize > 1)
+		{
+			FName ItemID = Items[i].ItemData->ItemID;
+			ItemGroups.FindOrAdd(ItemID).Add(i);
+		}
+	}
+
+	// Begin batch update to reduce UI refreshes
+	BeginBatchUpdate();
+
+	// For each group, try to stack them together
+	for (const auto& Group : ItemGroups)
+	{
+		const TArray<int32>& SlotIndices = Group.Value;
+		if (SlotIndices.Num() > 1)
+		{
+			// Sort slots so we process them in order
+			TArray<int32> SortedSlots = SlotIndices;
+			SortedSlots.Sort();
+
+			// Merge all stacks together - process from the end backwards
+			for (int32 i = SortedSlots.Num() - 1; i > 0; i--)
+			{
+				int32 SourceSlot = SortedSlots[i];
+
+				// Try to find a target slot that has space (search from beginning)
+				for (int32 j = 0; j < i; j++)
+				{
+					int32 TargetSlot = SortedSlots[j];
+
+					// Re-fetch items each time to get current state
+					FInventoryItem SourceItem = GetItemAtSlot(SourceSlot);
+					FInventoryItem TargetItem = GetItemAtSlot(TargetSlot);
+
+					// Skip if source is already empty (already merged)
+					if (!SourceItem.IsValid())
+					{
+						break;
+					}
+
+					// Check if target has space
+					if (TargetItem.IsValid() && TargetItem.Quantity < TargetItem.ItemData->MaxStackSize)
+					{
+						MergeStacks(SourceSlot, TargetSlot);
+
+						// Check if source is now empty
+						SourceItem = GetItemAtSlot(SourceSlot);
+						if (!SourceItem.IsValid())
+						{
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// End batch update - this will trigger debounced UI refresh automatically
+	EndBatchUpdate();
+}
+
+void UInventoryComponent::CompressItems()
+{
+	// Build a list of all items with their current slot indices
+	TArray<TPair<int32, FInventoryItem>> OccupiedSlots;
+
+	for (int32 i = 0; i < Items.Num(); ++i)
+	{
+		FInventoryItem Item = GetItemAtSlot(i);
+		if (Item.IsValid())
+		{
+			OccupiedSlots.Add(TPair<int32, FInventoryItem>(i, Item));
+		}
+	}
+
+	if (OccupiedSlots.Num() == 0)
+	{
+		return;
+	}
+
+	// Begin batch update to avoid multiple UI refreshes during compression
+	BeginBatchUpdate();
+
+	// Move each item to the earliest available slot
+	// Process from the beginning to ensure we fill slots in order
+	int32 NextTargetSlot = 0;
+
+	for (const TPair<int32, FInventoryItem>& SlotPair : OccupiedSlots)
+	{
+		int32 CurrentSlot = SlotPair.Key;
+
+		// If the item is already in the target slot, just advance to next
+		if (CurrentSlot == NextTargetSlot)
+		{
+			NextTargetSlot++;
+			continue;
+		}
+
+		// Move the item from CurrentSlot to NextTargetSlot
+		if (NextTargetSlot < MaxSlots)
+		{
+			// Use MoveItem to properly handle the move
+			bool bMoveSuccess = MoveItem(CurrentSlot, NextTargetSlot);
+
+			if (bMoveSuccess)
+			{
+				NextTargetSlot++;
+			}
+		}
+	}
+
+	// End batch update - this will trigger debounced UI refresh automatically
+	EndBatchUpdate();
 }

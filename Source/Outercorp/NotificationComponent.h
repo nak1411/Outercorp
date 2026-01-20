@@ -86,6 +86,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Notification")
 	void ShowItemPickupNotification(const FText& ItemName, int32 Quantity, class UTexture2D* ItemIcon = nullptr);
 
+	/** Show an item harvested notification */
+	UFUNCTION(BlueprintCallable, Category = "Notification")
+	void ShowItemHarvestedNotification(const FText& ItemName, int32 Quantity, class UTexture2D* ItemIcon = nullptr);
+
 	/** Show an item destroyed notification */
 	UFUNCTION(BlueprintCallable, Category = "Notification")
 	void ShowItemDestroyedNotification(const FText& ItemName, int32 Quantity);

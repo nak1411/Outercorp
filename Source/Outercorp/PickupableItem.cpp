@@ -48,8 +48,6 @@ void APickupableItem::BeginPlay()
 		// Clamp quantity to max stack size
 		if (Quantity > ItemData->MaxStackSize)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("PickupableItem '%s' has Quantity %d which exceeds MaxStackSize %d. Clamping to MaxStackSize."),
-				*ItemData->ItemName.ToString(), Quantity, ItemData->MaxStackSize);
 			Quantity = ItemData->MaxStackSize;
 		}
 
@@ -131,7 +129,6 @@ void APickupableItem::OnInteract_Implementation(AActor *InteractingActor)
 	else
 	{
 		// Could add feedback here (e.g., "Inventory Full" message)
-		UE_LOG(LogTemp, Warning, TEXT("Failed to add item to inventory - inventory may be full"));
 	}
 }
 
@@ -233,16 +230,14 @@ void APickupableItem::InitializeItem(UInventoryItemData *InItemData, int32 InQua
 		// Clamp quantity to be at least 1 and at most MaxStackSize
 		Quantity = FMath::Clamp(InQuantity, 1, ItemData->MaxStackSize);
 
-		if (InQuantity > ItemData->MaxStackSize)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("InitializeItem: Requested quantity %d exceeds MaxStackSize %d for item '%s'. Clamping to MaxStackSize."),
-				InQuantity, ItemData->MaxStackSize, *ItemData->ItemName.ToString());
-		}
-
 		// Update mesh if specified in item data
-		if (ItemData->ItemMesh.Get() && ItemMesh)
+		// Use LoadSynchronous() to ensure the soft reference is loaded (important for Standalone)
+		if (UStaticMesh* LoadedMesh = ItemData->ItemMesh.LoadSynchronous())
 		{
-			ItemMesh->SetStaticMesh(ItemData->ItemMesh.Get());
+			if (ItemMesh)
+			{
+				ItemMesh->SetStaticMesh(LoadedMesh);
+			}
 		}
 
 		// Update interactable component
@@ -278,14 +273,10 @@ void APickupableItem::StartDropCooldown()
 			DropCooldownTime,
 			false
 		);
-
-		UE_LOG(LogTemp, Log, TEXT("Item '%s' dropped - cooldown for %.1f seconds"),
-			ItemData ? *ItemData->ItemName.ToString() : TEXT("Unknown"), DropCooldownTime);
 	}
 }
 
 void APickupableItem::OnDropCooldownComplete()
 {
 	bIsInDropCooldown = false;
-	UE_LOG(LogTemp, Log, TEXT("Item '%s' is now interactable"), ItemData ? *ItemData->ItemName.ToString() : TEXT("Unknown"));
 }

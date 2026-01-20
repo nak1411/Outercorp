@@ -5,17 +5,31 @@
 #include "Camera/CameraComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
+#include "PCGHarvestableManager.h"
+#include "HarvestableResourceData.h"
+#include "HarvestableResourceActor.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 UInteractionManagerComponent::UInteractionManagerComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 
 	// Default values
-	InteractionTraceDistance = 500.0f; // 5 meters
-	InteractionCheckInterval = 0.1f; // Check 10 times per second
+	InteractionTraceDistance = 500.0f;
+	InteractionCheckInterval = 0.1f;
 	InteractionTraceChannel = ECC_Visibility;
+	InteractionTraceRadius = 0.0f;
 	bDrawDebugTrace = false;
 	InteractionCheckTimer = 0.0f;
+
+	// ISM/Harvestable defaults
+	PendingInstanceIndex = INDEX_NONE;
+	bLookingAtHarvestableISM = false;
+	ISMHighlightMesh = nullptr;
+	HighlightedInstanceIndex = INDEX_NONE;
+	HighlightOverlayMaterial = nullptr;
 }
 
 void UInteractionManagerComponent::BeginPlay()
@@ -23,14 +37,23 @@ void UInteractionManagerComponent::BeginPlay()
 	Super::BeginPlay();
 }
 
+void UInteractionManagerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (ISMHighlightMesh)
+	{
+		ISMHighlightMesh->DestroyComponent();
+		ISMHighlightMesh = nullptr;
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void UInteractionManagerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// Update timer
 	InteractionCheckTimer += DeltaTime;
 
-	// Only check at intervals (or every frame if interval is 0)
 	if (InteractionCheckInterval <= 0.0f || InteractionCheckTimer >= InteractionCheckInterval)
 	{
 		CheckForInteractables();
@@ -46,32 +69,47 @@ void UInteractionManagerComponent::CheckForInteractables()
 		return;
 	}
 
-	// Get camera for line trace
 	UCameraComponent* Camera = OwnerActor->FindComponentByClass<UCameraComponent>();
 	if (!Camera)
 	{
 		return;
 	}
 
-	// Get trace start and end points
 	FVector StartLocation = Camera->GetComponentLocation();
 	FVector ForwardVector = Camera->GetForwardVector();
 	FVector EndLocation = StartLocation + (ForwardVector * InteractionTraceDistance);
 
-	// Perform line trace
 	FHitResult HitResult;
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(OwnerActor);
 
-	bool bHit = GetWorld()->LineTraceSingleByChannel(
-		HitResult,
-		StartLocation,
-		EndLocation,
-		InteractionTraceChannel,
-		QueryParams
-	);
+	bool bHit = false;
+	if (InteractionTraceRadius > 0.0f)
+	{
+		// Sphere sweep for more precise control
+		FCollisionShape SphereShape = FCollisionShape::MakeSphere(InteractionTraceRadius);
+		bHit = GetWorld()->SweepSingleByChannel(
+			HitResult,
+			StartLocation,
+			EndLocation,
+			FQuat::Identity,
+			InteractionTraceChannel,
+			SphereShape,
+			QueryParams
+		);
+	}
+	else
+	{
+		// Standard line trace
+		bHit = GetWorld()->LineTraceSingleByChannel(
+			HitResult,
+			StartLocation,
+			EndLocation,
+			InteractionTraceChannel,
+			QueryParams
+		);
+	}
 
-	// Draw debug line if enabled
 	if (bDrawDebugTrace)
 	{
 		FColor DebugColor = bHit ? FColor::Green : FColor::Red;
@@ -84,25 +122,29 @@ void UInteractionManagerComponent::CheckForInteractables()
 	}
 
 	TScriptInterface<IInteractableInterface> NewInteractable = nullptr;
+	bool bFoundHarvestableISM = false;
 
 	if (bHit)
 	{
 		AActor* HitActor = HitResult.GetActor();
+		UPrimitiveComponent* HitComponent = HitResult.GetComponent();
+
 		if (HitActor)
 		{
+			// Skip PCG partition actors for regular interactable checks
+			bool bIsPCGActor = HitActor->GetClass()->GetName().Contains(TEXT("PCG"));
+
 			// Check if the hit actor implements IInteractableInterface
-			if (HitActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+			if (!bIsPCGActor && HitActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 			{
 				IInteractableInterface* Interactable = Cast<IInteractableInterface>(HitActor);
 				if (Interactable)
 				{
-					// Check if we're within interaction range
 					float InteractionRange = IInteractableInterface::Execute_GetInteractionRange(HitActor);
 					float Distance = FVector::Dist(StartLocation, HitResult.ImpactPoint);
 
 					if (Distance <= InteractionRange)
 					{
-						// Check if we can interact
 						if (IInteractableInterface::Execute_CanInteract(HitActor, OwnerActor))
 						{
 							NewInteractable = HitActor;
@@ -110,7 +152,7 @@ void UInteractionManagerComponent::CheckForInteractables()
 					}
 				}
 			}
-			else
+			else if (!bIsPCGActor)
 			{
 				// Check components for interactable interface
 				TArray<UActorComponent*> Components = HitActor->GetComponentsByInterface(UInteractableInterface::StaticClass());
@@ -119,13 +161,11 @@ void UInteractionManagerComponent::CheckForInteractables()
 					IInteractableInterface* Interactable = Cast<IInteractableInterface>(Component);
 					if (Interactable)
 					{
-						// Check if we're within interaction range
 						float InteractionRange = IInteractableInterface::Execute_GetInteractionRange(Component);
 						float Distance = FVector::Dist(StartLocation, HitResult.ImpactPoint);
 
 						if (Distance <= InteractionRange)
 						{
-							// Check if we can interact
 							if (IInteractableInterface::Execute_CanInteract(Component, OwnerActor))
 							{
 								NewInteractable = Component;
@@ -136,15 +176,60 @@ void UInteractionManagerComponent::CheckForInteractables()
 				}
 			}
 		}
+
+		// If no regular interactable found, check for ISM harvestable
+		if (!NewInteractable.GetObject() && HitComponent)
+		{
+			UInstancedStaticMeshComponent* ISMComp = Cast<UInstancedStaticMeshComponent>(HitComponent);
+			if (ISMComp)
+			{
+				APCGHarvestableManager* Manager = GetHarvestableManager();
+				if (Manager)
+				{
+					UStaticMesh* Mesh = ISMComp->GetStaticMesh();
+					const FPCGResourceMapping* Mapping = Manager->GetMappingForMesh(Mesh);
+
+					if (Mapping && Mapping->ResourceData)
+					{
+						float Distance = FVector::Dist(StartLocation, HitResult.ImpactPoint);
+
+						if (Distance <= Mapping->ResourceData->InteractionRange)
+						{
+							int32 FoundInstanceIndex = HitResult.Item;
+
+							if (FoundInstanceIndex != INDEX_NONE)
+							{
+								bFoundHarvestableISM = true;
+								PendingISMComponent = ISMComp;
+								PendingInstanceIndex = FoundInstanceIndex;
+								PendingISMHitLocation = HitResult.ImpactPoint;
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
-	// Update current interactable
+	// Update ISM state
+	if (bFoundHarvestableISM)
+	{
+		UpdateISMHighlight(PendingISMComponent.Get(), PendingInstanceIndex);
+		bLookingAtHarvestableISM = true;
+	}
+	else if (NewInteractable.GetObject() || !bHit)
+	{
+		PendingISMComponent = nullptr;
+		PendingInstanceIndex = INDEX_NONE;
+		ClearISMHighlight();
+		bLookingAtHarvestableISM = false;
+	}
+
 	SetCurrentInteractable(NewInteractable);
 }
 
 void UInteractionManagerComponent::SetCurrentInteractable(TScriptInterface<IInteractableInterface> NewInteractable)
 {
-	// If the interactable hasn't changed, do nothing
 	if (CurrentInteractable == NewInteractable)
 	{
 		return;
@@ -152,17 +237,14 @@ void UInteractionManagerComponent::SetCurrentInteractable(TScriptInterface<IInte
 
 	AActor* OwnerActor = GetOwner();
 
-	// Call OnLookAway on the previous interactable
 	if (CurrentInteractable.GetObject())
 	{
 		IInteractableInterface::Execute_OnLookAway(CurrentInteractable.GetObject(), OwnerActor);
 	}
 
-	// Update current interactable
 	PreviousInteractable = CurrentInteractable;
 	CurrentInteractable = NewInteractable;
 
-	// Call OnLookAt on the new interactable
 	if (CurrentInteractable.GetObject())
 	{
 		IInteractableInterface::Execute_OnLookAt(CurrentInteractable.GetObject(), OwnerActor);
@@ -171,21 +253,49 @@ void UInteractionManagerComponent::SetCurrentInteractable(TScriptInterface<IInte
 
 void UInteractionManagerComponent::Interact()
 {
-	if (!CurrentInteractable.GetObject())
-	{
-		return;
-	}
-
 	AActor* OwnerActor = GetOwner();
 	if (!OwnerActor)
 	{
 		return;
 	}
 
-	// Check if we can still interact (state may have changed)
-	if (IInteractableInterface::Execute_CanInteract(CurrentInteractable.GetObject(), OwnerActor))
+	// First check regular interactable
+	if (CurrentInteractable.GetObject())
 	{
-		IInteractableInterface::Execute_OnInteract(CurrentInteractable.GetObject(), OwnerActor);
+		if (IInteractableInterface::Execute_CanInteract(CurrentInteractable.GetObject(), OwnerActor))
+		{
+			IInteractableInterface::Execute_OnInteract(CurrentInteractable.GetObject(), OwnerActor);
+		}
+		return;
+	}
+
+	// Check for harvestable ISM instance
+	if (bLookingAtHarvestableISM && PendingISMComponent.IsValid() && PendingInstanceIndex != INDEX_NONE)
+	{
+		APCGHarvestableManager* Manager = GetHarvestableManager();
+		if (Manager)
+		{
+			AHarvestableResourceActor* SpawnedActor = Manager->ConvertInstance(PendingISMComponent.Get(), PendingInstanceIndex);
+			if (SpawnedActor)
+			{
+				IInteractableInterface::Execute_OnInteract(SpawnedActor, OwnerActor);
+
+				PendingISMComponent = nullptr;
+				PendingInstanceIndex = INDEX_NONE;
+				bLookingAtHarvestableISM = false;
+				ClearISMHighlight();
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Interact: ConvertInstance failed for ISM %s, Index %d"),
+					*PendingISMComponent->GetName(), PendingInstanceIndex);
+			}
+		}
+	}
+	else if (bLookingAtHarvestableISM)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Interact: ISM interaction skipped - Component Valid: %d, InstanceIndex: %d"),
+			PendingISMComponent.IsValid() ? 1 : 0, PendingInstanceIndex);
 	}
 }
 
@@ -196,13 +306,11 @@ AActor* UInteractionManagerComponent::GetCurrentInteractableActor() const
 		return nullptr;
 	}
 
-	// If it's an actor, return it directly
 	if (AActor* Actor = Cast<AActor>(CurrentInteractable.GetObject()))
 	{
 		return Actor;
 	}
 
-	// If it's a component, return its owner
 	if (UActorComponent* Component = Cast<UActorComponent>(CurrentInteractable.GetObject()))
 	{
 		return Component->GetOwner();
@@ -213,25 +321,187 @@ AActor* UInteractionManagerComponent::GetCurrentInteractableActor() const
 
 FText UInteractionManagerComponent::GetCurrentInteractionName() const
 {
-	if (!CurrentInteractable.GetObject())
+	if (CurrentInteractable.GetObject())
 	{
-		return FText::GetEmpty();
+		return IInteractableInterface::Execute_GetInteractionName(CurrentInteractable.GetObject());
 	}
 
-	return IInteractableInterface::Execute_GetInteractionName(CurrentInteractable.GetObject());
+	if (bLookingAtHarvestableISM)
+	{
+		return GetPendingHarvestableName();
+	}
+
+	return FText::GetEmpty();
 }
 
 FText UInteractionManagerComponent::GetCurrentInteractionPrompt() const
 {
-	if (!CurrentInteractable.GetObject())
+	if (CurrentInteractable.GetObject())
 	{
-		return FText::GetEmpty();
+		return IInteractableInterface::Execute_GetInteractionPrompt(CurrentInteractable.GetObject());
 	}
 
-	return IInteractableInterface::Execute_GetInteractionPrompt(CurrentInteractable.GetObject());
+	if (bLookingAtHarvestableISM && PendingISMComponent.IsValid())
+	{
+		APCGHarvestableManager* Manager = GetHarvestableManager();
+		if (Manager)
+		{
+			UStaticMesh* Mesh = PendingISMComponent->GetStaticMesh();
+			const FPCGResourceMapping* Mapping = Manager->GetMappingForMesh(Mesh);
+			if (Mapping && Mapping->ResourceData)
+			{
+				if (!Mapping->ResourceData->InteractionPrompt.IsEmpty())
+				{
+					return Mapping->ResourceData->InteractionPrompt;
+				}
+				return FText::FromString(TEXT("Harvest"));
+			}
+		}
+	}
+
+	return FText::GetEmpty();
 }
 
 bool UInteractionManagerComponent::IsLookingAtInteractable() const
 {
-	return CurrentInteractable.GetObject() != nullptr;
+	return CurrentInteractable.GetObject() != nullptr || bLookingAtHarvestableISM;
+}
+
+APCGHarvestableManager* UInteractionManagerComponent::GetHarvestableManager() const
+{
+	if (CachedHarvestableManager.IsValid())
+	{
+		return CachedHarvestableManager.Get();
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	AActor* FoundActor = UGameplayStatics::GetActorOfClass(World, APCGHarvestableManager::StaticClass());
+	if (FoundActor)
+	{
+		CachedHarvestableManager = Cast<APCGHarvestableManager>(FoundActor);
+		return CachedHarvestableManager.Get();
+	}
+
+	return nullptr;
+}
+
+FText UInteractionManagerComponent::GetPendingHarvestableName() const
+{
+	if (!bLookingAtHarvestableISM || !PendingISMComponent.IsValid())
+	{
+		return FText::GetEmpty();
+	}
+
+	APCGHarvestableManager* Manager = GetHarvestableManager();
+	if (Manager)
+	{
+		UStaticMesh* Mesh = PendingISMComponent->GetStaticMesh();
+		const FPCGResourceMapping* Mapping = Manager->GetMappingForMesh(Mesh);
+		if (Mapping && Mapping->ResourceData)
+		{
+			const FHarvestableSourceMesh* MeshEntry = Mapping->ResourceData->GetSourceMeshEntry(Mesh);
+			if (MeshEntry && !MeshEntry->DisplayName.IsEmpty())
+			{
+				return MeshEntry->DisplayName;
+			}
+		}
+	}
+
+	return FText::FromString(TEXT("Harvestable"));
+}
+
+void UInteractionManagerComponent::UpdateISMHighlight(UInstancedStaticMeshComponent* ISMComp, int32 InstanceIndex)
+{
+	if (!ISMComp || InstanceIndex == INDEX_NONE)
+	{
+		ClearISMHighlight();
+		return;
+	}
+
+	if (InstanceIndex < 0 || InstanceIndex >= ISMComp->GetInstanceCount())
+	{
+		ClearISMHighlight();
+		return;
+	}
+
+	FTransform InstanceTransform;
+	if (!ISMComp->GetInstanceTransform(InstanceIndex, InstanceTransform, true))
+	{
+		ClearISMHighlight();
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (!ISMHighlightMesh)
+	{
+		AActor* OwnerActor = GetOwner();
+		if (!OwnerActor)
+		{
+			return;
+		}
+
+		ISMHighlightMesh = NewObject<UStaticMeshComponent>(OwnerActor, TEXT("ISMHighlightMesh"));
+		if (ISMHighlightMesh)
+		{
+			ISMHighlightMesh->AttachToComponent(OwnerActor->GetRootComponent(), FAttachmentTransformRules::KeepWorldTransform);
+			ISMHighlightMesh->RegisterComponent();
+			ISMHighlightMesh->SetAbsolute(true, true, true);
+			ISMHighlightMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			ISMHighlightMesh->SetCastShadow(false);
+			ISMHighlightMesh->bReceivesDecals = false;
+			ISMHighlightMesh->SetVisibility(false);
+			ISMHighlightMesh->SetHiddenInGame(false);
+			ISMHighlightMesh->SetRenderCustomDepth(true);
+			ISMHighlightMesh->SetCustomDepthStencilValue(1);
+		}
+	}
+
+	if (!ISMHighlightMesh)
+	{
+		return;
+	}
+
+	if (HighlightedISMComponent.Get() == ISMComp && HighlightedInstanceIndex == InstanceIndex && ISMHighlightMesh->IsVisible())
+	{
+		return;
+	}
+
+	UStaticMesh* Mesh = ISMComp->GetStaticMesh();
+	if (Mesh != ISMHighlightMesh->GetStaticMesh())
+	{
+		ISMHighlightMesh->SetStaticMesh(Mesh);
+
+		// Copy materials from ISM to preserve WPO animations
+		for (int32 i = 0; i < ISMComp->GetNumMaterials(); i++)
+		{
+			ISMHighlightMesh->SetMaterial(i, ISMComp->GetMaterial(i));
+		}
+	}
+
+	ISMHighlightMesh->SetWorldTransform(InstanceTransform);
+	ISMHighlightMesh->SetVisibility(true);
+
+	HighlightedISMComponent = ISMComp;
+	HighlightedInstanceIndex = InstanceIndex;
+}
+
+void UInteractionManagerComponent::ClearISMHighlight()
+{
+	if (ISMHighlightMesh)
+	{
+		ISMHighlightMesh->SetVisibility(false);
+	}
+
+	HighlightedISMComponent = nullptr;
+	HighlightedInstanceIndex = INDEX_NONE;
 }

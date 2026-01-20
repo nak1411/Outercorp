@@ -2,13 +2,16 @@
 
 #include "FabricationBase.h"
 #include "FabricationData.h"
+#include "CraftingRecipeData.h"
 #include "InteractableComponent.h"
 #include "InteractionManagerComponent.h"
 #include "InteractionPromptWidget.h"
 #include "OutercorpCharacter.h"
 #include "ContainerWidget.h"
+#include "WorkSurfaceCraftingWidget.h"
 #include "InventoryComponent.h"
 #include "InventoryItemData.h"
+#include "InventoryWidget.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CanvasPanel.h"
@@ -60,6 +63,7 @@ AFabricationBase::AFabricationBase()
 	bIsInCraftingMode = false;
 	CurrentToolboxWindow = nullptr;
 	CurrentMaterialBinWindow = nullptr;
+	CurrentWorkSurfaceWindow = nullptr;
 	CurrentlyHoveredMesh = nullptr;
 }
 
@@ -193,6 +197,17 @@ void AFabricationBase::StartUsing(AActor* User)
 		Character->ActiveFabricationStation = this;
 	}
 
+	// Disable world dropping for player inventory while using fabrication station
+	if (Character)
+	{
+		UInventoryWidget* PlayerInventoryWidget = Character->GetInventoryWidget();
+		if (PlayerInventoryWidget)
+		{
+			PlayerInventoryWidget->SetWorldDropEnabled(false);
+			UE_LOG(LogTemp, Log, TEXT("Disabled world dropping for player inventory"));
+		}
+	}
+
 	// Enter interactive crafting mode
 	if (PlayerController && FabricationData && FabricationData->bEnableInteractiveMode)
 	{
@@ -225,6 +240,21 @@ void AFabricationBase::StopUsing()
 
 	// Close crafting UI
 	CloseCraftingUI();
+
+	// Re-enable world dropping for player inventory
+	if (PreviousUser)
+	{
+		AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(PreviousUser);
+		if (Character)
+		{
+			UInventoryWidget* PlayerInventoryWidget = Character->GetInventoryWidget();
+			if (PlayerInventoryWidget)
+			{
+				PlayerInventoryWidget->SetWorldDropEnabled(true);
+				UE_LOG(LogTemp, Log, TEXT("Re-enabled world dropping for player inventory"));
+			}
+		}
+	}
 
 	UE_LOG(LogTemp, Log, TEXT("FabricationBase '%s' stopped being used"), *GetName());
 }
@@ -503,6 +533,12 @@ void AFabricationBase::ExitCraftingMode()
 		CurrentMaterialBinWindow = nullptr;
 	}
 
+	if (CurrentWorkSurfaceWindow)
+	{
+		CurrentWorkSurfaceWindow->RemoveFromParent();
+		CurrentWorkSurfaceWindow = nullptr;
+	}
+
 	// Clear hovered mesh and unhighlight
 	if (CurrentlyHoveredMesh)
 	{
@@ -614,6 +650,13 @@ UContainerWidget* AFabricationBase::CreateToolboxContent()
 		PlayerInventory ? TEXT("Valid") : TEXT("NULL"),
 		ToolboxInventory ? TEXT("Valid") : TEXT("NULL"));
 
+	// Stack and compress items before setting up the container
+	if (ToolboxInventory)
+	{
+		ToolboxInventory->StackAllItems();  // Merge same items together
+		ToolboxInventory->CompressItems();  // Move items to fill gaps
+	}
+
 	// Setup content widget with player and toolbox inventories
 	ToolboxContent->SetupContainer(PlayerInventory, ToolboxInventory);
 
@@ -691,6 +734,13 @@ UContainerWidget* AFabricationBase::CreateMaterialBinContent()
 			PlayerInventory = Character->FindComponentByClass<UInventoryComponent>();
 		}
 
+		// Stack and compress items before setting up the container
+		if (MaterialBinInventory)
+		{
+			MaterialBinInventory->StackAllItems();  // Merge same items together
+			MaterialBinInventory->CompressItems();  // Move items to fill gaps
+		}
+
 		// Setup content widget with player and material bin inventories
 		MaterialBinContent->SetupContainer(PlayerInventory, MaterialBinInventory);
 
@@ -698,6 +748,100 @@ UContainerWidget* AFabricationBase::CreateMaterialBinContent()
 	}
 
 	return MaterialBinContent;
+}
+
+UUserWidget* AFabricationBase::CreateWorkSurfaceContent()
+{
+	// Get the WorkSurface zone module configuration
+	const FFabricationZoneTypeConfig* ZoneConfig = GetZoneTypeConfig(FName("WorkSurface"));
+	if (!ZoneConfig)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No WorkSurface zone configuration found in data asset!"));
+		return nullptr;
+	}
+
+	// Get the installed module for the WorkSurface zone
+	FName* InstalledModuleID = InstalledModules.Find(FName("WorkSurface"));
+	if (!InstalledModuleID)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No module installed in WorkSurface zone!"));
+		return nullptr;
+	}
+
+	// Find the module data
+	const FFabricationZoneModule* Module = nullptr;
+
+	// If DefaultModule.ModuleID is None, it auto-generates to match the zone type
+	FName DefaultModuleEffectiveID = ZoneConfig->DefaultModule.ModuleID;
+	if (DefaultModuleEffectiveID == NAME_None || DefaultModuleEffectiveID.IsNone())
+	{
+		DefaultModuleEffectiveID = FName("WorkSurface"); // Auto-generated ID matches zone type
+	}
+
+	if (DefaultModuleEffectiveID == *InstalledModuleID)
+	{
+		Module = &ZoneConfig->DefaultModule;
+	}
+	else
+	{
+		for (const FFabricationZoneModule& CompatibleModule : ZoneConfig->CompatibleModules)
+		{
+			if (CompatibleModule.ModuleID == *InstalledModuleID)
+			{
+				Module = &CompatibleModule;
+				break;
+			}
+		}
+	}
+
+	if (!Module || !Module->bIsWorkSurface)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WorkSurface module not found or not configured as work surface!"));
+		return nullptr;
+	}
+
+	if (!Module->ContentWidgetClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WorkSurface module has no content widget class set!"));
+		return nullptr;
+	}
+
+	if (!Module->WorkSurfaceConfig.bIsEnabled)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WorkSurface module is disabled!"));
+		return nullptr;
+	}
+
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	if (!PC)
+	{
+		return nullptr;
+	}
+
+	// Create the work surface content widget
+	UUserWidget* WorkSurfaceContent = CreateWidget<UUserWidget>(PC, Module->ContentWidgetClass);
+	if (WorkSurfaceContent)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Created work surface content widget - Size: %s, MaxIngredients: %d, MaxTools: %d"),
+			*UEnum::GetValueAsString(Module->WorkSurfaceConfig.SurfaceSize),
+			Module->WorkSurfaceConfig.MaxIngredientSlots,
+			Module->WorkSurfaceConfig.MaxRequiredTools);
+
+		// Initialize the crafting widget if it implements the WorkSurfaceCraftingWidget interface
+		UWorkSurfaceCraftingWidget* CraftingWidget = Cast<UWorkSurfaceCraftingWidget>(WorkSurfaceContent);
+		if (CraftingWidget)
+		{
+			CraftingWidget->SetupCrafting(this, Module->WorkSurfaceConfig);
+
+			// Auto-learn all recipes for now (TODO: Implement recipe learning system)
+			CraftingWidget->LearnAllRecipes();
+
+			UE_LOG(LogTemp, Log, TEXT("Initialized WorkSurfaceCraftingWidget with station data and learned %d recipes"),
+				CraftingWidget->LearnedRecipes.Num());
+		}
+	}
+
+	return WorkSurfaceContent;
 }
 
 void AFabricationBase::OnToolboxClicked_Implementation()
@@ -746,9 +890,92 @@ void AFabricationBase::OnToolboxClicked_Implementation()
 	UCanvasPanelSlot* WindowSlot = WindowCanvas->AddChildToCanvas(CurrentToolboxWindow);
 	if (WindowSlot)
 	{
-		// Set initial position and size
-		WindowSlot->SetPosition(FVector2D(200, 150));
-		WindowSlot->SetSize(FVector2D(500, 400));
+		// Get module configuration for positioning
+		const FFabricationZoneTypeConfig* ZoneConfig = GetZoneTypeConfig(FName("Toolbox"));
+		FName* InstalledModuleID = InstalledModules.Find(FName("Toolbox"));
+		const FFabricationZoneModule* Module = nullptr;
+
+		if (ZoneConfig && InstalledModuleID)
+		{
+			FName DefaultModuleEffectiveID = ZoneConfig->DefaultModule.ModuleID;
+			if (DefaultModuleEffectiveID == NAME_None || DefaultModuleEffectiveID.IsNone())
+			{
+				DefaultModuleEffectiveID = FName("Toolbox");
+			}
+
+			if (DefaultModuleEffectiveID == *InstalledModuleID)
+			{
+				Module = &ZoneConfig->DefaultModule;
+			}
+			else
+			{
+				for (const FFabricationZoneModule& CompatibleModule : ZoneConfig->CompatibleModules)
+				{
+					if (CompatibleModule.ModuleID == *InstalledModuleID)
+					{
+						Module = &CompatibleModule;
+						break;
+					}
+				}
+			}
+		}
+
+		FVector2D WidgetPosition = FVector2D(200, 150); // Default
+		FVector2D WidgetSize = FVector2D(500, 400); // Default
+
+		// Check if we have saved position/size from previous session
+		FVector2D* SavedPosition = SavedWindowPositions.Find(FName("Toolbox"));
+		FVector2D* SavedSize = SavedWindowSizes.Find(FName("Toolbox"));
+
+		if (SavedPosition && SavedSize)
+		{
+			// Use saved position and size
+			WidgetPosition = *SavedPosition;
+			WidgetSize = *SavedSize;
+			UE_LOG(LogTemp, Log, TEXT("Toolbox window using saved position %s and size %s"),
+				*WidgetPosition.ToString(), *WidgetSize.ToString());
+		}
+		else if (Module)
+		{
+			WidgetSize = Module->WidgetSize;
+
+			// Check if we should anchor to mesh
+			if (Module->bAnchorToMesh)
+			{
+				// Get the toolbox mesh
+				if (UStaticMeshComponent** ToolboxMeshPtr = ZoneMeshes.Find(FName("Toolbox")))
+				{
+					UStaticMeshComponent* Mesh = *ToolboxMeshPtr;
+					if (Mesh && PC)
+					{
+						// Project mesh world location to screen space
+						FVector MeshLocation = Mesh->GetComponentLocation();
+						FVector2D ScreenPosition;
+
+						if (PC->ProjectWorldLocationToScreen(MeshLocation, ScreenPosition))
+						{
+							// Add offset from module config
+							WidgetPosition = ScreenPosition + Module->WidgetPositionOffset;
+							UE_LOG(LogTemp, Log, TEXT("Toolbox window anchored to mesh at screen pos %s + offset %s = %s"),
+								*ScreenPosition.ToString(), *Module->WidgetPositionOffset.ToString(), *WidgetPosition.ToString());
+						}
+						else
+						{
+							// Fallback to offset as absolute position if projection fails
+							WidgetPosition = Module->WidgetPositionOffset;
+						}
+					}
+				}
+			}
+			else
+			{
+				// Use absolute positioning
+				WidgetPosition = Module->WidgetPositionOffset;
+			}
+		}
+
+		WindowSlot->SetPosition(WidgetPosition);
+		WindowSlot->SetSize(WidgetSize);
 		WindowSlot->SetAnchors(FAnchors(0, 0, 0, 0));
 	}
 
@@ -905,9 +1132,92 @@ void AFabricationBase::OnMaterialBinClicked_Implementation()
 	UCanvasPanelSlot* WindowSlot = WindowCanvas->AddChildToCanvas(CurrentMaterialBinWindow);
 	if (WindowSlot)
 	{
-		// Set initial position and size
-		WindowSlot->SetPosition(FVector2D(250, 200));
-		WindowSlot->SetSize(FVector2D(500, 400));
+		// Get module configuration for positioning
+		const FFabricationZoneTypeConfig* ZoneConfig = GetZoneTypeConfig(FName("MaterialBin"));
+		FName* InstalledModuleID = InstalledModules.Find(FName("MaterialBin"));
+		const FFabricationZoneModule* Module = nullptr;
+
+		if (ZoneConfig && InstalledModuleID)
+		{
+			FName DefaultModuleEffectiveID = ZoneConfig->DefaultModule.ModuleID;
+			if (DefaultModuleEffectiveID == NAME_None || DefaultModuleEffectiveID.IsNone())
+			{
+				DefaultModuleEffectiveID = FName("MaterialBin");
+			}
+
+			if (DefaultModuleEffectiveID == *InstalledModuleID)
+			{
+				Module = &ZoneConfig->DefaultModule;
+			}
+			else
+			{
+				for (const FFabricationZoneModule& CompatibleModule : ZoneConfig->CompatibleModules)
+				{
+					if (CompatibleModule.ModuleID == *InstalledModuleID)
+					{
+						Module = &CompatibleModule;
+						break;
+					}
+				}
+			}
+		}
+
+		FVector2D WidgetPosition = FVector2D(250, 200); // Default
+		FVector2D WidgetSize = FVector2D(500, 400); // Default
+
+		// Check if we have saved position/size from previous session
+		FVector2D* SavedPosition = SavedWindowPositions.Find(FName("MaterialBin"));
+		FVector2D* SavedSize = SavedWindowSizes.Find(FName("MaterialBin"));
+
+		if (SavedPosition && SavedSize)
+		{
+			// Use saved position and size
+			WidgetPosition = *SavedPosition;
+			WidgetSize = *SavedSize;
+			UE_LOG(LogTemp, Log, TEXT("MaterialBin window using saved position %s and size %s"),
+				*WidgetPosition.ToString(), *WidgetSize.ToString());
+		}
+		else if (Module)
+		{
+			WidgetSize = Module->WidgetSize;
+
+			// Check if we should anchor to mesh
+			if (Module->bAnchorToMesh)
+			{
+				// Get the material bin mesh
+				if (UStaticMeshComponent** MaterialBinMeshPtr = ZoneMeshes.Find(FName("MaterialBin")))
+				{
+					UStaticMeshComponent* Mesh = *MaterialBinMeshPtr;
+					if (Mesh && PC)
+					{
+						// Project mesh world location to screen space
+						FVector MeshLocation = Mesh->GetComponentLocation();
+						FVector2D ScreenPosition;
+
+						if (PC->ProjectWorldLocationToScreen(MeshLocation, ScreenPosition))
+						{
+							// Add offset from module config
+							WidgetPosition = ScreenPosition + Module->WidgetPositionOffset;
+							UE_LOG(LogTemp, Log, TEXT("MaterialBin window anchored to mesh at screen pos %s + offset %s = %s"),
+								*ScreenPosition.ToString(), *Module->WidgetPositionOffset.ToString(), *WidgetPosition.ToString());
+						}
+						else
+						{
+							// Fallback to offset as absolute position if projection fails
+							WidgetPosition = Module->WidgetPositionOffset;
+						}
+					}
+				}
+			}
+			else
+			{
+				// Use absolute positioning
+				WidgetPosition = Module->WidgetPositionOffset;
+			}
+		}
+
+		WindowSlot->SetPosition(WidgetPosition);
+		WindowSlot->SetSize(WidgetSize);
 		WindowSlot->SetAnchors(FAnchors(0, 0, 0, 0));
 	}
 
@@ -1010,22 +1320,296 @@ void AFabricationBase::OnMaterialBinClicked_Implementation()
 
 void AFabricationBase::OnWorkSurfaceClicked_Implementation()
 {
-	// Flash the zone for visual feedback
-	if (WorkSurfaceZone)
+	// Don't open if already open
+	if (CurrentWorkSurfaceWindow)
 	{
-		FlashZone(WorkSurfaceZone);
+		return;
 	}
 
-	// Blueprint can implement UI opening logic
+	if (!BaseWindowClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BaseWindowClass not set in Blueprint!"));
+		return;
+	}
+
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	if (!PC)
+	{
+		return;
+	}
+
+	// Get the character to access the HUD WindowCanvas
+	AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(CurrentUser);
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CurrentUser is not an OutercorpCharacter!"));
+		return;
+	}
+
+	UCanvasPanel* WindowCanvas = Character->GetHUDCanvas();
+	if (!WindowCanvas)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Could not get WindowCanvas from character!"));
+		return;
+	}
+
+	// Create the modular window
+	CurrentWorkSurfaceWindow = CreateWidget<UUserWidget>(GetWorld(), BaseWindowClass);
+	if (!CurrentWorkSurfaceWindow)
+	{
+		return;
+	}
+
+	// Add window to the WindowCanvas
+	UCanvasPanelSlot* WindowSlot = WindowCanvas->AddChildToCanvas(CurrentWorkSurfaceWindow);
+	if (WindowSlot)
+	{
+		// Get module configuration for positioning
+		const FFabricationZoneTypeConfig* ZoneConfig = GetZoneTypeConfig(FName("WorkSurface"));
+		FName* InstalledModuleID = InstalledModules.Find(FName("WorkSurface"));
+		const FFabricationZoneModule* Module = nullptr;
+
+		if (ZoneConfig && InstalledModuleID)
+		{
+			FName DefaultModuleEffectiveID = ZoneConfig->DefaultModule.ModuleID;
+			if (DefaultModuleEffectiveID == NAME_None || DefaultModuleEffectiveID.IsNone())
+			{
+				DefaultModuleEffectiveID = FName("WorkSurface");
+			}
+
+			if (DefaultModuleEffectiveID == *InstalledModuleID)
+			{
+				Module = &ZoneConfig->DefaultModule;
+			}
+			else
+			{
+				for (const FFabricationZoneModule& CompatibleModule : ZoneConfig->CompatibleModules)
+				{
+					if (CompatibleModule.ModuleID == *InstalledModuleID)
+					{
+						Module = &CompatibleModule;
+						break;
+					}
+				}
+			}
+		}
+
+		FVector2D WidgetPosition = FVector2D(300, 200); // Default
+		FVector2D WidgetSize = FVector2D(800, 600); // Default
+
+		// Check if we have saved position/size from previous session
+		FVector2D* SavedPosition = SavedWindowPositions.Find(FName("WorkSurface"));
+		FVector2D* SavedSize = SavedWindowSizes.Find(FName("WorkSurface"));
+
+		if (SavedPosition && SavedSize)
+		{
+			// Use saved position and size
+			WidgetPosition = *SavedPosition;
+			WidgetSize = *SavedSize;
+			UE_LOG(LogTemp, Log, TEXT("WorkSurface window using saved position %s and size %s"),
+				*WidgetPosition.ToString(), *WidgetSize.ToString());
+		}
+		else if (Module)
+		{
+			WidgetSize = Module->WidgetSize;
+
+			// Check if we should anchor to mesh
+			if (Module->bAnchorToMesh)
+			{
+				// Get the work surface mesh
+				if (UStaticMeshComponent** WorkSurfaceMeshPtr = ZoneMeshes.Find(FName("WorkSurface")))
+				{
+					UStaticMeshComponent* Mesh = *WorkSurfaceMeshPtr;
+					if (Mesh && PC)
+					{
+						// Project mesh world location to screen space
+						FVector MeshLocation = Mesh->GetComponentLocation();
+						FVector2D ScreenPosition;
+
+						if (PC->ProjectWorldLocationToScreen(MeshLocation, ScreenPosition))
+						{
+							// Add offset from module config
+							WidgetPosition = ScreenPosition + Module->WidgetPositionOffset;
+							UE_LOG(LogTemp, Log, TEXT("WorkSurface window anchored to mesh at screen pos %s + offset %s = %s"),
+								*ScreenPosition.ToString(), *Module->WidgetPositionOffset.ToString(), *WidgetPosition.ToString());
+						}
+						else
+						{
+							// Fallback to offset as absolute position if projection fails
+							WidgetPosition = Module->WidgetPositionOffset;
+						}
+					}
+				}
+			}
+			else
+			{
+				// Use absolute positioning
+				WidgetPosition = Module->WidgetPositionOffset;
+			}
+		}
+
+		WindowSlot->SetPosition(WidgetPosition);
+		WindowSlot->SetSize(WidgetSize);
+		WindowSlot->SetAnchors(FAnchors(0, 0, 0, 0));
+	}
+
+	// Initialize the window
+	UWindow* Window = Cast<UWindow>(CurrentWorkSurfaceWindow);
+	if (Window)
+	{
+		Window->Init();
+
+		// Apply capabilities from content widget
+		UUserWidget* TempContent = CreateWorkSurfaceContent();
+		if (TempContent)
+		{
+			Window->ApplyCapabilitiesFromContent(TempContent);
+			TempContent->RemoveFromParent(); // Remove temp widget, we'll create the real one below
+		}
+	}
+
+	// Register window for Z-order management
+	Character->RegisterWindow(CurrentWorkSurfaceWindow);
+
+	// Get the ChildWidgetCanvas from the modular window
+	UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(CurrentWorkSurfaceWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
+	UE_LOG(LogTemp, Warning, TEXT("OnWorkSurfaceClicked - ChildWidgetCanvas = %s"), ChildCanvas ? TEXT("Valid") : TEXT("NULL"));
+
+	if (ChildCanvas)
+	{
+		// Create the work surface content widget
+		UUserWidget* WorkSurfaceContent = CreateWorkSurfaceContent();
+		UE_LOG(LogTemp, Warning, TEXT("OnWorkSurfaceClicked - WorkSurfaceContent widget created = %s"), WorkSurfaceContent ? TEXT("Valid") : TEXT("NULL"));
+
+		if (WorkSurfaceContent)
+		{
+			// Add content to the child canvas
+			UCanvasPanelSlot* ContentSlot = ChildCanvas->AddChildToCanvas(WorkSurfaceContent);
+			UE_LOG(LogTemp, Warning, TEXT("OnWorkSurfaceClicked - ContentSlot added = %s"), ContentSlot ? TEXT("Valid") : TEXT("NULL"));
+
+			if (ContentSlot)
+			{
+				// Make the widget fill the entire canvas
+				ContentSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+				ContentSlot->SetOffsets(FMargin(0.0f, 0.0f, 0.0f, 0.0f));
+			}
+
+			// Set the window title from module name
+			UTextBlock* WindowTitleText = Cast<UTextBlock>(CurrentWorkSurfaceWindow->GetWidgetFromName(FName("TitleText")));
+			if (WindowTitleText)
+			{
+				// Get the module name from the zone config
+				const FFabricationZoneTypeConfig* ZoneConfig = GetZoneTypeConfig(FName("WorkSurface"));
+				FName* InstalledModuleID = InstalledModules.Find(FName("WorkSurface"));
+
+				FText WindowTitle = FText::FromString(TEXT("Work Surface")); // Fallback
+
+				if (ZoneConfig && InstalledModuleID)
+				{
+					const FFabricationZoneModule* Module = nullptr;
+
+					// If DefaultModule.ModuleID is None, it auto-generates to match the zone type
+					FName DefaultModuleEffectiveID = ZoneConfig->DefaultModule.ModuleID;
+					if (DefaultModuleEffectiveID == NAME_None || DefaultModuleEffectiveID.IsNone())
+					{
+						DefaultModuleEffectiveID = FName("WorkSurface");
+					}
+
+					if (DefaultModuleEffectiveID == *InstalledModuleID)
+					{
+						Module = &ZoneConfig->DefaultModule;
+					}
+					else
+					{
+						for (const FFabricationZoneModule& CompatibleModule : ZoneConfig->CompatibleModules)
+						{
+							if (CompatibleModule.ModuleID == *InstalledModuleID)
+							{
+								Module = &CompatibleModule;
+								break;
+							}
+						}
+					}
+
+					if (Module && !Module->ModuleName.IsEmpty())
+					{
+						WindowTitle = Module->ModuleName;
+					}
+				}
+
+				WindowTitleText->SetText(WindowTitle);
+			}
+
+			// Bind to close button
+			UButton* WindowCloseButton = Cast<UButton>(CurrentWorkSurfaceWindow->GetWidgetFromName(FName("CloseBtn")));
+			if (WindowCloseButton)
+			{
+				WindowCloseButton->OnClicked.AddDynamic(this, &AFabricationBase::CloseWorkSurfaceWindow);
+			}
+
+			UE_LOG(LogTemp, Log, TEXT("Opened work surface window with content"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("Failed to create work surface content widget!"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Could not find ChildWidgetCanvas in Base_Window!"));
+	}
 }
 
 void AFabricationBase::CloseToolboxWindow()
 {
 	if (CurrentToolboxWindow)
 	{
+		// Save window position and size before closing
+		UCanvasPanelSlot* WindowSlot = Cast<UCanvasPanelSlot>(CurrentToolboxWindow->Slot);
+		if (WindowSlot)
+		{
+			FVector2D CurrentPosition = WindowSlot->GetPosition();
+			FVector2D CurrentSize = WindowSlot->GetSize();
+
+			SavedWindowPositions.FindOrAdd(FName("Toolbox")) = CurrentPosition;
+			SavedWindowSizes.FindOrAdd(FName("Toolbox")) = CurrentSize;
+
+			UE_LOG(LogTemp, Log, TEXT("Saved toolbox window position %s and size %s"),
+				*CurrentPosition.ToString(), *CurrentSize.ToString());
+		}
+
+		// Refresh and compact the toolbox inventory before closing
+		if (ToolboxInventory)
+		{
+			// Get the content widget to call compress and refresh
+			UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(CurrentToolboxWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
+			if (ChildCanvas && ChildCanvas->GetChildrenCount() > 0)
+			{
+				UContainerWidget* ContainerWidget = Cast<UContainerWidget>(ChildCanvas->GetChildAt(0));
+				if (ContainerWidget)
+				{
+					// Stack and compress items
+					ToolboxInventory->StackAllItems();  // Merge same items together
+					ToolboxInventory->CompressItems();  // Move items to fill gaps
+					// Refresh the container display
+					ContainerWidget->RefreshContainer();
+				}
+			}
+		}
+
 		CurrentToolboxWindow->RemoveFromParent();
 		CurrentToolboxWindow = nullptr;
 		UE_LOG(LogTemp, Log, TEXT("Closed toolbox window"));
+	}
+
+	// Ensure cursor remains visible if still in crafting mode
+	if (bIsInCraftingMode)
+	{
+		APlayerController* PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+		if (PlayerController)
+		{
+			PlayerController->bShowMouseCursor = true;
+		}
 	}
 }
 
@@ -1033,10 +1617,184 @@ void AFabricationBase::CloseMaterialBinWindow()
 {
 	if (CurrentMaterialBinWindow)
 	{
+		// Save window position and size before closing
+		UCanvasPanelSlot* WindowSlot = Cast<UCanvasPanelSlot>(CurrentMaterialBinWindow->Slot);
+		if (WindowSlot)
+		{
+			FVector2D CurrentPosition = WindowSlot->GetPosition();
+			FVector2D CurrentSize = WindowSlot->GetSize();
+
+			SavedWindowPositions.FindOrAdd(FName("MaterialBin")) = CurrentPosition;
+			SavedWindowSizes.FindOrAdd(FName("MaterialBin")) = CurrentSize;
+
+			UE_LOG(LogTemp, Log, TEXT("Saved material bin window position %s and size %s"),
+				*CurrentPosition.ToString(), *CurrentSize.ToString());
+		}
+
+		// Refresh and compact the material bin inventory before closing
+		if (MaterialBinInventory)
+		{
+			// Get the content widget to call compress and refresh
+			UCanvasPanel* ChildCanvas = Cast<UCanvasPanel>(CurrentMaterialBinWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
+			if (ChildCanvas && ChildCanvas->GetChildrenCount() > 0)
+			{
+				UContainerWidget* ContainerWidget = Cast<UContainerWidget>(ChildCanvas->GetChildAt(0));
+				if (ContainerWidget)
+				{
+					// Stack and compress items
+					MaterialBinInventory->StackAllItems();  // Merge same items together
+					MaterialBinInventory->CompressItems();  // Move items to fill gaps
+					// Refresh the container display
+					ContainerWidget->RefreshContainer();
+				}
+			}
+		}
+
 		CurrentMaterialBinWindow->RemoveFromParent();
 		CurrentMaterialBinWindow = nullptr;
 		UE_LOG(LogTemp, Log, TEXT("Closed material bin window"));
 	}
+
+	// Ensure cursor remains visible if still in crafting mode
+	if (bIsInCraftingMode)
+	{
+		APlayerController* PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+		if (PlayerController)
+		{
+			PlayerController->bShowMouseCursor = true;
+		}
+	}
+}
+
+void AFabricationBase::CloseWorkSurfaceWindow()
+{
+	if (CurrentWorkSurfaceWindow)
+	{
+		// Save window position and size before closing
+		UCanvasPanelSlot* WindowSlot = Cast<UCanvasPanelSlot>(CurrentWorkSurfaceWindow->Slot);
+		if (WindowSlot)
+		{
+			FVector2D CurrentPosition = WindowSlot->GetPosition();
+			FVector2D CurrentSize = WindowSlot->GetSize();
+
+			SavedWindowPositions.FindOrAdd(FName("WorkSurface")) = CurrentPosition;
+			SavedWindowSizes.FindOrAdd(FName("WorkSurface")) = CurrentSize;
+
+			UE_LOG(LogTemp, Log, TEXT("Saved work surface window position %s and size %s"),
+				*CurrentPosition.ToString(), *CurrentSize.ToString());
+		}
+
+		CurrentWorkSurfaceWindow->RemoveFromParent();
+		CurrentWorkSurfaceWindow = nullptr;
+		UE_LOG(LogTemp, Log, TEXT("Closed work surface window"));
+	}
+}
+
+bool AFabricationBase::GetWorkSurfaceConfig(FWorkSurfaceConfig& OutConfig) const
+{
+	// Get the WorkSurface zone module configuration
+	const FFabricationZoneTypeConfig* ZoneConfig = GetZoneTypeConfig(FName("WorkSurface"));
+	if (!ZoneConfig)
+	{
+		return false;
+	}
+
+	// Get the installed module for the WorkSurface zone
+	const FName* InstalledModuleID = InstalledModules.Find(FName("WorkSurface"));
+	if (!InstalledModuleID)
+	{
+		return false;
+	}
+
+	// Find the module data
+	const FFabricationZoneModule* Module = nullptr;
+
+	// If DefaultModule.ModuleID is None, it auto-generates to match the zone type
+	FName DefaultModuleEffectiveID = ZoneConfig->DefaultModule.ModuleID;
+	if (DefaultModuleEffectiveID == NAME_None || DefaultModuleEffectiveID.IsNone())
+	{
+		DefaultModuleEffectiveID = FName("WorkSurface");
+	}
+
+	if (DefaultModuleEffectiveID == *InstalledModuleID)
+	{
+		Module = &ZoneConfig->DefaultModule;
+	}
+	else
+	{
+		for (const FFabricationZoneModule& CompatibleModule : ZoneConfig->CompatibleModules)
+		{
+			if (CompatibleModule.ModuleID == *InstalledModuleID)
+			{
+				Module = &CompatibleModule;
+				break;
+			}
+		}
+	}
+
+	if (!Module || !Module->bIsWorkSurface)
+	{
+		return false;
+	}
+
+	OutConfig = Module->WorkSurfaceConfig;
+	return true;
+}
+
+bool AFabricationBase::CanCraftRecipe(const UCraftingRecipeData* Recipe) const
+{
+	if (!Recipe)
+	{
+		return false;
+	}
+
+	// Get work surface config
+	FWorkSurfaceConfig SurfaceConfig;
+	if (!GetWorkSurfaceConfig(SurfaceConfig) || !SurfaceConfig.bIsEnabled)
+	{
+		return false;
+	}
+
+	// Check ingredient count
+	if (Recipe->Ingredients.Num() > SurfaceConfig.MaxIngredientSlots)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Recipe '%s' requires %d ingredients, but work surface only supports %d"),
+			*Recipe->RecipeName.ToString(), Recipe->Ingredients.Num(), SurfaceConfig.MaxIngredientSlots);
+		return false;
+	}
+
+	// Check required tools count
+	if (Recipe->RequiredTools.Num() > SurfaceConfig.MaxRequiredTools)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Recipe '%s' requires %d tools, but work surface only supports %d"),
+			*Recipe->RecipeName.ToString(), Recipe->RequiredTools.Num(), SurfaceConfig.MaxRequiredTools);
+		return false;
+	}
+
+	return true;
+}
+
+EStationType AFabricationBase::GetStationType() const
+{
+	return FabricationData ? FabricationData->StationType : EStationType::Workbench;
+}
+
+float AFabricationBase::GetCraftingSpeedMultiplier() const
+{
+	return FabricationData ? FabricationData->CraftingSpeedMultiplier : 1.0f;
+}
+
+UInventoryComponent* AFabricationBase::GetPlayerInventory() const
+{
+	if (CurrentUser)
+	{
+		AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(CurrentUser);
+		if (Character)
+		{
+			return Character->FindComponentByClass<UInventoryComponent>();
+		}
+	}
+	return nullptr;
 }
 
 void AFabricationBase::AddTestItemsToToolbox()
@@ -1288,15 +2046,17 @@ void AFabricationBase::InstallModule(FName ZoneType, FName ModuleID)
 	// Install the module
 	InstalledModules.Add(ZoneType, ModuleID);
 
-	// Create inventory component if module has storage
-	if (Module->InventorySlots > 0)
+	// Create inventory component if module is a storage module
+	if (Module->bIsStorageModule && Module->InventorySlots > 0)
 	{
 		// Check if inventory already exists
 		if (UInventoryComponent** ExistingInventory = ZoneInventories.Find(ZoneType))
 		{
-			// Update inventory size
+			// Update inventory size and category filter
 			(*ExistingInventory)->MaxSlots = Module->InventorySlots;
-			UE_LOG(LogTemp, Log, TEXT("FabricationBase::InstallModule - Updated inventory for zone '%s' to %d slots"), *ZoneType.ToString(), Module->InventorySlots);
+			(*ExistingInventory)->AllowedItemCategories = Module->AllowedItemCategories;
+			UE_LOG(LogTemp, Log, TEXT("FabricationBase::InstallModule - Updated inventory for zone '%s' to %d slots, category filter: 0x%X"),
+				*ZoneType.ToString(), Module->InventorySlots, Module->AllowedItemCategories);
 		}
 		else
 		{
@@ -1308,9 +2068,12 @@ void AFabricationBase::InstallModule(FName ZoneType, FName ModuleID)
 			{
 				NewInventory->RegisterComponent();
 				NewInventory->MaxSlots = Module->InventorySlots;
+				NewInventory->AllowedItemCategories = Module->AllowedItemCategories;
+
 				ZoneInventories.Add(ZoneType, NewInventory);
 
-				UE_LOG(LogTemp, Log, TEXT("FabricationBase::InstallModule - Created inventory for zone '%s' with %d slots"), *ZoneType.ToString(), Module->InventorySlots);
+				UE_LOG(LogTemp, Log, TEXT("FabricationBase::InstallModule - Created inventory for zone '%s' with %d slots, category filter: 0x%X"),
+					*ZoneType.ToString(), Module->InventorySlots, Module->AllowedItemCategories);
 			}
 		}
 	}
