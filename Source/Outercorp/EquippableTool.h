@@ -40,6 +40,10 @@ protected:
 public:
 	virtual void Tick(float DeltaTime) override;
 
+	/** Item data asset this tool was created from */
+	UPROPERTY(BlueprintReadOnly, Category = "Tool|Data")
+	UInventoryItemData* SourceItemData;
+
 	/** First-person mesh for when tool is equipped (seen by player) */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	USkeletalMeshComponent* FirstPersonMesh;
@@ -56,9 +60,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Attachment")
 	FName AttachSocketName;
 
-	/** Relative transform when attached to character */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Attachment")
-	FTransform RelativeTransform;
+	/** Animation state to set on character when this tool is equipped */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Animation")
+	EEquippableState ToolAnimationState;
 
 	/** Whether this tool requires continuous hold for primary action */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Usage")
@@ -164,23 +168,13 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Tool")
 	float GetDurabilityPercentage() const;
 
-	// === Transform Adjustment Helpers ===
+	/** Initialize tool properties from an inventory item data asset */
+	UFUNCTION(BlueprintCallable, Category = "Tool")
+	void InitializeFromItemData(UInventoryItemData* InItemData);
 
-	/** Set the relative transform of the equipped tool (for adjusting position in-game) */
-	UFUNCTION(BlueprintCallable, Category = "Tool|Debug")
-	void SetToolRelativeTransform(FVector Location, FRotator Rotation, FVector Scale);
-
-	/** Get the current relative transform of the tool */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Tool|Debug")
-	FTransform GetToolRelativeTransform() const { return RelativeTransform; }
-
-	/** Print current transform to log (for copying values) */
-	UFUNCTION(BlueprintCallable, Category = "Tool|Debug")
-	void PrintCurrentTransform();
-
-	/** Toggle debug visualization of the tool attachment */
-	UFUNCTION(BlueprintCallable, Category = "Tool|Debug")
-	void ToggleDebugVisualization();
+	/** Get the source item data asset */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Tool")
+	UInventoryItemData* GetSourceItemData() const { return SourceItemData; }
 
 protected:
 	/** Timer handle for cooldown */
@@ -189,15 +183,9 @@ protected:
 	/** Whether tool is currently on cooldown */
 	bool bIsOnCooldown;
 
-	/** Whether to show debug visualization */
-	bool bShowDebugVisualization;
-
 	/** Reset cooldown */
 	void ResetCooldown();
 
 	/** Play tool use animation on character */
 	void PlayUseAnimation(UAnimMontage* Animation);
-
-	/** Draw debug visualization for tool attachment */
-	void DrawDebugVisualization();
 };

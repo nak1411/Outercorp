@@ -25,7 +25,6 @@
 #include "NotificationComponent.h"
 #include "PickupableItem.h"
 #include "EquippableTool.h"
-#include "ToolTransformWidget.h"
 #include "FabricationBase.h"
 #include "Outercorp.h"
 #include "Window.h"
@@ -129,9 +128,6 @@ AOutercorpCharacter::AOutercorpCharacter()
 	// Initialize equipment variables
 	EquippedTool = nullptr;
 	EquippedToolItemData = nullptr;
-
-	// Initialize widget pointers
-	ToolTransformWidget = nullptr;
 }
 
 void AOutercorpCharacter::Tick(float DeltaTime)
@@ -447,6 +443,13 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AOutercorpCharacter::DoJumpStart);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::DoJumpEnd);
 
+		// Crouching
+		if (CrouchAction)
+		{
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &ACharacter::Crouch, false);
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Completed, this, &ACharacter::UnCrouch, false);
+		}
+
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AOutercorpCharacter::MoveInput);
 
@@ -524,12 +527,6 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 		if (ConstructionSlot3Action)
 		{
 			EnhancedInputComponent->BindAction(ConstructionSlot3Action, ETriggerEvent::Started, this, &AOutercorpCharacter::SelectConstructionSlot3);
-		}
-
-		// Toggle Tool Transform Widget
-		if (ToggleToolTransformWidgetAction)
-		{
-			EnhancedInputComponent->BindAction(ToggleToolTransformWidgetAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleToolTransformWidget);
 		}
 
 		// Equip/Unequip Tool
@@ -1136,38 +1133,6 @@ void AOutercorpCharacter::ToggleInventory()
 	else
 	{
 		OpenInventory();
-	}
-}
-
-void AOutercorpCharacter::ToggleToolTransformWidget()
-{
-	if (!IsLocallyControlled())
-	{
-		return;
-	}
-
-	// If widget doesn't exist yet, create it
-	if (!ToolTransformWidget && ToolTransformWidgetClass)
-	{
-		ToolTransformWidget = CreateWidget<UToolTransformWidget>(GetWorld(), ToolTransformWidgetClass);
-		if (ToolTransformWidget)
-		{
-			ToolTransformWidget->AddToViewport();
-		}
-		return;
-	}
-
-	// Toggle visibility
-	if (ToolTransformWidget)
-	{
-		if (ToolTransformWidget->IsInViewport())
-		{
-			ToolTransformWidget->RemoveFromParent();
-		}
-		else
-		{
-			ToolTransformWidget->AddToViewport();
-		}
 	}
 }
 
@@ -4843,7 +4808,7 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& Inventory
 	}
 
 	// Check if item is equippable
-	if (!InventoryItem.ItemData->bIsEquippable || !InventoryItem.ItemData->EquippableToolClass)
+	if (!InventoryItem.ItemData->bIsEquippable)
 	{
 		if (NotificationComponent)
 		{
@@ -4858,13 +4823,13 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& Inventory
 		UnequipCurrentTool();
 	}
 
-	// Spawn the tool actor
+	// Spawn a generic equippable tool actor
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
 	SpawnParams.Instigator = this;
 
 	EquippedTool = GetWorld()->SpawnActor<AEquippableTool>(
-		InventoryItem.ItemData->EquippableToolClass,
+		AEquippableTool::StaticClass(),
 		FVector::ZeroVector,
 		FRotator::ZeroRotator,
 		SpawnParams
@@ -4872,21 +4837,11 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& Inventory
 
 	if (EquippedTool)
 	{
+		// Initialize from item data
+		EquippedTool->InitializeFromItemData(InventoryItem.ItemData);
+
 		// Equip the tool
 		EquippedTool->EquipTool(this);
-
-		// Load saved transform from item data
-		if (InventoryItem.ItemData->EquippedRelativeTransform.GetLocation() != FVector::ZeroVector ||
-			!InventoryItem.ItemData->EquippedRelativeTransform.GetRotation().Equals(FQuat::Identity))
-		{
-			// Has a saved transform, apply it
-			FTransform SavedTransform = InventoryItem.ItemData->EquippedRelativeTransform;
-			EquippedTool->SetToolRelativeTransform(
-				SavedTransform.GetLocation(),
-				SavedTransform.GetRotation().Rotator(),
-				SavedTransform.GetScale3D()
-			);
-		}
 
 		// Store the item data for tracking
 		EquippedToolItemData = InventoryItem.ItemData;

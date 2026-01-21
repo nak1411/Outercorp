@@ -346,6 +346,9 @@ private:
 	/** Handle invert selection action */
 	void HandleInvertSelection();
 
+	/** Handle equip item action - equips the item to character hand */
+	void HandleEquipItem();
+
 	/** Show tooltip for this row */
 	void ShowTooltip();
 

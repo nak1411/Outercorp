@@ -311,6 +311,9 @@ protected:
 	/** Handle invert selection action - inverts current selection */
 	void HandleInvertSelection();
 
+	/** Handle equip item action - equips the item to character hand */
+	void HandleEquipItem();
+
 	/** Blueprint event for notifying selection changes */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
 	void OnSelectionChanged(const TArray<int32> &SelectedSlots);

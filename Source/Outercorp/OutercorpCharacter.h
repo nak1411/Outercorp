@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
 #include "InventoryItemData.h"
+#include "EquippableTool.h"
 #include "OutercorpCharacter.generated.h"
 
 class UInputComponent;
@@ -22,8 +23,6 @@ class UInteractionPromptWidget;
 class UInteractionManagerComponent;
 class UNotificationComponent;
 class UConstructionPartData;
-class AEquippableTool;
-class UToolTransformWidget;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -139,10 +138,6 @@ protected:
 	/** Construction mode border widget class */
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> ConstructionModeBorderWidgetClass;
-
-	/** Tool transform adjuster widget class */
-	UPROPERTY(EditDefaultsOnly, Category = "UI")
-	TSubclassOf<UToolTransformWidget> ToolTransformWidgetClass;
 
 	/** Inventory window capabilities */
 	UPROPERTY(EditAnywhere, Category = "UI|Window Capabilities")
@@ -260,13 +255,13 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *EquipToolAction;
 
-	/** Toggle Tool Transform Widget Input Action (for adjusting tool transforms) */
-	UPROPERTY(EditAnywhere, Category = "Input")
-	class UInputAction *ToggleToolTransformWidgetAction;
-
 	/** Exit Crafting Mode Input Action (ESC key) */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *ExitCraftingAction;
+
+	/** Crouch Input Action */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *CrouchAction;
 
 	/** Time player must hold interact key before picking up item */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
@@ -445,13 +440,13 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Equipment")
 	AEquippableTool* EquippedTool;
 
+	/** Current equippable state for animation blend poses */
+	UPROPERTY(BlueprintReadOnly, Category = "Equipment")
+	EEquippableState EquippableState;
+
 	/** Item data of currently equipped tool (for re-equipping after save/load) */
 	UPROPERTY()
 	UInventoryItemData* EquippedToolItemData;
-
-	/** Tool transform adjuster widget */
-	UPROPERTY()
-	UToolTransformWidget* ToolTransformWidget;
 
 public:
 	/** Currently active fabrication station (for exiting crafting mode) */
@@ -661,13 +656,17 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment")
 	UInventoryItemData* GetEquippedToolItemData() const { return EquippedToolItemData; }
 
+	/** Get current equippable state for animation blueprints */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment")
+	EEquippableState GetEquippableState() const { return EquippableState; }
+
+	/** Set current equippable state */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void SetEquippableState(EEquippableState NewState) { EquippableState = NewState; }
+
 	/** Toggle inventory display */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	virtual void ToggleInventory();
-
-	/** Toggle tool transform adjuster widget */
-	UFUNCTION(BlueprintCallable, Category = "UI")
-	void ToggleToolTransformWidget();
 
 	/** Exit crafting mode (called by ESC key) */
 	UFUNCTION(BlueprintCallable, Category = "Crafting")

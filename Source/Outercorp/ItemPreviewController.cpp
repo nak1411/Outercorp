@@ -217,26 +217,21 @@ void AItemPreviewController::SetPreviewItem(const FInventoryItem& Item)
 	UStaticMesh* LoadedStaticMesh = nullptr;
 	UPrimitiveComponent* ActiveMeshComponent = nullptr;
 
-	// Try to get skeletal mesh from equippable tool class
-	if (Item.ItemData->bIsEquippable && Item.ItemData->EquippableToolClass)
+	// Try to get skeletal mesh from equippable item data
+	if (Item.ItemData->bIsEquippable)
 	{
-		// Get the default object to inspect its properties
-		AEquippableTool* ToolCDO = Item.ItemData->EquippableToolClass->GetDefaultObject<AEquippableTool>();
-		if (ToolCDO)
+		// Prefer third-person skeletal mesh for preview (more complete view)
+		// Fall back to first-person mesh if third-person isn't available
+		USkeletalMesh* SkeletalMeshToUse = Item.ItemData->ToolThirdPersonMesh;
+		if (!SkeletalMeshToUse)
 		{
-			// Prefer third-person skeletal mesh for preview (more complete view)
-			// Fall back to first-person mesh if third-person isn't available
-			USkeletalMesh* SkeletalMeshToUse = ToolCDO->ThirdPersonSkeletalMesh;
-			if (!SkeletalMeshToUse)
-			{
-				SkeletalMeshToUse = ToolCDO->FirstPersonSkeletalMesh;
-			}
+			SkeletalMeshToUse = Item.ItemData->ToolFirstPersonMesh;
+		}
 
-			if (SkeletalMeshToUse)
-			{
-				LoadedSkeletalMesh = SkeletalMeshToUse;
-				bIsSkeletalMesh = true;
-			}
+		if (SkeletalMeshToUse)
+		{
+			LoadedSkeletalMesh = SkeletalMeshToUse;
+			bIsSkeletalMesh = true;
 		}
 	}
 

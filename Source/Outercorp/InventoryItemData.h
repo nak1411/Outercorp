@@ -6,6 +6,42 @@
 #include "Engine/DataAsset.h"
 #include "InventoryItemData.generated.h"
 
+class USkeletalMesh;
+class UAnimMontage;
+class USoundBase;
+class UNiagaraSystem;
+
+/**
+ * Tool type for categorization and harvesting checks
+ */
+UENUM(BlueprintType)
+enum class EToolType : uint8
+{
+	None		UMETA(DisplayName = "None"),
+	Axe			UMETA(DisplayName = "Axe"),
+	Pickaxe		UMETA(DisplayName = "Pickaxe"),
+	Shovel		UMETA(DisplayName = "Shovel"),
+	Sickle		UMETA(DisplayName = "Sickle"),
+	Knife		UMETA(DisplayName = "Knife"),
+	Hammer		UMETA(DisplayName = "Hammer"),
+	Wrench		UMETA(DisplayName = "Wrench"),
+	Generic		UMETA(DisplayName = "Generic Tool")
+};
+
+/**
+ * Equippable state for animation blueprint blend poses
+ */
+UENUM(BlueprintType)
+enum class EEquippableState : uint8
+{
+	Unarmed UMETA(DisplayName = "Unarmed"),
+	OneHandedTool UMETA(DisplayName = "One-Handed Tool"),
+	TwoHandedTool UMETA(DisplayName = "Two-Handed Tool"),
+	Axe UMETA(DisplayName = "Axe"),
+	Pickaxe UMETA(DisplayName = "Pickaxe"),
+	Shovel UMETA(DisplayName = "Shovel")
+};
+
 /**
  * Item rarity/quality enum
  */
@@ -113,13 +149,73 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment")
 	bool bIsEquippable = false;
 
-	/** Tool actor class to spawn when equipped (must inherit from AEquippableTool) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment", meta = (EditCondition = "bIsEquippable"))
-	TSubclassOf<class AEquippableTool> EquippableToolClass;
+	// ============================================
+	// TOOL PROPERTIES (only used if bIsEquippable)
+	// ============================================
 
-	/** Saved relative transform for equipped tool (position/rotation when equipped) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Item|Equipment", meta = (EditCondition = "bIsEquippable"))
-	FTransform EquippedRelativeTransform;
+	/** Tool type for categorization and harvesting */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Tool", meta = (EditCondition = "bIsEquippable"))
+	EToolType ToolType = EToolType::None;
+
+	/** Tool tier/quality level (affects harvesting efficiency) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Tool", meta = (EditCondition = "bIsEquippable", ClampMin = "1"))
+	int32 ToolTier = 1;
+
+	/** First-person skeletal mesh (seen by player when equipped) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Mesh", meta = (EditCondition = "bIsEquippable"))
+	USkeletalMesh* ToolFirstPersonMesh = nullptr;
+
+	/** Third-person skeletal mesh (seen by others) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Mesh", meta = (EditCondition = "bIsEquippable"))
+	USkeletalMesh* ToolThirdPersonMesh = nullptr;
+
+	/** Socket name to attach to on character's first-person mesh */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Attachment", meta = (EditCondition = "bIsEquippable"))
+	FName ToolAttachSocketName = FName("GripPoint");
+
+	/** Animation state to set on character when this tool is equipped */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Animation", meta = (EditCondition = "bIsEquippable"))
+	EEquippableState ToolAnimationState = EEquippableState::OneHandedTool;
+
+	/** Animation to play on character when using tool (primary action) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Animation", meta = (EditCondition = "bIsEquippable"))
+	UAnimMontage* ToolPrimaryUseAnimation = nullptr;
+
+	/** Animation to play on character when using tool (secondary action) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Animation", meta = (EditCondition = "bIsEquippable"))
+	UAnimMontage* ToolSecondaryUseAnimation = nullptr;
+
+	/** Whether this tool requires continuous hold for primary action */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Usage", meta = (EditCondition = "bIsEquippable"))
+	bool bToolRequiresContinuousHold = false;
+
+	/** Cooldown time between tool uses (seconds) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Usage", meta = (EditCondition = "bIsEquippable", ClampMin = "0.0"))
+	float ToolUsageCooldown = 0.5f;
+
+	/** Base damage dealt by this tool (for harvesting) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Usage", meta = (EditCondition = "bIsEquippable", ClampMin = "0.0"))
+	float ToolBaseDamage = 10.0f;
+
+	/** Maximum durability of the tool (0 = infinite durability) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Durability", meta = (EditCondition = "bIsEquippable", ClampMin = "0.0"))
+	float ToolMaxDurability = 0.0f;
+
+	/** Durability cost per use */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Durability", meta = (EditCondition = "bIsEquippable", ClampMin = "0.0"))
+	float ToolDurabilityCostPerUse = 1.0f;
+
+	/** Sound played when using the tool */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Feedback", meta = (EditCondition = "bIsEquippable"))
+	USoundBase* ToolUseSound = nullptr;
+
+	/** Sound played when equipping the tool */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Feedback", meta = (EditCondition = "bIsEquippable"))
+	USoundBase* ToolEquipSound = nullptr;
+
+	/** Niagara effect when using the tool */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Feedback", meta = (EditCondition = "bIsEquippable"))
+	UNiagaraSystem* ToolUseEffect = nullptr;
 
 	/** Item metadata (for custom properties) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")

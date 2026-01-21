@@ -7,6 +7,7 @@
 #include "TooltipWidget.h"
 #include "QuantityInputDialog.h"
 #include "FabricationBase.h"
+#include "OutercorpCharacter.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/Border.h"
@@ -677,6 +678,8 @@ bool UInventorySlotWidget::CanAcceptItem(const FInventoryItem& Item) const
 
 void UInventorySlotWidget::HandleContextMenuAction_Implementation(FName ActionID)
 {
+	UE_LOG(LogTemp, Log, TEXT("HandleContextMenuAction called with ActionID: %s"), *ActionID.ToString());
+
 	if (ActionID == "Split")
 	{
 		HandleSplitItem();
@@ -708,6 +711,10 @@ void UInventorySlotWidget::HandleContextMenuAction_Implementation(FName ActionID
 	else if (ActionID == "InvertSelection")
 	{
 		HandleInvertSelection();
+	}
+	else if (ActionID == "Equip")
+	{
+		HandleEquipItem();
 	}
 }
 
@@ -1227,6 +1234,47 @@ void UInventorySlotWidget::HandleInvertSelection()
 
 	// Broadcast to all slots in the inventory
 	BroadcastSelectionChanged();
+}
+
+void UInventorySlotWidget::HandleEquipItem()
+{
+	UE_LOG(LogTemp, Log, TEXT("HandleEquipItem called"));
+
+	if (!CurrentItem.IsValid() || !CurrentItem.ItemData)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HandleEquipItem: CurrentItem is invalid"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("HandleEquipItem: Item = %s, bIsEquippable = %s"),
+		*CurrentItem.ItemData->ItemName.ToString(),
+		CurrentItem.ItemData->bIsEquippable ? TEXT("true") : TEXT("false"));
+
+	// Check if the item is equippable
+	if (!CurrentItem.ItemData->bIsEquippable)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HandleEquipItem: Item is not equippable"));
+		return;
+	}
+
+	// Get the owning player character
+	APlayerController* PC = GetOwningPlayer();
+	if (!PC)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HandleEquipItem: No PlayerController"));
+		return;
+	}
+
+	AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(PC->GetPawn());
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HandleEquipItem: Failed to cast to OutercorpCharacter"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("HandleEquipItem: Calling EquipToolFromInventory"));
+	// Equip the item
+	Character->EquipToolFromInventory(CurrentItem);
 }
 
 void UInventorySlotWidget::UpdateAppearance()

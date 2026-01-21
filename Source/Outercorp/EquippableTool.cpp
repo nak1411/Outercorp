@@ -1,12 +1,12 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "EquippableTool.h"
+#include "InventoryItemData.h"
 #include "OutercorpCharacter.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "TimerManager.h"
-#include "DrawDebugHelpers.h"
 
 AEquippableTool::AEquippableTool()
 {
@@ -15,7 +15,6 @@ AEquippableTool::AEquippableTool()
 	// Create first-person mesh component
 	FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
 	FirstPersonMesh->SetupAttachment(Root);
-	FirstPersonMesh->SetOnlyOwnerSee(true);
 	FirstPersonMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	FirstPersonMesh->SetCastShadow(false);
 	FirstPersonMesh->SetVisibility(false); // Hidden until equipped
@@ -26,7 +25,7 @@ AEquippableTool::AEquippableTool()
 
 	// Default values
 	AttachSocketName = FName("GripPoint");
-	RelativeTransform = FTransform::Identity;
+	ToolAnimationState = EEquippableState::OneHandedTool;
 	bRequiresContinuousHold = false;
 	UsageCooldown = 0.5f;
 	CurrentUsageMode = EToolUsageMode::None;
@@ -41,7 +40,7 @@ AEquippableTool::AEquippableTool()
 	FirstPersonSkeletalMesh = nullptr;
 	PrimaryUseAnimation = nullptr;
 	SecondaryUseAnimation = nullptr;
-	bShowDebugVisualization = false;
+	SourceItemData = nullptr;
 }
 
 void AEquippableTool::BeginPlay()
@@ -71,12 +70,6 @@ void AEquippableTool::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Draw debug visualization if enabled
-	if (bShowDebugVisualization && bIsEquipped)
-	{
-		DrawDebugVisualization();
-	}
-
 	// Tool-specific tick logic can be added in subclasses
 }
 
@@ -101,6 +94,9 @@ void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter* Character)
 
 	bIsEquipped = true;
 	OwningCharacter = Character;
+
+	// Set character's animation state
+	Character->SetEquippableState(ToolAnimationState);
 
 	// Get character's first-person mesh
 	USkeletalMeshComponent* CharacterFPMesh = Character->GetFirstPersonMesh();
@@ -176,38 +172,51 @@ void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter* Character)
 			}
 		}
 
-		// Attach the actor's root component to the character socket
-		// Using SnapToTargetIncludingScale ensures proper transform inheritance from animated bone
+		// Attach the MESH COMPONENT directly to the character socket (not the actor)
 		FAttachmentTransformRules AttachRules(
 			EAttachmentRule::SnapToTarget,
 			EAttachmentRule::SnapToTarget,
-			EAttachmentRule::KeepWorld,
-			false  // Don't weld simulated bodies
+			EAttachmentRule::SnapToTarget,
+			true  // Weld simulated bodies
 		);
 
-		AttachToComponent(
+		MeshToAttach->AttachToComponent(
 			CharacterFPMesh,
 			AttachRules,
 			SocketToUse
 		);
 
-		// Apply the custom relative transform offset
-		SetActorRelativeTransform(RelativeTransform);
+		// Set owner for visibility
+		SetOwner(Character);
 
-		// Make sure the mesh is visible
-		MeshToAttach->SetVisibility(true);
-
-		// Set owner-see-only if it's a skeletal mesh component
+		// Configure mesh visibility for first-person view
 		if (USkeletalMeshComponent* SkelMesh = Cast<USkeletalMeshComponent>(MeshToAttach))
 		{
-			SkelMesh->SetOnlyOwnerSee(true);
+			SkelMesh->SetOnlyOwnerSee(false);
+			SkelMesh->SetOwnerNoSee(false);
+			SkelMesh->SetCastShadow(true);
+			SkelMesh->SetVisibility(true, true);
+			SkelMesh->SetHiddenInGame(false);
+			UE_LOG(LogTemp, Log, TEXT("Skeletal mesh attached and configured - Asset: %s, Visible: %s, HiddenInGame: %s"),
+				SkelMesh->GetSkeletalMeshAsset() ? *SkelMesh->GetSkeletalMeshAsset()->GetName() : TEXT("NULL"),
+				SkelMesh->IsVisible() ? TEXT("true") : TEXT("false"),
+				SkelMesh->bHiddenInGame ? TEXT("true") : TEXT("false"));
 		}
 		else if (UStaticMeshComponent* StaticMesh = Cast<UStaticMeshComponent>(MeshToAttach))
 		{
-			StaticMesh->SetOnlyOwnerSee(true);
+			StaticMesh->SetOnlyOwnerSee(false);
+			StaticMesh->SetOwnerNoSee(false);
+			StaticMesh->SetCastShadow(true);
+			StaticMesh->SetVisibility(true, true);
+			StaticMesh->SetHiddenInGame(false);
+			UE_LOG(LogTemp, Log, TEXT("Static mesh attached and configured - Mesh: %s, Visible: %s"),
+				StaticMesh->GetStaticMesh() ? *StaticMesh->GetStaticMesh()->GetName() : TEXT("NULL"),
+				StaticMesh->IsVisible() ? TEXT("true") : TEXT("false"));
 		}
 
-		UE_LOG(LogTemp, Log, TEXT("Tool mesh attached to socket: %s"), *SocketToUse.ToString());
+		UE_LOG(LogTemp, Log, TEXT("Tool mesh attached to socket: %s, Attach Parent: %s"),
+			*SocketToUse.ToString(),
+			MeshToAttach->GetAttachParent() ? *MeshToAttach->GetAttachParent()->GetName() : TEXT("NULL"));
 	}
 
 	// Disable collision when equipped
@@ -225,6 +234,12 @@ void AEquippableTool::UnequipTool()
 void AEquippableTool::OnUnequipped_Implementation()
 {
 	bIsEquipped = false;
+
+	// Reset character's animation state to unarmed
+	if (OwningCharacter)
+	{
+		OwningCharacter->SetEquippableState(EEquippableState::Unarmed);
+	}
 
 	// Stop any ongoing use
 	if (bIsInUse)
@@ -435,101 +450,62 @@ void AEquippableTool::PlayUseAnimation(UAnimMontage* Animation)
 	}
 }
 
-// ============================================================================
-// Transform Adjustment Helpers
-// ============================================================================
-
-void AEquippableTool::SetToolRelativeTransform(FVector Location, FRotator Rotation, FVector Scale)
+void AEquippableTool::InitializeFromItemData(UInventoryItemData* InItemData)
 {
-	RelativeTransform.SetLocation(Location);
-	RelativeTransform.SetRotation(Rotation.Quaternion());
-	RelativeTransform.SetScale3D(Scale);
-
-	// Apply immediately if equipped
-	if (bIsEquipped && GetAttachParentActor())
+	if (!InItemData)
 	{
-		// Set the actor's relative transform since we attach the whole actor now
-		SetActorRelativeTransform(RelativeTransform);
-	}
-}
-
-void AEquippableTool::PrintCurrentTransform()
-{
-	FVector Loc = RelativeTransform.GetLocation();
-	FRotator Rot = RelativeTransform.GetRotation().Rotator();
-	FVector Scale = RelativeTransform.GetScale3D();
-
-	UE_LOG(LogTemp, Warning, TEXT("=== Current Tool Transform ==="));
-	UE_LOG(LogTemp, Warning, TEXT("Location: X=%.2f Y=%.2f Z=%.2f"), Loc.X, Loc.Y, Loc.Z);
-	UE_LOG(LogTemp, Warning, TEXT("Rotation: Pitch=%.2f Yaw=%.2f Roll=%.2f"), Rot.Pitch, Rot.Yaw, Rot.Roll);
-	UE_LOG(LogTemp, Warning, TEXT("Scale: X=%.2f Y=%.2f Z=%.2f"), Scale.X, Scale.Y, Scale.Z);
-	UE_LOG(LogTemp, Warning, TEXT("============================="));
-
-	// Also log in easy-to-copy format
-	UE_LOG(LogTemp, Warning, TEXT("Copy-paste values:"));
-	UE_LOG(LogTemp, Warning, TEXT("Location: (%f, %f, %f)"), Loc.X, Loc.Y, Loc.Z);
-	UE_LOG(LogTemp, Warning, TEXT("Rotation: (%f, %f, %f)"), Rot.Pitch, Rot.Yaw, Rot.Roll);
-	UE_LOG(LogTemp, Warning, TEXT("Scale: (%f, %f, %f)"), Scale.X, Scale.Y, Scale.Z);
-}
-
-void AEquippableTool::ToggleDebugVisualization()
-{
-	bShowDebugVisualization = !bShowDebugVisualization;
-	UE_LOG(LogTemp, Log, TEXT("Tool debug visualization: %s"), bShowDebugVisualization ? TEXT("ON") : TEXT("OFF"));
-}
-
-void AEquippableTool::DrawDebugVisualization()
-{
-	if (!OwningCharacter)
-	{
+		UE_LOG(LogTemp, Warning, TEXT("AEquippableTool::InitializeFromItemData - ItemData is null"));
 		return;
 	}
 
-	USkeletalMeshComponent* CharacterFPMesh = OwningCharacter->GetFirstPersonMesh();
-	if (!CharacterFPMesh)
+	if (!InItemData->bIsEquippable)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("AEquippableTool::InitializeFromItemData - Item '%s' is not equippable"), *InItemData->ItemName.ToString());
 		return;
 	}
 
-	// Find which mesh is attached
-	USceneComponent* AttachedMesh = nullptr;
-	if (FirstPersonMesh && FirstPersonMesh->GetAttachParent())
+	SourceItemData = InItemData;
+
+	// Set mesh references
+	FirstPersonSkeletalMesh = InItemData->ToolFirstPersonMesh;
+	ThirdPersonSkeletalMesh = InItemData->ToolThirdPersonMesh;
+
+	// Set attachment
+	AttachSocketName = InItemData->ToolAttachSocketName;
+
+	// Set animation state
+	ToolAnimationState = InItemData->ToolAnimationState;
+
+	// Set animations
+	PrimaryUseAnimation = InItemData->ToolPrimaryUseAnimation;
+	SecondaryUseAnimation = InItemData->ToolSecondaryUseAnimation;
+
+	// Set usage properties
+	bRequiresContinuousHold = InItemData->bToolRequiresContinuousHold;
+	UsageCooldown = InItemData->ToolUsageCooldown;
+
+	// Set durability
+	MaxDurability = InItemData->ToolMaxDurability;
+	DurabilityCostPerUse = InItemData->ToolDurabilityCostPerUse;
+	if (MaxDurability > 0.0f)
 	{
-		AttachedMesh = FirstPersonMesh;
+		CurrentDurability = MaxDurability;
 	}
-	else if (ItemMesh && ItemMesh->GetAttachParent())
+
+	// Apply first-person mesh if set
+	if (FirstPersonSkeletalMesh && FirstPersonMesh)
 	{
-		AttachedMesh = ItemMesh;
+		FirstPersonMesh->SetSkeletalMesh(FirstPersonSkeletalMesh);
+		UE_LOG(LogTemp, Log, TEXT("Set FirstPersonMesh skeletal mesh to: %s"), *FirstPersonSkeletalMesh->GetName());
 	}
-
-	if (!AttachedMesh)
+	else
 	{
-		return;
+		UE_LOG(LogTemp, Warning, TEXT("No FirstPersonSkeletalMesh to set (FPMesh: %s, SkeletalMesh: %s)"),
+			FirstPersonMesh ? TEXT("Valid") : TEXT("NULL"),
+			FirstPersonSkeletalMesh ? *FirstPersonSkeletalMesh->GetName() : TEXT("NULL"));
 	}
 
-	// Get world transform of the attached mesh
-	FTransform MeshWorldTransform = AttachedMesh->GetComponentTransform();
-	FVector MeshLocation = MeshWorldTransform.GetLocation();
-	FRotator MeshRotation = MeshWorldTransform.GetRotation().Rotator();
-
-	// Draw coordinate axes at the mesh location
-	float AxisLength = 20.0f;
-	FVector Forward = MeshRotation.RotateVector(FVector::ForwardVector) * AxisLength;
-	FVector Right = MeshRotation.RotateVector(FVector::RightVector) * AxisLength;
-	FVector Up = MeshRotation.RotateVector(FVector::UpVector) * AxisLength;
-
-	DrawDebugLine(GetWorld(), MeshLocation, MeshLocation + Forward, FColor::Red, false, -1.0f, 0, 2.0f);
-	DrawDebugLine(GetWorld(), MeshLocation, MeshLocation + Right, FColor::Green, false, -1.0f, 0, 2.0f);
-	DrawDebugLine(GetWorld(), MeshLocation, MeshLocation + Up, FColor::Blue, false, -1.0f, 0, 2.0f);
-
-	// Draw a sphere at the origin
-	DrawDebugSphere(GetWorld(), MeshLocation, 5.0f, 8, FColor::Yellow, false, -1.0f, 0, 1.0f);
-
-	// Draw text with current transform values
-	FVector Loc = RelativeTransform.GetLocation();
-	FRotator Rot = RelativeTransform.GetRotation().Rotator();
-	FString TransformText = FString::Printf(TEXT("Loc: (%.1f, %.1f, %.1f)\nRot: (%.1f, %.1f, %.1f)"),
-		Loc.X, Loc.Y, Loc.Z, Rot.Pitch, Rot.Yaw, Rot.Roll);
-
-	DrawDebugString(GetWorld(), MeshLocation + FVector(0, 0, 30), TransformText, nullptr, FColor::White, 0.0f, true);
+	UE_LOG(LogTemp, Log, TEXT("Tool initialized from item: %s (ToolFirstPersonMesh in data: %s)"),
+		*InItemData->ItemName.ToString(),
+		InItemData->ToolFirstPersonMesh ? *InItemData->ToolFirstPersonMesh->GetName() : TEXT("NULL"));
 }

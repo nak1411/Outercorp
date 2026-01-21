@@ -13,6 +13,7 @@
 #include "InventoryItemData.h"
 #include "InventorySlotWidget.h"
 #include "QuantityInputDialog.h"
+#include "OutercorpCharacter.h"
 #include "Engine/Texture2D.h"
 #include "Input/Reply.h"
 #include "GameFramework/PlayerController.h"
@@ -777,6 +778,8 @@ void UInventoryListRowWidget::OnColumnWidthsChanged()
 
 void UInventoryListRowWidget::HandleContextMenuAction_Implementation(FName ActionID)
 {
+	UE_LOG(LogTemp, Log, TEXT("ListRowWidget::HandleContextMenuAction called with ActionID: %s"), *ActionID.ToString());
+
 	if (ActionID == "Split")
 	{
 		HandleSplitItem();
@@ -808,6 +811,10 @@ void UInventoryListRowWidget::HandleContextMenuAction_Implementation(FName Actio
 	else if (ActionID == "InvertSelection")
 	{
 		HandleInvertSelection();
+	}
+	else if (ActionID == "Equip")
+	{
+		HandleEquipItem();
 	}
 }
 
@@ -1163,6 +1170,47 @@ void UInventoryListRowWidget::HandleInvertSelection()
 {
 	// Invert selection of all rows
 	// This would require access to all row widgets, which we don't have here
+}
+
+void UInventoryListRowWidget::HandleEquipItem()
+{
+	UE_LOG(LogTemp, Log, TEXT("ListRowWidget::HandleEquipItem called"));
+
+	if (!ItemData || !ItemData->Item.IsValid() || !ItemData->Item.ItemData)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ListRowWidget::HandleEquipItem: ItemData is invalid"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("ListRowWidget::HandleEquipItem: Item = %s, bIsEquippable = %s"),
+		*ItemData->Item.ItemData->ItemName.ToString(),
+		ItemData->Item.ItemData->bIsEquippable ? TEXT("true") : TEXT("false"));
+
+	// Check if the item is equippable
+	if (!ItemData->Item.ItemData->bIsEquippable)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ListRowWidget::HandleEquipItem: Item is not equippable"));
+		return;
+	}
+
+	// Get the owning player character
+	APlayerController* PC = GetOwningPlayer();
+	if (!PC)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ListRowWidget::HandleEquipItem: No PlayerController"));
+		return;
+	}
+
+	AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(PC->GetPawn());
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ListRowWidget::HandleEquipItem: Failed to cast to OutercorpCharacter"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("ListRowWidget::HandleEquipItem: Calling EquipToolFromInventory"));
+	// Equip the item
+	Character->EquipToolFromInventory(ItemData->Item);
 }
 
 void UInventoryListRowWidget::SelectRange()
