@@ -56,9 +56,13 @@ struct FSpawnedResourceInfo
 	UPROPERTY()
 	bool bInstanceHidden = false;
 
+	/** Hash of the instance used to track in ConvertedInstances set */
+	uint64 InstanceHash = 0;
+
 	FSpawnedResourceInfo()
 		: InstanceIndex(INDEX_NONE)
 		, bInstanceHidden(false)
+		, InstanceHash(0)
 	{}
 };
 

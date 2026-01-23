@@ -9,6 +9,15 @@
 #include "EngineUtils.h"
 #include "DrawDebugHelpers.h"
 
+// Console variable for debug visualization
+static TAutoConsoleVariable<int32> CVarPCGManagerDebug(
+	TEXT("Harvesting.Debug.PCGManager"),
+	0,
+	TEXT("Show PCG Manager debug visualization (instance conversion tracking).\n")
+	TEXT("0: Disabled (default)\n")
+	TEXT("1: Enabled"),
+	ECVF_Default);
+
 APCGHarvestableManager::APCGHarvestableManager()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -210,6 +219,8 @@ AHarvestableResourceActor* APCGHarvestableManager::ConvertInstance(UInstancedSta
 {
 	if (!ISMComponent || InstanceIndex < 0 || InstanceIndex >= ISMComponent->GetInstanceCount())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("ConvertInstance: Invalid ISM component or instance index %d (count: %d)"),
+			InstanceIndex, ISMComponent ? ISMComponent->GetInstanceCount() : -1);
 		return nullptr;
 	}
 
@@ -218,6 +229,7 @@ AHarvestableResourceActor* APCGHarvestableManager::ConvertInstance(UInstancedSta
 	const FPCGResourceMapping* Mapping = GetMappingForMesh(Mesh);
 	if (!Mapping || !Mapping->ResourceData)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("ConvertInstance: No mapping found for mesh %s"), Mesh ? *Mesh->GetName() : TEXT("null"));
 		return nullptr;
 	}
 
@@ -225,6 +237,7 @@ AHarvestableResourceActor* APCGHarvestableManager::ConvertInstance(UInstancedSta
 	FTransform InstanceTransform;
 	if (!ISMComponent->GetInstanceTransform(InstanceIndex, InstanceTransform, true))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("ConvertInstance: Failed to get transform for instance %d"), InstanceIndex);
 		return nullptr;
 	}
 
@@ -232,14 +245,28 @@ AHarvestableResourceActor* APCGHarvestableManager::ConvertInstance(UInstancedSta
 	uint64 InstanceHash = GenerateInstanceHash(ISMComponent, InstanceIndex);
 	if (ConvertedInstances.Contains(InstanceHash))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("ConvertInstance: Instance already in ConvertedInstances set (hash: %llu) at location %.0f, %.0f, %.0f"),
+			InstanceHash, InstanceTransform.GetLocation().X, InstanceTransform.GetLocation().Y, InstanceTransform.GetLocation().Z);
 		return nullptr;
 	}
 
-	// Spawn the actor
+	// Debug: Get player position before conversion
+	FVector PlayerPosBefore = FVector::ZeroVector;
+	if (CachedPlayerPawn.IsValid())
+	{
+		PlayerPosBefore = CachedPlayerPawn->GetActorLocation();
+	}
+
+	// Mark as converted FIRST to prevent double-conversion race conditions
+	ConvertedInstances.Add(InstanceHash);
+
+	// Spawn the actor FIRST before hiding the instance
+	// This way if spawn fails, we can remove from converted set and try again
 	AHarvestableResourceActor* SpawnedActor = SpawnResourceActor(*Mapping, ISMComponent, InstanceIndex, InstanceTransform);
 	if (SpawnedActor)
 	{
-		// Hide the original instance
+		// Hide the original ISM instance AFTER successful spawn
+		// This prevents any collision overlap between ISM and spawned actor
 		HideInstance(ISMComponent, InstanceIndex);
 
 		// Track the spawned resource
@@ -249,14 +276,38 @@ AHarvestableResourceActor* APCGHarvestableManager::ConvertInstance(UInstancedSta
 		Info.InstanceIndex = InstanceIndex;
 		Info.OriginalTransform = InstanceTransform;
 		Info.bInstanceHidden = true;
+		Info.InstanceHash = InstanceHash;  // Store the hash for later removal
 		SpawnedResources.Add(Info);
-
-		// Mark as converted
-		ConvertedInstances.Add(InstanceHash);
 
 		// Bind events
 		SpawnedActor->OnResourceDepleted.AddDynamic(this, &APCGHarvestableManager::OnResourceDepleted);
 		SpawnedActor->OnResourceRespawned.AddDynamic(this, &APCGHarvestableManager::OnResourceRespawned);
+
+		// Debug: Check if player moved during conversion (toggleable via console OR property)
+		bool bShowDebug = CVarPCGManagerDebug.GetValueOnGameThread() || bDrawDebug;
+		if (bShowDebug && CachedPlayerPawn.IsValid())
+		{
+			FVector PlayerPosAfter = CachedPlayerPawn->GetActorLocation();
+			float ZDelta = PlayerPosAfter.Z - PlayerPosBefore.Z;
+
+			// Draw conversion location
+			DrawDebugSphere(GetWorld(), InstanceTransform.GetLocation(), 100.0f, 12, FColor::Orange, false, 5.0f, 0, 3.0f);
+			DrawDebugString(GetWorld(), InstanceTransform.GetLocation() + FVector(0, 0, 200.0f),
+				FString::Printf(TEXT("CONVERTED\nPlayer Z Delta: %.1f"), ZDelta),
+				nullptr, FColor::Orange, 5.0f);
+
+			// If significant Z change, highlight it in red
+			if (FMath::Abs(ZDelta) > 10.0f)
+			{
+				DrawDebugLine(GetWorld(), PlayerPosBefore, PlayerPosAfter, FColor::Red, false, 5.0f, 0, 5.0f);
+				UE_LOG(LogTemp, Warning, TEXT("PCGHarvestableManager: Player Z moved by %.1f during conversion!"), ZDelta);
+			}
+		}
+	}
+	else
+	{
+		// Spawn failed - remove from converted set so it can be tried again
+		ConvertedInstances.Remove(InstanceHash);
 	}
 
 	return SpawnedActor;
@@ -315,17 +366,19 @@ void APCGHarvestableManager::CheckForDespawn()
 		float Distance = FVector::Dist(PlayerLocation, Actor->GetActorLocation());
 		if (Distance > DespawnDistance)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("PCGHarvestableManager: Despawning resource at distance %.0f (> %.0f)"), Distance, DespawnDistance);
+
 			// Restore the ISM instance
 			if (Info.SourceComponent.IsValid() && Info.bInstanceHidden)
 			{
 				RestoreInstance(Info.SourceComponent.Get(), Info.InstanceIndex, Info.OriginalTransform);
-			}
 
-			// Remove from converted set if we allow reconversion
-			if (bAllowReconversion)
-			{
-				uint64 InstanceHash = GenerateInstanceHash(Info.SourceComponent.Get(), Info.InstanceIndex);
-				ConvertedInstances.Remove(InstanceHash);
+				// Remove from converted set if we allow reconversion
+				if (bAllowReconversion)
+				{
+					ConvertedInstances.Remove(Info.InstanceHash);
+					UE_LOG(LogTemp, Warning, TEXT("PCGHarvestableManager: Removed hash %llu from ConvertedInstances"), Info.InstanceHash);
+				}
 			}
 
 			// Destroy the actor
@@ -340,6 +393,7 @@ AHarvestableResourceActor* APCGHarvestableManager::SpawnResourceActor(const FPCG
 	UWorld* World = GetWorld();
 	if (!World || !Mapping.ResourceData || !ISMComponent)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnResourceActor: Invalid world/mapping/component"));
 		return nullptr;
 	}
 
@@ -371,7 +425,19 @@ AHarvestableResourceActor* APCGHarvestableManager::SpawnResourceActor(const FPCG
 		SpawnedActor->SetActorScale3D(InstanceTransform.GetScale3D());
 
 		// Initialize from PCG instance
+		if (!Mapping.ResourceData)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("SpawnResourceActor: ResourceData is null after spawn"));
+			SpawnedActor->Destroy();
+			return nullptr;
+		}
+
 		SpawnedActor->InitializeFromPCGInstance(Mapping.ResourceData, ISMComponent, InstanceIndex, InstanceTransform);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnResourceActor: World->SpawnActor returned null for class %s at location %.0f, %.0f, %.0f"),
+			*ActorClass->GetName(), InstanceTransform.GetLocation().X, InstanceTransform.GetLocation().Y, InstanceTransform.GetLocation().Z);
 	}
 
 	return SpawnedActor;

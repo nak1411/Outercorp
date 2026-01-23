@@ -2,11 +2,25 @@
 
 #include "HarvestingTool.h"
 #include "HarvestableResourceActor.h"
+#include "HarvestableResourceData.h"
+#include "InventoryItemData.h"
 #include "OutercorpCharacter.h"
+#include "InteractionManagerComponent.h"
+#include "PCGHarvestableManager.h"
 #include "Camera/CameraComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "DrawDebugHelpers.h"
+
+// Console variable for debug visualization
+static TAutoConsoleVariable<int32> CVarHarvestingToolDebugRaycast(
+	TEXT("Harvesting.Debug.ToolRaycast"),
+	0,
+	TEXT("Show raycast debug visualization for harvesting tools.\n")
+	TEXT("0: Disabled (default)\n")
+	TEXT("1: Enabled"),
+	ECVF_Default);
 
 AHarvestingTool::AHarvestingTool()
 {
@@ -16,6 +30,7 @@ AHarvestingTool::AHarvestingTool()
 	HarvestDamage = 20.0f;
 	HarvestRange = 250.0f;
 	SwingTime = 0.5f;
+	HitTime = 0.2f;
 	HitCameraShakeIntensity = 0.3f;
 
 	bIsSwinging = false;
@@ -23,7 +38,7 @@ AHarvestingTool::AHarvestingTool()
 
 	// Override base tool properties
 	UsageCooldown = SwingTime;
-	bRequiresContinuousHold = true;
+	bRequiresContinuousHold = false;
 }
 
 void AHarvestingTool::BeginPlay()
@@ -34,33 +49,86 @@ void AHarvestingTool::BeginPlay()
 	UsageCooldown = SwingTime;
 }
 
+void AHarvestingTool::InitializeFromItemData(UInventoryItemData* InItemData)
+{
+	// Call base class first
+	Super::InitializeFromItemData(InItemData);
+
+	if (!InItemData)
+	{
+		return;
+	}
+
+	// Map EToolType to EHarvestToolType
+	switch (InItemData->ToolType)
+	{
+		case EToolType::Axe:
+			HarvestToolType = EHarvestToolType::Axe;
+			break;
+		case EToolType::Pickaxe:
+			HarvestToolType = EHarvestToolType::Pickaxe;
+			break;
+		case EToolType::Shovel:
+			HarvestToolType = EHarvestToolType::Shovel;
+			break;
+		case EToolType::Sickle:
+			HarvestToolType = EHarvestToolType::Sickle;
+			break;
+		case EToolType::Knife:
+			HarvestToolType = EHarvestToolType::Knife;
+			break;
+		default:
+			HarvestToolType = EHarvestToolType::Any;
+			break;
+	}
+
+	// Copy harvesting properties
+	ToolTier = InItemData->ToolTier;
+	HarvestDamage = InItemData->ToolBaseDamage;
+	SwingTime = InItemData->ToolUsageCooldown;
+	HitTime = InItemData->ToolHitTime;
+
+	// Copy feedback sounds/effects
+	SwingSound = InItemData->ToolUseSound;
+	HitSound = InItemData->ToolHitSound;
+	HitEffect = InItemData->ToolUseEffect;
+
+	UE_LOG(LogTemp, Log, TEXT("HarvestingTool initialized: Type=%d, Tier=%d, Damage=%.1f"),
+		static_cast<int32>(HarvestToolType), ToolTier, HarvestDamage);
+}
+
 void AHarvestingTool::StartPrimaryUse_Implementation()
 {
-	Super::StartPrimaryUse_Implementation();
-
-	// Start continuous harvesting
-	if (CanUseTool() && !bIsSwinging)
+	// Don't call Super - we handle everything ourselves for harvesting tools
+	if (!CanUseTool())
 	{
-		PerformHarvestSwing();
+		return;
 	}
+
+	bIsInUse = true;
+	CurrentUsageMode = EToolUsageMode::Primary;
+
+	// Start the first swing
+	PerformHarvestSwing();
 }
 
 void AHarvestingTool::StopPrimaryUse_Implementation()
 {
-	Super::StopPrimaryUse_Implementation();
+	bIsInUse = false;
+	CurrentUsageMode = EToolUsageMode::None;
 
 	// Clear swing timer if stopping
-	GetWorld()->GetTimerManager().ClearTimer(SwingTimerHandle);
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(SwingTimerHandle);
+	}
 	bIsSwinging = false;
 }
 
 void AHarvestingTool::PerformPrimaryAction_Implementation()
 {
-	// Single swing action
-	if (!bIsSwinging)
-	{
-		PerformHarvestSwing();
-	}
+	// This is called by base class continuous loop - we don't use it
+	// Harvesting is driven by PerformHarvestSwing and OnSwingComplete
 }
 
 void AHarvestingTool::PerformHarvestSwing()
@@ -70,45 +138,105 @@ void AHarvestingTool::PerformHarvestSwing()
 		return;
 	}
 
-	bIsSwinging = true;
-
-	// Play swing feedback
-	PlaySwingFeedback();
-
-	// Play animation
+	// Play animation - the actual harvest happens when the ToolHit notify fires
+	bool bAnimationStarted = false;
 	if (PrimaryUseAnimation)
 	{
-		PlayUseAnimation(PrimaryUseAnimation);
+		bAnimationStarted = PlayUseAnimation(PrimaryUseAnimation);
 	}
 
-	// Find target resource
+	// Only proceed if animation actually started (not queued)
+	if (!bAnimationStarted)
+	{
+		return;
+	}
+
+	bIsSwinging = true;
+
+	// Play swing feedback (whoosh sound) at start of swing
+	PlaySwingFeedback();
+
+	// Set timer for swing completion (allows next swing if still holding)
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			SwingTimerHandle,
+			this,
+			&AHarvestingTool::OnSwingComplete,
+			SwingTime,
+			false
+		);
+	}
+}
+
+void AHarvestingTool::OnToolHitNotify_Implementation()
+{
+	UE_LOG(LogTemp, Log, TEXT("HarvestingTool: OnToolHitNotify_Implementation called!"));
+
+	// This is called from the ToolHit anim notify at the moment of impact
+	if (!OwningCharacter)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HarvestingTool: OnToolHitNotify - no OwningCharacter!"));
+		return;
+	}
+
+	// Find target resource at the moment of impact (need this first to check debug settings)
 	TargetedResource = FindTargetResource();
+
+	// Debug: Draw player position before hit (toggleable via console OR target's data asset)
+	bool bShowRaycastDebug = CVarHarvestingToolDebugRaycast.GetValueOnGameThread() ||
+		(TargetedResource && TargetedResource->ResourceData && TargetedResource->ResourceData->bDebugShowToolRaycast);
+	if (bShowRaycastDebug)
+	{
+		FVector PlayerPos = OwningCharacter->GetActorLocation();
+		DrawDebugSphere(GetWorld(), PlayerPos, 30.0f, 8, FColor::Cyan, false, 3.0f, 0, 2.0f);
+		DrawDebugString(GetWorld(), PlayerPos + FVector(0, 0, 100.0f),
+			FString::Printf(TEXT("Player Z: %.1f"), PlayerPos.Z), nullptr, FColor::Cyan, 3.0f);
+	}
+	UE_LOG(LogTemp, Log, TEXT("HarvestingTool: OnToolHitNotify - TargetedResource: %s"),
+		TargetedResource ? *TargetedResource->GetName() : TEXT("None"));
 
 	if (TargetedResource)
 	{
-		// Check if we can harvest this resource
-		if (CanHarvestResource(TargetedResource))
+		// Skip direct pickup items - they can only be picked up with E key
+		if (TargetedResource->bIsDirectPickup)
 		{
-			// Apply damage
-			bool bDamageApplied = TargetedResource->ApplyHarvestDamage(
-				OwningCharacter,
-				HarvestToolType,
-				ToolTier,
-				HarvestDamage
-			);
+			return;
+		}
 
-			if (bDamageApplied)
+		// Apply damage - the resource actor will check tool effectiveness
+		bool bDamageApplied = TargetedResource->ApplyHarvestDamage(
+			OwningCharacter,
+			HarvestToolType,
+			ToolTier,
+			HarvestDamage
+		);
+
+		if (bDamageApplied)
+		{
+			// Get actual impact point by tracing to the resource
+			FVector HitLocation = GetImpactPoint(TargetedResource);
+
+			// Play hit feedback (sound, effects, camera shake)
+			PlayHitFeedback(HitLocation);
+
+			// Consume durability
+			ConsumeDurability(DurabilityCostPerUse);
+
+			// Debug: Draw player position after hit
+			if (bShowRaycastDebug)
 			{
-				// Play hit feedback
-				PlayHitFeedback(TargetedResource->GetActorLocation());
-
-				// Consume durability
-				ConsumeDurability(DurabilityCostPerUse);
+				FVector PlayerPos = OwningCharacter->GetActorLocation();
+				FVector PlayerPosAfter = OwningCharacter->GetActorLocation();
+				DrawDebugSphere(GetWorld(), PlayerPosAfter, 30.0f, 8, FColor::Magenta, false, 3.0f, 0, 2.0f);
+				DrawDebugString(GetWorld(), PlayerPosAfter + FVector(0, 0, 150.0f),
+					FString::Printf(TEXT("After Hit Z: %.1f (Delta: %.1f)"), PlayerPosAfter.Z, PlayerPosAfter.Z - PlayerPos.Z),
+					nullptr, FColor::Magenta, 3.0f);
 			}
 		}
 		else
 		{
-			// Wrong tool type - play miss sound
+			// Incompatible tool or no damage dealt - play miss sound
 			PlayMissFeedback();
 		}
 	}
@@ -117,15 +245,6 @@ void AHarvestingTool::PerformHarvestSwing()
 		// No target - play miss sound
 		PlayMissFeedback();
 	}
-
-	// Set timer for swing completion
-	GetWorld()->GetTimerManager().SetTimer(
-		SwingTimerHandle,
-		this,
-		&AHarvestingTool::OnSwingComplete,
-		SwingTime,
-		false
-	);
 }
 
 AHarvestableResourceActor* AHarvestingTool::FindTargetResource()
@@ -135,66 +254,55 @@ AHarvestableResourceActor* AHarvestingTool::FindTargetResource()
 		return nullptr;
 	}
 
-	UCameraComponent* Camera = OwningCharacter->GetFirstPersonCameraComponent();
-	if (!Camera)
+	// Use the InteractionManagerComponent - it already tracks what player is looking at
+	UInteractionManagerComponent* InteractionManager = OwningCharacter->GetInteractionManagerComponent();
+	if (!InteractionManager)
 	{
 		return nullptr;
 	}
 
-	FVector StartLocation = Camera->GetComponentLocation();
-	FVector ForwardVector = Camera->GetForwardVector();
-	FVector EndLocation = StartLocation + (ForwardVector * HarvestRange);
-
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(OwningCharacter);
-	QueryParams.AddIgnoredActor(this);
-	QueryParams.bTraceComplex = false;
-
-	UWorld* World = GetWorld();
-	if (!World)
+	// Check if looking at an already-converted HarvestableResourceActor
+	AActor* CurrentInteractable = InteractionManager->GetCurrentInteractableActor();
+	if (CurrentInteractable)
 	{
-		return nullptr;
-	}
-
-	// Perform line trace
-	bool bHit = World->LineTraceSingleByChannel(
-		HitResult,
-		StartLocation,
-		EndLocation,
-		ECC_Visibility,
-		QueryParams
-	);
-
-	if (bHit && HitResult.GetActor())
-	{
-		// Check if we hit a harvestable resource
-		AHarvestableResourceActor* Resource = Cast<AHarvestableResourceActor>(HitResult.GetActor());
+		AHarvestableResourceActor* Resource = Cast<AHarvestableResourceActor>(CurrentInteractable);
 		if (Resource)
 		{
 			return Resource;
 		}
 	}
 
-	return nullptr;
-}
-
-bool AHarvestingTool::CanHarvestResource(AHarvestableResourceActor* Resource) const
-{
-	if (!Resource || !Resource->ResourceData)
+	// Check if looking at a harvestable ISM that needs conversion
+	if (InteractionManager->IsLookingAtHarvestableISM())
 	{
-		return false;
+		// Get the PCGHarvestableManager to convert the instance
+		APCGHarvestableManager* Manager = InteractionManager->GetHarvestableManager();
+		TWeakObjectPtr<UInstancedStaticMeshComponent> PendingISM = InteractionManager->GetPendingISMComponent();
+		int32 PendingIndex = InteractionManager->GetPendingInstanceIndex();
+
+		if (Manager && PendingISM.IsValid() && PendingIndex != INDEX_NONE)
+		{
+			// Convert the ISM instance to a HarvestableResourceActor
+			AHarvestableResourceActor* SpawnedActor = Manager->ConvertInstance(PendingISM.Get(), PendingIndex);
+
+			if (SpawnedActor)
+			{
+				// Clear the pending state since we converted it
+				InteractionManager->ClearPendingISMState();
+				return SpawnedActor;
+			}
+		}
 	}
 
-	return Resource->ResourceData->IsToolTypeValid(HarvestToolType, ToolTier);
+	return nullptr;
 }
 
 void AHarvestingTool::OnSwingComplete()
 {
 	bIsSwinging = false;
 
-	// If still holding primary use, swing again
-	if (CurrentUsageMode == EToolUsageMode::Primary && bIsInUse)
+	// Only auto-swing again if continuous hold is enabled AND still holding
+	if (bRequiresContinuousHold && CurrentUsageMode == EToolUsageMode::Primary && bIsInUse)
 	{
 		PerformHarvestSwing();
 	}
@@ -225,12 +333,22 @@ void AHarvestingTool::PlayHitFeedback(const FVector& HitLocation)
 	// Play hit effect
 	if (HitEffect)
 	{
+		UE_LOG(LogTemp, Log, TEXT("Spawning HitEffect '%s' at location: %s"),
+			*HitEffect->GetName(), *HitLocation.ToString());
+
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 			World,
 			HitEffect,
 			HitLocation,
-			FRotator::ZeroRotator
+			FRotator::ZeroRotator,
+			FVector(1.0f),  // Scale
+			true,           // bAutoDestroy
+			true            // bAutoActivate
 		);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PlayHitFeedback: HitEffect is NULL!"));
 	}
 
 	// Play camera shake
@@ -250,4 +368,70 @@ void AHarvestingTool::PlayMissFeedback()
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, MissSound, GetActorLocation());
 	}
+}
+
+FVector AHarvestingTool::GetImpactPoint(AHarvestableResourceActor* Resource) const
+{
+	if (!Resource || !OwningCharacter)
+	{
+		return Resource ? Resource->GetActorLocation() : FVector::ZeroVector;
+	}
+
+	// Trace from camera to the resource to get actual impact point
+	UCameraComponent* Camera = OwningCharacter->GetFirstPersonCameraComponent();
+	if (!Camera)
+	{
+		return Resource->GetActorLocation();
+	}
+
+	FVector StartLocation = Camera->GetComponentLocation();
+	FVector ForwardVector = Camera->GetForwardVector();
+	FVector EndLocation = StartLocation + (ForwardVector * HarvestRange * 2.0f);
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(OwningCharacter);
+	QueryParams.AddIgnoredActor(this);
+
+	UWorld* World = GetWorld();
+	bool bHit = World && World->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_Visibility, QueryParams);
+
+	// Debug raycast visualization (toggleable via console OR target's data asset)
+	bool bShowRaycastDebug = CVarHarvestingToolDebugRaycast.GetValueOnGameThread() ||
+		(Resource && Resource->ResourceData && Resource->ResourceData->bDebugShowToolRaycast);
+	if (bShowRaycastDebug && World)
+	{
+		// Draw the raycast line
+		FColor LineColor = bHit ? FColor::Green : FColor::Red;
+		DrawDebugLine(World, StartLocation, EndLocation, LineColor, false, 3.0f, 0, 2.0f);
+
+		// Draw start point (camera)
+		DrawDebugSphere(World, StartLocation, 10.0f, 8, FColor::Blue, false, 3.0f, 0, 1.0f);
+
+		if (bHit)
+		{
+			// Draw impact point
+			DrawDebugSphere(World, HitResult.ImpactPoint, 15.0f, 12, FColor::Green, false, 3.0f, 0, 2.0f);
+
+			// Draw what we hit
+			FString HitInfo = FString::Printf(TEXT("Hit: %s\nComponent: %s\nChannel Block: Visibility"),
+				HitResult.GetActor() ? *HitResult.GetActor()->GetName() : TEXT("None"),
+				HitResult.GetComponent() ? *HitResult.GetComponent()->GetName() : TEXT("None"));
+			DrawDebugString(World, HitResult.ImpactPoint + FVector(0, 0, 30.0f), HitInfo, nullptr, FColor::Green, 3.0f);
+		}
+		else
+		{
+			// Draw end point (no hit)
+			DrawDebugSphere(World, EndLocation, 10.0f, 8, FColor::Red, false, 3.0f, 0, 1.0f);
+			DrawDebugString(World, EndLocation, TEXT("No Hit"), nullptr, FColor::Red, 3.0f);
+		}
+	}
+
+	if (bHit)
+	{
+		return HitResult.ImpactPoint;
+	}
+
+	// Fallback to actor location
+	return Resource->GetActorLocation();
 }

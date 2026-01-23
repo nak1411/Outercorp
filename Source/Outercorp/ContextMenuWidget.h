@@ -45,6 +45,10 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = "Context Menu")
 	TObjectPtr<UUserWidget> OwningSlot;
 
+	/** Whether the item in this context menu is equippable (set by slot widget on creation) */
+	UPROPERTY(BlueprintReadOnly, Category = "Context Menu")
+	bool bIsItemEquippable = false;
+
 private:
 	/** Whether click capture is currently active */
 	bool bIsClickCaptureActive = false;

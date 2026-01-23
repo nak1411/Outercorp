@@ -21,7 +21,10 @@ public class Outercorp : ModuleRules
 			"Slate",
 			"SlateCore",
 			"NX_ModularWindow",
-			"Niagara"
+			"Niagara",
+			"Chaos",
+			"GeometryCollectionEngine",
+			"ProceduralMeshComponent"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

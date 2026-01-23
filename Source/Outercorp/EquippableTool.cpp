@@ -7,6 +7,7 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "TimerManager.h"
+#include "Kismet/GameplayStatics.h"
 
 AEquippableTool::AEquippableTool()
 {
@@ -32,6 +33,7 @@ AEquippableTool::AEquippableTool()
 	bIsEquipped = false;
 	bIsInUse = false;
 	bIsOnCooldown = false;
+	bPendingAction = false;
 	OwningCharacter = nullptr;
 	MaxDurability = 0.0f; // Infinite by default
 	CurrentDurability = 0.0f;
@@ -41,6 +43,7 @@ AEquippableTool::AEquippableTool()
 	PrimaryUseAnimation = nullptr;
 	SecondaryUseAnimation = nullptr;
 	SourceItemData = nullptr;
+	EquipSound = nullptr;
 }
 
 void AEquippableTool::BeginPlay()
@@ -70,7 +73,23 @@ void AEquippableTool::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Tool-specific tick logic can be added in subclasses
+	// Check for pending action when montage finishes (single-click mode only)
+	if (bPendingAction && bIsEquipped && !bRequiresContinuousHold && OwningCharacter)
+	{
+		USkeletalMeshComponent* CharacterMesh = OwningCharacter->GetFirstPersonMesh();
+		if (CharacterMesh && CharacterMesh->GetAnimInstance())
+		{
+			UAnimInstance* AnimInstance = CharacterMesh->GetAnimInstance();
+
+			// If montage finished, play the queued action
+			if (!AnimInstance->Montage_IsPlaying(PrimaryUseAnimation))
+			{
+				bPendingAction = false;
+				PlayUseAnimation(PrimaryUseAnimation);
+				PerformPrimaryAction();
+			}
+		}
+	}
 }
 
 void AEquippableTool::EquipTool(AOutercorpCharacter* Character)
@@ -222,6 +241,12 @@ void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter* Character)
 	// Disable collision when equipped
 	SetActorEnableCollision(false);
 
+	// Play equip sound
+	if (EquipSound)
+	{
+		UGameplayStatics::PlaySound2D(this, EquipSound);
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("Tool '%s' equipped by '%s'"),
 		*GetName(), *Character->GetName());
 }
@@ -235,6 +260,19 @@ void AEquippableTool::OnUnequipped_Implementation()
 {
 	bIsEquipped = false;
 
+	// Unbind montage notify delegate before clearing OwningCharacter
+	if (OwningCharacter)
+	{
+		USkeletalMeshComponent* FirstPersonCharacterMesh = OwningCharacter->GetFirstPersonMesh();
+		if (FirstPersonCharacterMesh && FirstPersonCharacterMesh->GetAnimInstance())
+		{
+			FirstPersonCharacterMesh->GetAnimInstance()->OnPlayMontageNotifyBegin.RemoveDynamic(this, &AEquippableTool::HandleMontageNotify);
+		}
+	}
+
+	// Stop any playing montage immediately
+	StopCurrentMontage();
+
 	// Reset character's animation state to unarmed
 	if (OwningCharacter)
 	{
@@ -245,6 +283,13 @@ void AEquippableTool::OnUnequipped_Implementation()
 	if (bIsInUse)
 	{
 		StopPrimaryUse();
+	}
+
+	// Clear all timers
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(CooldownTimerHandle);
+		GetWorld()->GetTimerManager().ClearTimer(ContinuousUseTimerHandle);
 	}
 
 	// Detach and hide first-person mesh (skeletal)
@@ -279,15 +324,44 @@ void AEquippableTool::StartPrimaryUse_Implementation()
 	bIsInUse = true;
 	CurrentUsageMode = EToolUsageMode::Primary;
 
+	// Clear any existing cooldown timer to allow animation restart
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(CooldownTimerHandle);
+		GetWorld()->GetTimerManager().ClearTimer(ContinuousUseTimerHandle);
+	}
+	bIsOnCooldown = false;
+
 	// Play animation
 	PlayUseAnimation(PrimaryUseAnimation);
 
 	// Perform the action
 	PerformPrimaryAction();
 
-	// If not continuous hold, stop immediately
-	if (!bRequiresContinuousHold)
+	// If continuous hold, start looping timer to repeat the action
+	if (bRequiresContinuousHold && GetWorld())
 	{
+		// Get montage length for timing, or use cooldown as fallback
+		float LoopInterval = UsageCooldown;
+		if (PrimaryUseAnimation)
+		{
+			LoopInterval = PrimaryUseAnimation->GetPlayLength();
+		}
+
+		// Ensure minimum interval to prevent spam
+		LoopInterval = FMath::Max(LoopInterval, 0.1f);
+
+		GetWorld()->GetTimerManager().SetTimer(
+			ContinuousUseTimerHandle,
+			this,
+			&AEquippableTool::ContinuousUseTick,
+			LoopInterval,
+			true // Looping
+		);
+	}
+	else
+	{
+		// If not continuous hold, stop immediately
 		StopPrimaryUse();
 	}
 }
@@ -297,18 +371,47 @@ void AEquippableTool::StopPrimaryUse_Implementation()
 	bIsInUse = false;
 	CurrentUsageMode = EToolUsageMode::None;
 
-	// Start cooldown if applicable
-	if (UsageCooldown > 0.0f && GetWorld())
+	// Stop continuous use timer
+	if (GetWorld())
 	{
-		bIsOnCooldown = true;
-		GetWorld()->GetTimerManager().SetTimer(
-			CooldownTimerHandle,
-			this,
-			&AEquippableTool::ResetCooldown,
-			UsageCooldown,
-			false
-		);
+		GetWorld()->GetTimerManager().ClearTimer(ContinuousUseTimerHandle);
 	}
+
+	// Only stop the montage if continuous hold mode - let single-click animations play through
+	if (bRequiresContinuousHold)
+	{
+		StopCurrentMontage();
+
+		// Only apply cooldown for continuous hold mode
+		if (UsageCooldown > 0.0f && GetWorld())
+		{
+			bIsOnCooldown = true;
+			GetWorld()->GetTimerManager().SetTimer(
+				CooldownTimerHandle,
+				this,
+				&AEquippableTool::ResetCooldown,
+				UsageCooldown,
+				false
+			);
+		}
+	}
+	// Single-click mode: no cooldown, allow immediate re-use
+}
+
+void AEquippableTool::ContinuousUseTick()
+{
+	// Check if we should still be using the tool
+	if (!bIsInUse || !bIsEquipped || !HasDurability())
+	{
+		StopPrimaryUse();
+		return;
+	}
+
+	// Play animation again
+	PlayUseAnimation(PrimaryUseAnimation);
+
+	// Perform the action again
+	PerformPrimaryAction();
 }
 
 void AEquippableTool::StartSecondaryUse_Implementation()
@@ -369,6 +472,21 @@ void AEquippableTool::PerformSecondaryAction_Implementation()
 {
 	// Base implementation - override in subclasses
 	UE_LOG(LogTemp, Log, TEXT("Tool '%s' performing secondary action"), *GetName());
+}
+
+void AEquippableTool::OnToolHitNotify_Implementation()
+{
+	// Base implementation - override in subclasses
+	// This is called when the ToolHit anim notify fires during an attack animation
+	UE_LOG(LogTemp, Log, TEXT("Tool '%s' received ToolHit notify"), *GetName());
+}
+
+void AEquippableTool::HandleMontageNotify(FName NotifyName, const FBranchingPointNotifyPayload& BranchingPointPayload)
+{
+	// Note: ToolHit is handled via AnimNotify_ToolHit class, not branching point notifies
+	// This callback is kept for other potential montage notifies but does NOT trigger tool hits
+	// to prevent double-damage when both systems are used
+	UE_LOG(LogTemp, Log, TEXT("Tool '%s' HandleMontageNotify received: '%s'"), *GetName(), *NotifyName.ToString());
 }
 
 bool AEquippableTool::CanUseTool() const
@@ -436,18 +554,74 @@ void AEquippableTool::ResetCooldown()
 	bIsOnCooldown = false;
 }
 
-void AEquippableTool::PlayUseAnimation(UAnimMontage* Animation)
+void AEquippableTool::StopCurrentMontage()
 {
-	if (!Animation || !OwningCharacter)
+	if (!OwningCharacter)
 	{
 		return;
 	}
 
-	USkeletalMeshComponent* CharacterMesh = OwningCharacter->GetFirstPersonMesh();
-	if (CharacterMesh && CharacterMesh->GetAnimInstance())
+	// Stop on first-person mesh
+	USkeletalMeshComponent* FirstPersonCharacterMesh = OwningCharacter->GetFirstPersonMesh();
+	if (FirstPersonCharacterMesh && FirstPersonCharacterMesh->GetAnimInstance())
 	{
-		CharacterMesh->GetAnimInstance()->Montage_Play(Animation);
+		FirstPersonCharacterMesh->GetAnimInstance()->Montage_Stop(0.15f);
 	}
+
+	// Stop on third-person mesh
+	USkeletalMeshComponent* ThirdPersonCharacterMesh = OwningCharacter->GetMesh();
+	if (ThirdPersonCharacterMesh && ThirdPersonCharacterMesh->GetAnimInstance())
+	{
+		ThirdPersonCharacterMesh->GetAnimInstance()->Montage_Stop(0.15f);
+	}
+}
+
+bool AEquippableTool::PlayUseAnimation(UAnimMontage* Animation)
+{
+	if (!Animation || !OwningCharacter)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PlayUseAnimation: Animation=%s, OwningCharacter=%s"),
+			Animation ? *Animation->GetName() : TEXT("NULL"),
+			OwningCharacter ? *OwningCharacter->GetName() : TEXT("NULL"));
+		return false;
+	}
+
+	float PlayRate = 1.0f;
+
+	// Play on first-person mesh (arms)
+	USkeletalMeshComponent* FirstPersonCharacterMesh = OwningCharacter->GetFirstPersonMesh();
+	if (FirstPersonCharacterMesh && FirstPersonCharacterMesh->GetAnimInstance())
+	{
+		UAnimInstance* FPAnimInstance = FirstPersonCharacterMesh->GetAnimInstance();
+
+		// For single-click mode: don't interrupt, only play if not already playing
+		if (!bRequiresContinuousHold && FPAnimInstance->Montage_IsPlaying(Animation))
+		{
+			// Animation still playing, queue up next action by marking pending
+			bPendingAction = true;
+			return false;
+		}
+
+		FPAnimInstance->Montage_Play(Animation, PlayRate);
+		bPendingAction = false;
+
+		// Bind to notify events on the first-person anim instance
+		FPAnimInstance->OnPlayMontageNotifyBegin.AddUniqueDynamic(this, &AEquippableTool::HandleMontageNotify);
+
+		UE_LOG(LogTemp, Log, TEXT("Playing animation montage on FP mesh: %s"), *Animation->GetName());
+	}
+
+	// Play on third-person mesh (full body) for shadows and other players
+	USkeletalMeshComponent* ThirdPersonCharacterMesh = OwningCharacter->GetMesh();
+	if (ThirdPersonCharacterMesh && ThirdPersonCharacterMesh->GetAnimInstance())
+	{
+		UAnimInstance* TPAnimInstance = ThirdPersonCharacterMesh->GetAnimInstance();
+		TPAnimInstance->Montage_Play(Animation, PlayRate);
+
+		UE_LOG(LogTemp, Log, TEXT("Playing animation montage on TP mesh: %s"), *Animation->GetName());
+	}
+
+	return true;
 }
 
 void AEquippableTool::InitializeFromItemData(UInventoryItemData* InItemData)
@@ -491,6 +665,9 @@ void AEquippableTool::InitializeFromItemData(UInventoryItemData* InItemData)
 	{
 		CurrentDurability = MaxDurability;
 	}
+
+	// Set feedback sounds
+	EquipSound = InItemData->ToolEquipSound;
 
 	// Apply first-person mesh if set
 	if (FirstPersonSkeletalMesh && FirstPersonMesh)

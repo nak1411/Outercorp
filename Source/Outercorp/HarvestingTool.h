@@ -52,6 +52,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvesting", meta = (ClampMin = "0.1"))
 	float SwingTime = 0.5f;
 
+	/** Time into swing when hit occurs (for harvest detection). If 0, uses ToolHit anim notify instead */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Harvesting", meta = (ClampMin = "0.0"))
+	float HitTime = 0.0f;
+
 	// ============================================
 	// FEEDBACK
 	// ============================================
@@ -96,6 +100,9 @@ protected:
 	/** Timer for swing cooldown */
 	FTimerHandle SwingTimerHandle;
 
+	/** Timer for hit detection (fallback if anim notify doesn't work) */
+	FTimerHandle HitTimerHandle;
+
 	// ============================================
 	// TOOL OVERRIDES
 	// ============================================
@@ -104,6 +111,10 @@ public:
 	virtual void PerformPrimaryAction_Implementation() override;
 	virtual void StartPrimaryUse_Implementation() override;
 	virtual void StopPrimaryUse_Implementation() override;
+	virtual void OnToolHitNotify_Implementation() override;
+
+	/** Initialize harvesting properties from item data */
+	virtual void InitializeFromItemData(UInventoryItemData* InItemData) override;
 
 	// ============================================
 	// HARVESTING FUNCTIONS
@@ -123,13 +134,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Harvesting")
 	AHarvestableResourceActor* FindTargetResource();
 
-	/**
-	 * Check if this tool can harvest a specific resource
-	 * @param Resource The resource to check
-	 * @return True if this tool can harvest the resource
-	 */
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Harvesting")
-	bool CanHarvestResource(AHarvestableResourceActor* Resource) const;
 
 protected:
 	/** Called when swing animation completes */
@@ -143,4 +147,7 @@ protected:
 
 	/** Play miss feedback effects */
 	void PlayMissFeedback();
+
+	/** Get the actual impact point on the target resource */
+	FVector GetImpactPoint(AHarvestableResourceActor* Resource) const;
 };

@@ -12,6 +12,7 @@ class UInventoryItemData;
 class USoundBase;
 class UNiagaraSystem;
 class UParticleSystem;
+class ASlicedMeshActor;
 
 /**
  * Type of harvesting tool required
@@ -26,6 +27,55 @@ enum class EHarvestToolType : uint8
 	Sickle			UMETA(DisplayName = "Sickle"),
 	Knife			UMETA(DisplayName = "Knife"),
 	Any				UMETA(DisplayName = "Any Tool")
+};
+
+/**
+ * Effectiveness of a tool for harvesting
+ */
+UENUM(BlueprintType)
+enum class EToolEffectiveness : uint8
+{
+	Incompatible	UMETA(DisplayName = "Incompatible - Cannot Harvest"),
+	Poor			UMETA(DisplayName = "Poor - Heavily Penalized"),
+	Suboptimal		UMETA(DisplayName = "Suboptimal - Penalized"),
+	Optimal			UMETA(DisplayName = "Optimal - Full Effectiveness")
+};
+
+/**
+ * Tool effectiveness configuration for a specific tool type
+ */
+USTRUCT(BlueprintType)
+struct FToolEffectivenessEntry
+{
+	GENERATED_BODY()
+
+	/** The tool type this entry applies to */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Effectiveness")
+	EHarvestToolType ToolType = EHarvestToolType::None;
+
+	/** How effective this tool is */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Effectiveness")
+	EToolEffectiveness Effectiveness = EToolEffectiveness::Incompatible;
+
+	/** Damage multiplier (0.0 to 1.0+). Applied to base damage. 0 = incompatible */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Effectiveness", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float DamageMultiplier = 1.0f;
+
+	/** Yield multiplier (0.0 to 1.0+). Applied to harvest yields. Lower = fewer resources */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Effectiveness", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float YieldMultiplier = 1.0f;
+
+	/** Minimum tool tier required for this effectiveness level (0 = any tier) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool Effectiveness", meta = (ClampMin = "0"))
+	int32 MinimumToolTier = 0;
+
+	FToolEffectivenessEntry()
+		: ToolType(EHarvestToolType::None)
+		, Effectiveness(EToolEffectiveness::Incompatible)
+		, DamageMultiplier(1.0f)
+		, YieldMultiplier(1.0f)
+		, MinimumToolTier(0)
+	{}
 };
 
 
@@ -192,20 +242,24 @@ public:
 	// HARVESTING REQUIREMENTS
 	// ============================================
 
-	/** Type of tool required to harvest */
+	/** Tool effectiveness configurations. Defines which tools work and how well. If empty, uses legacy RequiredToolType. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvesting")
+	TArray<FToolEffectivenessEntry> ToolEffectiveness;
+
+	/** LEGACY: Type of tool required to harvest (deprecated - use ToolEffectiveness instead) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvesting|Legacy", meta = (EditCondition = "ToolEffectiveness.Num() == 0"))
 	EHarvestToolType RequiredToolType = EHarvestToolType::None;
 
-	/** Minimum tool tier required (0 = any tier) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvesting", meta = (ClampMin = "0"))
+	/** LEGACY: Minimum tool tier required (deprecated - use ToolEffectiveness instead) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvesting|Legacy", meta = (ClampMin = "0", EditCondition = "ToolEffectiveness.Num() == 0"))
 	int32 MinimumToolTier = 0;
 
-	/** Can be harvested by hand (no tool required) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvesting")
+	/** LEGACY: Can be harvested by hand (deprecated - use ToolEffectiveness instead) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvesting|Legacy", meta = (EditCondition = "ToolEffectiveness.Num() == 0"))
 	bool bCanHarvestByHand = false;
 
-	/** Damage dealt per harvest hit without proper tool */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvesting", meta = (ClampMin = "0.0", EditCondition = "bCanHarvestByHand"))
+	/** Damage dealt per harvest hit with bare hands (unarmed) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Harvesting", meta = (ClampMin = "0.0"))
 	float HandHarvestDamage = 5.0f;
 
 	// ============================================
@@ -228,13 +282,13 @@ public:
 	// YIELDS
 	// ============================================
 
-	/** Multiplier applied to yields based on tool tier above minimum */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Yields", meta = (ClampMin = "1.0"))
-	float ToolTierYieldMultiplier = 1.1f;
-
 	// ============================================
 	// VISUALS & FEEDBACK
 	// ============================================
+
+	/** Sliced mesh actor class to spawn as a slicing effect when harvested */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
+	TSubclassOf<class ASlicedMeshActor> DestructibleActorClass = nullptr;
 
 	/** Destruction stages for visual feedback */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
@@ -281,6 +335,22 @@ public:
 	bool bHighlightOnLookAt = true;
 
 	// ============================================
+	// DEBUG SETTINGS
+	// ============================================
+
+	/** Show collision debug visualization for this resource type */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
+	bool bDebugShowCollision = false;
+
+	/** Show health bar above this resource type when damaged */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
+	bool bDebugShowHealth = false;
+
+	/** Show tool raycast debug when harvesting this resource type */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
+	bool bDebugShowToolRaycast = false;
+
+	// ============================================
 	// HELPER FUNCTIONS
 	// ============================================
 
@@ -295,9 +365,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Harvestable Resource")
 	float CalculateDamage(float IncomingDamage) const;
 
-	/** Check if a tool type is valid for this resource */
+	/** LEGACY: Check if a tool type is valid for this resource (deprecated - use GetToolEffectiveness instead) */
 	UFUNCTION(BlueprintCallable, Category = "Harvestable Resource")
 	bool IsToolTypeValid(EHarvestToolType ToolType, int32 ToolTier) const;
+
+	/** Get the effectiveness of a specific tool for this resource. Returns multipliers and compatibility. */
+	UFUNCTION(BlueprintCallable, Category = "Harvestable Resource")
+	bool GetToolEffectiveness(EHarvestToolType ToolType, int32 ToolTier, float& OutDamageMultiplier, float& OutYieldMultiplier) const;
+
+	/** Check if a tool can harvest this resource at all (not incompatible) */
+	UFUNCTION(BlueprintCallable, Category = "Harvestable Resource")
+	bool CanToolHarvest(EHarvestToolType ToolType, int32 ToolTier) const;
 
 	/** Check if this data asset contains the given mesh */
 	bool ContainsMesh(UStaticMesh* Mesh) const;

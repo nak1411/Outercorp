@@ -38,6 +38,14 @@ float UHarvestableResourceData::CalculateDamage(float IncomingDamage) const
 
 bool UHarvestableResourceData::IsToolTypeValid(EHarvestToolType ToolType, int32 ToolTier) const
 {
+	// If new tool effectiveness system is configured, use that
+	if (ToolEffectiveness.Num() > 0)
+	{
+		float DamageMultiplier, YieldMultiplier;
+		return GetToolEffectiveness(ToolType, ToolTier, DamageMultiplier, YieldMultiplier);
+	}
+
+	// Legacy behavior for backwards compatibility
 	// Check if hand harvesting is allowed
 	if (ToolType == EHarvestToolType::None)
 	{
@@ -58,6 +66,71 @@ bool UHarvestableResourceData::IsToolTypeValid(EHarvestToolType ToolType, int32 
 
 	// Wrong tool type - can still harvest by hand if allowed
 	return bCanHarvestByHand;
+}
+
+bool UHarvestableResourceData::GetToolEffectiveness(EHarvestToolType ToolType, int32 ToolTier, float& OutDamageMultiplier, float& OutYieldMultiplier) const
+{
+	// If no tool effectiveness configured, fall back to legacy behavior
+	if (ToolEffectiveness.Num() == 0)
+	{
+		// Legacy: If tool is valid, return full effectiveness
+		if (IsToolTypeValid(ToolType, ToolTier))
+		{
+			OutDamageMultiplier = 1.0f;
+			OutYieldMultiplier = 1.0f;
+			return true;
+		}
+		OutDamageMultiplier = 0.0f;
+		OutYieldMultiplier = 0.0f;
+		return false;
+	}
+
+	// Find the best matching effectiveness entry for this tool
+	const FToolEffectivenessEntry* BestMatch = nullptr;
+
+	for (const FToolEffectivenessEntry& Entry : ToolEffectiveness)
+	{
+		// Skip if tool type doesn't match and isn't "Any"
+		if (Entry.ToolType != ToolType && Entry.ToolType != EHarvestToolType::Any)
+		{
+			continue;
+		}
+
+		// Skip if tool tier is too low (but allow unarmed/None with tier 0)
+		if (ToolTier < Entry.MinimumToolTier && !(ToolType == EHarvestToolType::None && ToolTier == 0))
+		{
+			continue;
+		}
+
+		// Prefer exact tool type matches over "Any"
+		if (!BestMatch ||
+			(Entry.ToolType == ToolType && BestMatch->ToolType == EHarvestToolType::Any) ||
+			(Entry.ToolType == ToolType && BestMatch->ToolType == ToolType && Entry.MinimumToolTier > BestMatch->MinimumToolTier))
+		{
+			BestMatch = &Entry;
+		}
+	}
+
+	// If no match found, tool is incompatible
+	if (!BestMatch)
+	{
+		OutDamageMultiplier = 0.0f;
+		OutYieldMultiplier = 0.0f;
+		return false;
+	}
+
+	// Return the effectiveness multipliers
+	OutDamageMultiplier = BestMatch->DamageMultiplier;
+	OutYieldMultiplier = BestMatch->YieldMultiplier;
+
+	// Tool can harvest if damage multiplier > 0
+	return BestMatch->DamageMultiplier > 0.0f;
+}
+
+bool UHarvestableResourceData::CanToolHarvest(EHarvestToolType ToolType, int32 ToolTier) const
+{
+	float DamageMultiplier, YieldMultiplier;
+	return GetToolEffectiveness(ToolType, ToolTier, DamageMultiplier, YieldMultiplier);
 }
 
 bool UHarvestableResourceData::ContainsMesh(UStaticMesh* Mesh) const

@@ -10,9 +10,29 @@
 #include "PickupableItem.h"
 #include "EquippableTool.h"
 #include "NotificationComponent.h"
+#include "SlicedMeshActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
+#include "DrawDebugHelpers.h"
+#include "PhysicsEngine/BodySetup.h"
+
+// Console variables for debug visualization
+static TAutoConsoleVariable<int32> CVarHarvestableDebugCollision(
+	TEXT("Harvesting.Debug.Collision"),
+	0,
+	TEXT("Show collision debug visualization for harvestable resources.\n")
+	TEXT("0: Disabled (default)\n")
+	TEXT("1: Enabled"),
+	ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarHarvestableShowHealth(
+	TEXT("Harvesting.Debug.ShowHealth"),
+	0,
+	TEXT("Show health bars above harvestable resources.\n")
+	TEXT("0: Disabled (default)\n")
+	TEXT("1: Enabled"),
+	ECVF_Default);
 
 AHarvestableResourceActor::AHarvestableResourceActor()
 {
@@ -22,18 +42,22 @@ AHarvestableResourceActor::AHarvestableResourceActor()
 	RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent"));
 	SetRootComponent(RootSceneComponent);
 
-	// Create mesh component - collision disabled since ISM already has collision
-	// and we want to avoid double collision when converting instances
+	// Create mesh component - collision completely disabled
+	// The ISM handles world collision, we just need this for visuals
 	ResourceMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ResourceMesh"));
 	ResourceMesh->SetupAttachment(RootSceneComponent);
 	ResourceMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ResourceMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+	ResourceMesh->SetGenerateOverlapEvents(false);
 
-	// Create interaction volume
+	// Create interaction volume - query only for visibility traces, no physics
 	InteractionVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionVolume"));
 	InteractionVolume->SetupAttachment(RootSceneComponent);
 	InteractionVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	InteractionVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
 	InteractionVolume->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	InteractionVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	InteractionVolume->SetGenerateOverlapEvents(false);
 	InteractionVolume->SetBoxExtent(FVector(100.0f, 100.0f, 100.0f));
 
 	// Create interactable component
@@ -57,10 +81,20 @@ void AHarvestableResourceActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Store original transform for respawning (if not already set by PCG initialization)
+	if (PCGInstanceIndex == INDEX_NONE)
+	{
+		OriginalTransform = GetActorTransform();
+	}
+
+	// Initialize from data first - this will set up collision properly
 	if (ResourceData)
 	{
 		InitializeFromData(ResourceData);
 	}
+
+	// NOTE: Collision setup is handled in InitializeFromData
+	// We use the mesh's native collision instead of InteractionVolume
 }
 
 void AHarvestableResourceActor::Tick(float DeltaTime)
@@ -70,6 +104,86 @@ void AHarvestableResourceActor::Tick(float DeltaTime)
 	if (bIsDepleted)
 	{
 		HandleRespawnTimer(DeltaTime);
+	}
+
+	// Debug collision visualization (toggleable via console OR data asset)
+	bool bShowCollisionDebug = CVarHarvestableDebugCollision.GetValueOnGameThread() || (ResourceData && ResourceData->bDebugShowCollision);
+	if (bShowCollisionDebug)
+	{
+		if (InteractionVolume)
+		{
+			FVector BoxCenter = InteractionVolume->GetComponentLocation();
+			FVector BoxExtent = InteractionVolume->GetScaledBoxExtent();
+			FQuat BoxRotation = InteractionVolume->GetComponentQuat();
+
+			// Green = QueryOnly, Red = physics enabled, Blue = NoCollision
+			FColor BoxColor = FColor::Blue;
+			if (InteractionVolume->GetCollisionEnabled() == ECollisionEnabled::QueryOnly)
+			{
+				BoxColor = FColor::Green;
+			}
+			else if (InteractionVolume->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
+			{
+				BoxColor = FColor::Red;
+			}
+
+			DrawDebugBox(GetWorld(), BoxCenter, BoxExtent, BoxRotation, BoxColor, false, -1.0f, 0, 2.0f);
+
+			// Draw collision info text
+			FString CollisionInfo = FString::Printf(TEXT("InteractionVolume: %d\nMesh Collision: %d"),
+				static_cast<int32>(InteractionVolume->GetCollisionEnabled()),
+				ResourceMesh ? static_cast<int32>(ResourceMesh->GetCollisionEnabled()) : -1);
+			DrawDebugString(GetWorld(), BoxCenter + FVector(0, 0, BoxExtent.Z + 50.0f), CollisionInfo, nullptr, FColor::White, 0.0f);
+		}
+
+		// Draw debug sphere for ResourceMesh bounds
+		if (ResourceMesh && ResourceMesh->GetStaticMesh())
+		{
+			FBoxSphereBounds Bounds = ResourceMesh->Bounds;
+			// Yellow sphere for mesh bounds
+			DrawDebugSphere(GetWorld(), Bounds.Origin, Bounds.SphereRadius * 0.1f, 8, FColor::Yellow, false, -1.0f, 0, 1.0f);
+		}
+	}
+
+	// Health display (toggleable via console OR data asset)
+	bool bShowHealthDebug = CVarHarvestableShowHealth.GetValueOnGameThread() || (ResourceData && ResourceData->bDebugShowHealth);
+	if (bShowHealthDebug && !bIsDepleted)
+	{
+		FVector ActorLocation = GetActorLocation();
+		FVector HealthBarLocation = ActorLocation + FVector(0, 0, 200.0f); // 200 units above actor
+
+		// Calculate health percentage
+		float HealthPercent = MeshMaxHealth > 0.0f ? (CurrentHealth / MeshMaxHealth) : 1.0f;
+
+		// Color gradient: Green -> Yellow -> Red
+		FColor HealthColor;
+		if (HealthPercent > 0.5f)
+		{
+			// Green to Yellow (100% -> 50%)
+			float t = (1.0f - HealthPercent) * 2.0f; // 0 to 1
+			HealthColor = FColor(FMath::RoundToInt(255 * t), 255, 0);
+		}
+		else
+		{
+			// Yellow to Red (50% -> 0%)
+			float t = HealthPercent * 2.0f; // 0 to 1
+			HealthColor = FColor(255, FMath::RoundToInt(255 * t), 0);
+		}
+
+		// Draw health bar background (black)
+		float BarWidth = 100.0f;
+		float BarHeight = 8.0f;
+		FVector BarStart = HealthBarLocation - FVector(BarWidth / 2.0f, 0, 0);
+		FVector BarEnd = HealthBarLocation + FVector(BarWidth / 2.0f, 0, 0);
+		DrawDebugLine(GetWorld(), BarStart, BarEnd, FColor::Black, false, -1.0f, 0, BarHeight + 2.0f);
+
+		// Draw health bar foreground (colored based on health)
+		FVector HealthBarEnd = BarStart + FVector(BarWidth * HealthPercent, 0, 0);
+		DrawDebugLine(GetWorld(), BarStart, HealthBarEnd, HealthColor, false, -1.0f, 0, BarHeight);
+
+		// Draw health text
+		FString HealthText = FString::Printf(TEXT("%.0f / %.0f"), CurrentHealth, MeshMaxHealth);
+		DrawDebugString(GetWorld(), HealthBarLocation + FVector(0, 0, 15.0f), HealthText, nullptr, FColor::White, 0.0f);
 	}
 }
 
@@ -216,16 +330,30 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter* Harveste
 		return false;
 	}
 
-	// Check if tool is valid for this resource
-	bool bToolValid = ResourceData->IsToolTypeValid(ToolType, ToolTier);
-	if (!bToolValid)
+	// Get tool effectiveness
+	float DamageMultiplier = 0.0f;
+	float YieldMultiplier = 0.0f;
+	bool bCanHarvest = ResourceData->GetToolEffectiveness(ToolType, ToolTier, DamageMultiplier, YieldMultiplier);
+
+	if (!bCanHarvest)
 	{
-		// Wrong tool - could show feedback to player here
+		// Incompatible tool - show feedback to player
+		if (Harvester && Harvester->GetNotificationComponent())
+		{
+			Harvester->GetNotificationComponent()->ShowSimpleNotification(
+				FText::FromString(TEXT("Wrong tool! Cannot harvest this resource.")),
+				ENotificationType::Error,
+				2.0f
+			);
+		}
 		return false;
 	}
 
+	// Apply tool effectiveness to damage
+	float ModifiedDamage = BaseDamage * DamageMultiplier;
+
 	// Calculate actual damage after armor
-	float ActualDamage = ResourceData->CalculateDamage(BaseDamage);
+	float ActualDamage = ResourceData->CalculateDamage(ModifiedDamage);
 
 	if (ActualDamage <= 0.0f)
 	{
@@ -236,35 +364,55 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter* Harveste
 	float OldHealth = CurrentHealth;
 	CurrentHealth = FMath::Max(0.0f, CurrentHealth - ActualDamage);
 
-	// Check if depleted
-	bool bWasDepleted = CurrentHealth <= 0.0f;
-
-	// Roll for yields from per-mesh data
-	TArray<FHarvestYield> Yields;
-	float YieldMultiplier = FMath::Pow(ResourceData->ToolTierYieldMultiplier, static_cast<float>(FMath::Max(0, ToolTier - ResourceData->MinimumToolTier)));
-
-	for (const FHarvestYield& Yield : MeshHarvestYields)
+	// Update material strength parameter based on damage (trunk is material slot 2)
+	if (ResourceMesh)
 	{
-		if (ToolTier < Yield.RequiredToolTier)
+		UMaterialInstanceDynamic* MatInstance = Cast<UMaterialInstanceDynamic>(ResourceMesh->GetMaterial(2));
+
+		if (!MatInstance)
 		{
-			continue;
+			MatInstance = ResourceMesh->CreateAndSetMaterialInstanceDynamic(2);
 		}
-		if (FMath::FRand() <= Yield.DropChance)
+
+		if (MatInstance)
 		{
-			FHarvestYield RolledYield = Yield;
-			int32 BaseQuantity = FMath::RandRange(Yield.MinQuantity, Yield.MaxQuantity);
-			RolledYield.MinQuantity = FMath::RoundToInt(static_cast<float>(BaseQuantity) * YieldMultiplier);
-			RolledYield.MaxQuantity = RolledYield.MinQuantity;
-			if (RolledYield.MinQuantity > 0)
-			{
-				Yields.Add(RolledYield);
-			}
+			float DamageRatio = 1.0f - GetHealthPercent();
+			MatInstance->SetScalarParameterValue(FName(TEXT("Strength")), DamageRatio);
+			UE_LOG(LogTemp, Warning, TEXT("Updated Strength to %.2f on %s"), DamageRatio, *ResourceMesh->GetName());
 		}
 	}
 
-	// Add depletion bonus yields if depleted
+	// Check if depleted
+	bool bWasDepleted = CurrentHealth <= 0.0f;
+
+	// Only spawn yields when fully depleted
+	TArray<FHarvestYield> Yields;
 	if (bWasDepleted)
 	{
+		// Use tool effectiveness yield multiplier
+		float FinalYieldMultiplier = YieldMultiplier;
+
+		// Roll for main yields from per-mesh data
+		for (const FHarvestYield& Yield : MeshHarvestYields)
+		{
+			if (ToolTier < Yield.RequiredToolTier)
+			{
+				continue;
+			}
+			if (FMath::FRand() <= Yield.DropChance)
+			{
+				FHarvestYield RolledYield = Yield;
+				int32 BaseQuantity = FMath::RandRange(Yield.MinQuantity, Yield.MaxQuantity);
+				RolledYield.MinQuantity = FMath::RoundToInt(static_cast<float>(BaseQuantity) * FinalYieldMultiplier);
+				RolledYield.MaxQuantity = RolledYield.MinQuantity;
+				if (RolledYield.MinQuantity > 0)
+				{
+					Yields.Add(RolledYield);
+				}
+			}
+		}
+
+		// Add depletion bonus yields
 		for (const FHarvestYield& Yield : MeshDepletionBonusYields)
 		{
 			if (ToolTier < Yield.RequiredToolTier)
@@ -275,7 +423,7 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter* Harveste
 			{
 				FHarvestYield RolledYield = Yield;
 				int32 BaseQuantity = FMath::RandRange(Yield.MinQuantity, Yield.MaxQuantity);
-				RolledYield.MinQuantity = FMath::RoundToInt(static_cast<float>(BaseQuantity) * YieldMultiplier);
+				RolledYield.MinQuantity = FMath::RoundToInt(static_cast<float>(BaseQuantity) * FinalYieldMultiplier);
 				RolledYield.MaxQuantity = RolledYield.MinQuantity;
 				if (RolledYield.MinQuantity > 0)
 				{
@@ -431,13 +579,29 @@ void AHarvestableResourceActor::InitializeFromData(UHarvestableResourceData* Dat
 	// Store original scale
 	OriginalScale = GetActorScale3D();
 
-	// Setup interaction volume based on mesh bounds
+	// Look up direct pickup settings from source mesh if not already set
 	if (ResourceMesh && ResourceMesh->GetStaticMesh())
 	{
-		FBox MeshBounds = ResourceMesh->GetStaticMesh()->GetBoundingBox();
-		FVector BoundsExtent = MeshBounds.GetExtent() * GetActorScale3D();
-		InteractionVolume->SetBoxExtent(BoundsExtent * 1.2f); // Slightly larger than mesh
-		InteractionVolume->SetRelativeLocation(MeshBounds.GetCenter());
+		const FHarvestableSourceMesh* MeshEntry = ResourceData->GetSourceMeshEntry(ResourceMesh->GetStaticMesh());
+		if (MeshEntry)
+		{
+			bIsDirectPickup = MeshEntry->bDirectPickup;
+			DirectPickupItem = MeshEntry->DirectPickupItem;
+			DirectPickupQuantity = MeshEntry->DirectPickupQuantity;
+		}
+	}
+
+	// Use the mesh's actual collision for interaction traces instead of the box volume
+	// Enable query-only collision on the ResourceMesh using its native collision shape
+	if (ResourceMesh && ResourceMesh->GetStaticMesh())
+	{
+		// Use the mesh's built-in collision for visibility traces
+		ResourceMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		ResourceMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+		ResourceMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+		// Disable the box InteractionVolume since we're using mesh collision
+		InteractionVolume->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
 	// Store original mesh
@@ -488,10 +652,24 @@ void AHarvestableResourceActor::InitializeFromPCGInstance(UHarvestableResourceDa
 	{
 		ResourceMesh->SetStaticMesh(ISMComponent->GetStaticMesh());
 
-		// Copy materials
+		// Copy materials from ISM
 		for (int32 i = 0; i < ISMComponent->GetNumMaterials(); i++)
 		{
 			ResourceMesh->SetMaterial(i, ISMComponent->GetMaterial(i));
+		}
+
+		// For the trunk material (slot 2), create a dynamic instance from the source material
+		// This ensures we can update the Strength parameter for the WPO effect
+		if (ISMComponent->GetNumMaterials() > 2)
+		{
+			UMaterialInterface* TrunkMaterial = ISMComponent->GetMaterial(2);
+			if (TrunkMaterial)
+			{
+				// Create dynamic instance from the trunk material itself
+				UMaterialInstanceDynamic* DynMat = UMaterialInstanceDynamic::Create(TrunkMaterial, ResourceMesh);
+				ResourceMesh->SetMaterial(2, DynMat);
+				DynMat->SetScalarParameterValue(FName(TEXT("Strength")), 0.0f);
+			}
 		}
 	}
 
@@ -547,10 +725,70 @@ void AHarvestableResourceActor::Deplete()
 		RespawnTimeRemaining = ResourceData->RespawnTime;
 	}
 
-	// Hide mesh or switch to depleted visual
+	// Spawn sliced mesh actor if specified (instance override takes priority, then data asset)
+	TSubclassOf<ASlicedMeshActor> ActorClassToSpawn = SlicedMeshActorClassOverride;
+	if (!ActorClassToSpawn && ResourceData && ResourceData->DestructibleActorClass)
+	{
+		ActorClassToSpawn = ResourceData->DestructibleActorClass;
+	}
+	if (!ActorClassToSpawn)
+	{
+		// Use default ASlicedMeshActor if no override specified
+		ActorClassToSpawn = ASlicedMeshActor::StaticClass();
+	}
+
+	if (ActorClassToSpawn)
+	{
+		UWorld* World = GetWorld();
+		if (World && ResourceMesh && ResourceMesh->GetStaticMesh())
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			ASlicedMeshActor* SlicedActor = World->SpawnActor<ASlicedMeshActor>(
+				ActorClassToSpawn,
+				GetActorLocation(),
+				GetActorRotation(),
+				SpawnParams
+			);
+
+			if (SlicedActor)
+			{
+				SlicedActor->SetActorScale3D(GetActorScale3D());
+				SlicedActor->SetActorLocation(GetActorLocation());
+				SlicedActor->SetActorRotation(GetActorRotation());
+
+				// Initialize slicing parameters
+				// Get mesh bounds in local space
+				FVector MeshOrigin, MeshExtent;
+				ResourceMesh->GetStaticMesh()->GetBounds().GetCenterAndExtents(MeshOrigin, MeshExtent);
+
+				// Slice at 30% from the bottom of the mesh bounds
+				// MeshOrigin is the center, so bottom is at -MeshExtent.Z
+				float SliceHeight = MeshOrigin.Z + (-MeshExtent.Z * 0.7f); // 30% from bottom = 70% down from center
+				FVector SlicePlaneLocation = FVector(0, 0, SliceHeight); // Local space
+				FVector SlicePlaneNormal = FVector::UpVector;
+				FVector FallingVelocity(FMath::RandRange(-200, 200), FMath::RandRange(-200, 200), -500);
+
+				SlicedActor->InitializeSlicedMesh(
+					ResourceMesh->GetStaticMesh(),
+					SlicePlaneLocation,
+					SlicePlaneNormal,
+					FallingVelocity,
+					ResourceMesh->GetMaterial(0)
+				);
+
+				SlicedActor->CreateSlicedMeshes();
+			}
+		}
+	}
+
+	// Hide mesh
 	if (ResourceMesh)
 	{
 		ResourceMesh->SetVisibility(false);
+		// Disable collision on mesh so traces can hit spawned items below
+		ResourceMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
 	// Disable interaction
@@ -574,7 +812,7 @@ void AHarvestableResourceActor::Respawn()
 	CurrentHealth = MeshMaxHealth;
 	RespawnTimeRemaining = 0.0f;
 
-	// Reset mesh
+	// Reset mesh and physics
 	if (ResourceMesh)
 	{
 		if (OriginalMesh)
@@ -582,10 +820,17 @@ void AHarvestableResourceActor::Respawn()
 			ResourceMesh->SetStaticMesh(OriginalMesh);
 		}
 		ResourceMesh->SetVisibility(true);
+
+		// Reset physics
+		ResourceMesh->SetSimulatePhysics(false);
+		ResourceMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		ResourceMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+		ResourceMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	}
 
-	// Reset scale
+	// Reset scale and rotation
 	SetActorScale3D(OriginalScale);
+	SetActorTransform(OriginalTransform);
 
 	// Re-enable interaction
 	if (InteractionVolume)

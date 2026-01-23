@@ -16,6 +16,7 @@ class UHarvestableResourceData;
 class UInventoryItemData;
 class APickupableItem;
 class AOutercorpCharacter;
+class ASlicedMeshActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnResourceHarvested, AHarvestableResourceActor*, Resource, float, DamageDealt);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnResourceDepleted, AHarvestableResourceActor*, Resource);
@@ -137,6 +138,14 @@ protected:
 	/** Current destruction stage index */
 	UPROPERTY()
 	int32 CurrentStageIndex;
+
+	// ============================================
+	// DESTRUCTIBLE PROPERTIES
+	// ============================================
+
+	/** Sliced mesh actor class to spawn on depletion (overrides data asset setting) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Destructible")
+	TSubclassOf<class ASlicedMeshActor> SlicedMeshActorClassOverride;
 
 	// ============================================
 	// EVENTS

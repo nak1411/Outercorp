@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "PickupableItem.h"
+#include "Animation/AnimInstance.h"
 #include "EquippableTool.generated.h"
 
 class USkeletalMeshComponent;
@@ -108,6 +109,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Durability")
 	float DurabilityCostPerUse;
 
+	/** Sound played when equipping the tool */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Feedback")
+	USoundBase* EquipSound;
+
 	// === Tool Lifecycle Functions ===
 
 	/** Called when tool is equipped by a character */
@@ -152,6 +157,10 @@ public:
 	UFUNCTION(BlueprintNativeEvent, Category = "Tool")
 	void PerformSecondaryAction();
 
+	/** Called when the ToolHit anim notify fires during an attack animation */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Tool")
+	void OnToolHitNotify();
+
 	/** Check if tool can be used right now */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Tool")
 	bool CanUseTool() const;
@@ -170,7 +179,7 @@ public:
 
 	/** Initialize tool properties from an inventory item data asset */
 	UFUNCTION(BlueprintCallable, Category = "Tool")
-	void InitializeFromItemData(UInventoryItemData* InItemData);
+	virtual void InitializeFromItemData(UInventoryItemData* InItemData);
 
 	/** Get the source item data asset */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Tool")
@@ -180,12 +189,28 @@ protected:
 	/** Timer handle for cooldown */
 	FTimerHandle CooldownTimerHandle;
 
+	/** Timer handle for continuous use loop */
+	FTimerHandle ContinuousUseTimerHandle;
+
 	/** Whether tool is currently on cooldown */
 	bool bIsOnCooldown;
+
+	/** Whether there's a pending action queued (clicked while animation was playing) */
+	bool bPendingAction;
 
 	/** Reset cooldown */
 	void ResetCooldown();
 
-	/** Play tool use animation on character */
-	void PlayUseAnimation(UAnimMontage* Animation);
+	/** Play tool use animation on character. Returns true if animation started, false if queued/blocked */
+	bool PlayUseAnimation(UAnimMontage* Animation);
+
+	/** Stop any currently playing montage */
+	void StopCurrentMontage();
+
+	/** Handle montage notify events - looks for "ToolHit" notify */
+	UFUNCTION()
+	void HandleMontageNotify(FName NotifyName, const FBranchingPointNotifyPayload& BranchingPointPayload);
+
+	/** Called repeatedly while holding for continuous use */
+	void ContinuousUseTick();
 };

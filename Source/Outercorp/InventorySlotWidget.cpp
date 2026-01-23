@@ -676,6 +676,11 @@ bool UInventorySlotWidget::CanAcceptItem(const FInventoryItem& Item) const
 	return bCanAccept;
 }
 
+bool UInventorySlotWidget::IsCurrentItemEquippable() const
+{
+	return CurrentItem.IsValid() && CurrentItem.ItemData && CurrentItem.ItemData->bIsEquippable;
+}
+
 void UInventorySlotWidget::HandleContextMenuAction_Implementation(FName ActionID)
 {
 	UE_LOG(LogTemp, Log, TEXT("HandleContextMenuAction called with ActionID: %s"), *ActionID.ToString());
@@ -1476,6 +1481,24 @@ void UInventorySlotWidget::SetCurrentContextMenu(UUserWidget *ContextMenu)
 	if (ContextMenu)
 	{
 		CurrentOpenContextMenu = ContextMenu;
+	}
+}
+
+void UInventorySlotWidget::SetCurrentContextMenuWithItemData(UUserWidget *ContextMenu)
+{
+	if (!ContextMenu)
+	{
+		return;
+	}
+
+	// Set as the current context menu
+	CurrentOpenContextMenu = ContextMenu;
+
+	// If it's a ContextMenuWidget, set the equippable flag
+	if (UContextMenuWidget *ContextMenuWidget = Cast<UContextMenuWidget>(ContextMenu))
+	{
+		ContextMenuWidget->bIsItemEquippable = IsCurrentItemEquippable();
+		ContextMenuWidget->OwningSlot = this;
 	}
 }
 

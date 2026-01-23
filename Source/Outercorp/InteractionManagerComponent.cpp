@@ -226,6 +226,13 @@ void UInteractionManagerComponent::CheckForInteractables()
 		bLookingAtHarvestableISM = false;
 	}
 
+	// Also clear ISM highlight if we found a regular interactable (converted actor)
+	// This handles the case where we just converted an ISM to an actor
+	if (NewInteractable.GetObject())
+	{
+		ClearISMHighlight();
+	}
+
 	SetCurrentInteractable(NewInteractable);
 }
 
@@ -260,9 +267,18 @@ void UInteractionManagerComponent::Interact()
 		return;
 	}
 
-	// First check regular interactable
+	// First check regular interactable (non-harvestable)
 	if (CurrentInteractable.GetObject())
 	{
+		// Skip direct pickup harvestables - they should only be pickable via E key
+		if (AHarvestableResourceActor* Harvestable = Cast<AHarvestableResourceActor>(CurrentInteractable.GetObject()))
+		{
+			if (Harvestable->bIsDirectPickup)
+			{
+				return; // Don't allow left-click harvesting for direct pickup items
+			}
+		}
+
 		if (IInteractableInterface::Execute_CanInteract(CurrentInteractable.GetObject(), OwnerActor))
 		{
 			IInteractableInterface::Execute_OnInteract(CurrentInteractable.GetObject(), OwnerActor);
@@ -276,6 +292,19 @@ void UInteractionManagerComponent::Interact()
 		APCGHarvestableManager* Manager = GetHarvestableManager();
 		if (Manager)
 		{
+			// Check if this is a direct pickup type before converting
+			UStaticMesh* Mesh = PendingISMComponent->GetStaticMesh();
+			const FPCGResourceMapping* Mapping = Manager->GetMappingForMesh(Mesh);
+
+			if (Mapping && Mapping->ResourceData)
+			{
+				const FHarvestableSourceMesh* MeshEntry = Mapping->ResourceData->GetSourceMeshEntry(Mesh);
+				if (MeshEntry && MeshEntry->bDirectPickup)
+				{
+					return; // Don't allow left-click harvesting for direct pickup items
+				}
+			}
+
 			AHarvestableResourceActor* SpawnedActor = Manager->ConvertInstance(PendingISMComponent.Get(), PendingInstanceIndex);
 			if (SpawnedActor)
 			{
@@ -290,6 +319,11 @@ void UInteractionManagerComponent::Interact()
 			{
 				UE_LOG(LogTemp, Warning, TEXT("Interact: ConvertInstance failed for ISM %s, Index %d"),
 					*PendingISMComponent->GetName(), PendingInstanceIndex);
+				// Clear pending state so we don't keep trying to convert this instance
+				PendingISMComponent = nullptr;
+				PendingInstanceIndex = INDEX_NONE;
+				bLookingAtHarvestableISM = false;
+				ClearISMHighlight();
 			}
 		}
 	}
@@ -297,6 +331,72 @@ void UInteractionManagerComponent::Interact()
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Interact: ISM interaction skipped - Component Valid: %d, InstanceIndex: %d"),
 			PendingISMComponent.IsValid() ? 1 : 0, PendingInstanceIndex);
+	}
+}
+
+void UInteractionManagerComponent::InteractNonHarvestable()
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	// Check if we're looking at a direct pickup PCG harvestable ISM instance
+	if (bLookingAtHarvestableISM && PendingISMComponent.IsValid() && PendingInstanceIndex != INDEX_NONE)
+	{
+		APCGHarvestableManager* Manager = GetHarvestableManager();
+		if (Manager)
+		{
+			// Get the resource data for this ISM
+			UStaticMesh* Mesh = PendingISMComponent->GetStaticMesh();
+			const FPCGResourceMapping* Mapping = Manager->GetMappingForMesh(Mesh);
+
+			if (Mapping && Mapping->ResourceData)
+			{
+				// Check if this is a direct pickup type by looking at source mesh settings
+				const FHarvestableSourceMesh* MeshEntry = Mapping->ResourceData->GetSourceMeshEntry(Mesh);
+				if (MeshEntry && MeshEntry->bDirectPickup)
+				{
+					// Convert and interact with the direct pickup harvestable
+					AHarvestableResourceActor* SpawnedActor = Manager->ConvertInstance(PendingISMComponent.Get(), PendingInstanceIndex);
+					if (SpawnedActor)
+					{
+						IInteractableInterface::Execute_OnInteract(SpawnedActor, OwnerActor);
+						PendingISMComponent = nullptr;
+						PendingInstanceIndex = INDEX_NONE;
+						bLookingAtHarvestableISM = false;
+						ClearISMHighlight();
+					}
+				}
+			}
+		}
+		return;
+	}
+
+	// Check if we're looking at a direct pickup harvestable actor
+	if (CurrentInteractable.GetObject())
+	{
+		// Try to cast to harvestable resource actor
+		if (AHarvestableResourceActor* Harvestable = Cast<AHarvestableResourceActor>(CurrentInteractable.GetObject()))
+		{
+			// If this is a direct pickup item, allow interaction via E key
+			if (Harvestable->bIsDirectPickup && Harvestable->DirectPickupItem)
+			{
+				if (IInteractableInterface::Execute_CanInteract(CurrentInteractable.GetObject(), OwnerActor))
+				{
+					IInteractableInterface::Execute_OnInteract(CurrentInteractable.GetObject(), OwnerActor);
+				}
+			}
+			// Don't interact with non-direct-pickup harvestables via E key
+			return;
+		}
+
+		// Interact with regular non-harvestable interactables only
+		if (IInteractableInterface::Execute_CanInteract(CurrentInteractable.GetObject(), OwnerActor))
+		{
+			IInteractableInterface::Execute_OnInteract(CurrentInteractable.GetObject(), OwnerActor);
+		}
 	}
 }
 
@@ -505,4 +605,12 @@ void UInteractionManagerComponent::ClearISMHighlight()
 
 	HighlightedISMComponent = nullptr;
 	HighlightedInstanceIndex = INDEX_NONE;
+}
+
+void UInteractionManagerComponent::ClearPendingISMState()
+{
+	PendingISMComponent = nullptr;
+	PendingInstanceIndex = INDEX_NONE;
+	bLookingAtHarvestableISM = false;
+	ClearISMHighlight();
 }

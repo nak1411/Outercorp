@@ -234,6 +234,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	bool CanAcceptItem(const FInventoryItem& Item) const;
 
+	/** Check if the current item is equippable (for context menu filtering) */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	bool IsCurrentItemEquippable() const;
+
 	/** Disable dropping items to world (set to true when in crafting/fabrication mode) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory|Behavior")
 	bool bDisableWorldDrop = false;
@@ -261,6 +265,10 @@ protected:
 	/** Set the currently open context menu (call this after creating the menu) */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	static void SetCurrentContextMenu(UUserWidget *ContextMenu);
+
+	/** Set the currently open context menu and configure it with item equippable state */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void SetCurrentContextMenuWithItemData(UUserWidget *ContextMenu);
 
 private:
 	/** Static reference to currently open context menu (shared across all slots) */

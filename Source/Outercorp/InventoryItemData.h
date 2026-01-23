@@ -193,6 +193,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Usage", meta = (EditCondition = "bIsEquippable", ClampMin = "0.0"))
 	float ToolUsageCooldown = 0.5f;
 
+	/** Time into swing animation when impact occurs (seconds) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Usage", meta = (EditCondition = "bIsEquippable", ClampMin = "0.0"))
+	float ToolHitTime = 0.2f;
+
 	/** Base damage dealt by this tool (for harvesting) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Usage", meta = (EditCondition = "bIsEquippable", ClampMin = "0.0"))
 	float ToolBaseDamage = 10.0f;
@@ -205,9 +209,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Durability", meta = (EditCondition = "bIsEquippable", ClampMin = "0.0"))
 	float ToolDurabilityCostPerUse = 1.0f;
 
-	/** Sound played when using the tool */
+	/** Sound played when swinging the tool (whoosh) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Feedback", meta = (EditCondition = "bIsEquippable"))
 	USoundBase* ToolUseSound = nullptr;
+
+	/** Sound played when tool hits a target (impact) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Feedback", meta = (EditCondition = "bIsEquippable"))
+	USoundBase* ToolHitSound = nullptr;
 
 	/** Sound played when equipping the tool */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Feedback", meta = (EditCondition = "bIsEquippable"))

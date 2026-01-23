@@ -308,6 +308,14 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	static void SetCurrentContextMenu(UUserWidget* ContextMenu);
 
+	/** Set the currently open context menu and configure it with item equippable state */
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void SetCurrentContextMenuWithItemData(UUserWidget* ContextMenu);
+
+	/** Check if the current item is equippable (for context menu filtering) */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
+	bool IsCurrentItemEquippable() const;
+
 	/** Get the current open context menu (useful for Blueprint IsValid checks) */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
 	static UUserWidget* GetCurrentContextMenu();

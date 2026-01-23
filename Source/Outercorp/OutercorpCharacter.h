@@ -243,6 +243,18 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *ConstructionSlot3Action;
 
+	/** Tool Slot 1 Input Action (hotkey for equipping tool) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ToolSlot1Action;
+
+	/** Tool Slot 2 Input Action (hotkey for equipping tool) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ToolSlot2Action;
+
+	/** Tool Slot 3 Input Action (hotkey for equipping tool) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *ToolSlot3Action;
+
 	/** Tool Use Input Action (primary action - left click or trigger) */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *ToolUseAction;
@@ -254,6 +266,10 @@ protected:
 	/** Equip/Unequip Tool Input Action (e.g., hotkey to toggle equipped tool) */
 	UPROPERTY(EditAnywhere, Category = "Input")
 	class UInputAction *EquipToolAction;
+
+	/** Unequip Tool Input Action (hotkey to unequip currently equipped tool) */
+	UPROPERTY(EditAnywhere, Category = "Input")
+	class UInputAction *UnequipToolAction;
 
 	/** Exit Crafting Mode Input Action (ESC key) */
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -286,6 +302,10 @@ protected:
 	/** Construction part slots for hotkey switching (index 0 = hotkey 1, index 1 = hotkey 2, etc.) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
 	TArray<class UConstructionPartData*> ConstructionPartSlots;
+
+	/** Tool item data slots for hotkey equipping (index 0 = hotkey 1, index 1 = hotkey 2, etc.) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Equipment")
+	TArray<class UInventoryItemData*> ToolSlots;
 
 	/** Pickupable item class to spawn when dropping items (set to Blueprint class in BP_FirstPersonCharacter) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
@@ -448,6 +468,33 @@ protected:
 	UPROPERTY()
 	UInventoryItemData* EquippedToolItemData;
 
+	/** Whether unarmed harvesting requires continuous hold */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Equipment|Unarmed")
+	bool bUnarmedRequiresContinuousHold = false;
+
+	/** Cooldown time between unarmed harvests (seconds) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Equipment|Unarmed", meta = (ClampMin = "0.0"))
+	float UnarmedHarvestCooldown = 0.5f;
+
+protected:
+	/** Whether unarmed harvesting is on cooldown */
+	bool bUnarmedOnCooldown = false;
+
+	/** Timer handle for unarmed harvest cooldown */
+	FTimerHandle UnarmedCooldownTimerHandle;
+
+	/** Timer handle for continuous unarmed harvesting */
+	FTimerHandle UnarmedContinuousTimerHandle;
+
+	/** Whether player is currently holding unarmed harvest */
+	bool bHoldingUnarmedHarvest = false;
+
+	/** Reset unarmed harvest cooldown */
+	void ResetUnarmedCooldown();
+
+	/** Tick for continuous unarmed harvesting */
+	void UnarmedContinuousTick();
+
 public:
 	/** Currently active fabrication station (for exiting crafting mode) */
 	UPROPERTY()
@@ -607,6 +654,18 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Construction")
 	void SelectConstructionSlot3();
 
+	/** Equip tool from slot 1 */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void EquipToolSlot1();
+
+	/** Equip tool from slot 2 */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void EquipToolSlot2();
+
+	/** Equip tool from slot 3 */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void EquipToolSlot3();
+
 	/** Helper function to check if two socket types are compatible for snapping */
 	bool AreSocketTypesCompatible(FName SocketType1, FName SocketType2) const;
 
@@ -644,6 +703,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Equipment")
 	void StopToolSecondaryUse();
 
+	/** Perform unarmed harvest (hands only - no tool equipped) */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void PerformUnarmedHarvest();
+
+	/** Stop unarmed harvesting */
+	UFUNCTION(BlueprintCallable, Category = "Equipment")
+	void StopUnarmedHarvest();
+
 	/** Check if player has a tool equipped */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment")
 	bool HasToolEquipped() const;
@@ -662,7 +729,7 @@ public:
 
 	/** Set current equippable state */
 	UFUNCTION(BlueprintCallable, Category = "Equipment")
-	void SetEquippableState(EEquippableState NewState) { EquippableState = NewState; }
+	void SetEquippableState(EEquippableState NewState);
 
 	/** Toggle inventory display */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")

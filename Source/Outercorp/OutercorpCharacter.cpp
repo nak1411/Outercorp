@@ -25,6 +25,7 @@
 #include "NotificationComponent.h"
 #include "PickupableItem.h"
 #include "EquippableTool.h"
+#include "HarvestingTool.h"
 #include "FabricationBase.h"
 #include "Outercorp.h"
 #include "Window.h"
@@ -128,6 +129,7 @@ AOutercorpCharacter::AOutercorpCharacter()
 	// Initialize equipment variables
 	EquippedTool = nullptr;
 	EquippedToolItemData = nullptr;
+	EquippableState = EEquippableState::Unarmed;
 }
 
 void AOutercorpCharacter::Tick(float DeltaTime)
@@ -515,7 +517,7 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 			EnhancedInputComponent->BindAction(ToggleRotationSnapAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleRotationSnap);
 		}
 
-		// Construction Part Hotkeys
+		// Construction Part Hotkeys (only active in construction mode)
 		if (ConstructionSlot1Action)
 		{
 			EnhancedInputComponent->BindAction(ConstructionSlot1Action, ETriggerEvent::Started, this, &AOutercorpCharacter::SelectConstructionSlot1);
@@ -529,10 +531,30 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 			EnhancedInputComponent->BindAction(ConstructionSlot3Action, ETriggerEvent::Started, this, &AOutercorpCharacter::SelectConstructionSlot3);
 		}
 
+		// Tool Slot Hotkeys (1, 2, 3 keys for equipping tools)
+		if (ToolSlot1Action)
+		{
+			EnhancedInputComponent->BindAction(ToolSlot1Action, ETriggerEvent::Started, this, &AOutercorpCharacter::EquipToolSlot1);
+		}
+		if (ToolSlot2Action)
+		{
+			EnhancedInputComponent->BindAction(ToolSlot2Action, ETriggerEvent::Started, this, &AOutercorpCharacter::EquipToolSlot2);
+		}
+		if (ToolSlot3Action)
+		{
+			EnhancedInputComponent->BindAction(ToolSlot3Action, ETriggerEvent::Started, this, &AOutercorpCharacter::EquipToolSlot3);
+		}
+
 		// Equip/Unequip Tool
 		if (EquipToolAction)
 		{
 			EnhancedInputComponent->BindAction(EquipToolAction, ETriggerEvent::Started, this, &AOutercorpCharacter::ToggleEquipTool);
+		}
+
+		// Unequip Tool
+		if (UnequipToolAction)
+		{
+			EnhancedInputComponent->BindAction(UnequipToolAction, ETriggerEvent::Started, this, &AOutercorpCharacter::UnequipCurrentTool);
 		}
 
 		// Tool Use Actions
@@ -710,10 +732,11 @@ void AOutercorpCharacter::Interact()
 		return;
 	}
 
-	// Call interact on the interaction manager component
+	// Only interact with non-harvestable objects (pickupable items, NPCs, etc)
+	// Harvesting is now only handled through left-click with equipped tools (ToolUseAction)
 	if (InteractionManagerComponent)
 	{
-		InteractionManagerComponent->Interact();
+		InteractionManagerComponent->InteractNonHarvestable();
 	}
 }
 
@@ -750,6 +773,8 @@ void AOutercorpCharacter::InteractPressed()
 			false
 		);
 	}
+	// NOTE: Harvesting is now only handled through left-click with equipped tools (ToolUseAction)
+	// The E key is reserved for picking up/placing items only
 }
 
 void AOutercorpCharacter::InteractReleased()
@@ -758,15 +783,20 @@ void AOutercorpCharacter::InteractReleased()
 	if (bIsHoldingInteract)
 	{
 		bIsHoldingInteract = false;
-		// If no held item and timer hasn't fired, do instant interact
+		// If no held item and timer hasn't fired, do non-harvestable interact
 		if (!HeldItemData)
 		{
-			// Timer hasn't fired yet (quick tap), do instant interact
+			// Timer hasn't fired yet (quick tap), clear it and interact
 			if (GetWorld())
 			{
 				GetWorld()->GetTimerManager().ClearTimer(InteractHoldTimerHandle);
 			}
-			Interact();
+			// Only interact with non-harvestable objects (pickupable items, NPCs, etc)
+			// Harvesting is only handled through left-click with equipped tools (ToolUseAction)
+			if (InteractionManagerComponent)
+			{
+				InteractionManagerComponent->InteractNonHarvestable();
+			}
 		}
 		// If we have held item data, just keep holding it (don't drop)
 		// Next interact press will place it
@@ -4158,6 +4188,87 @@ void AOutercorpCharacter::SelectConstructionSlot3()
 	SwitchConstructionPartSlot(2);
 }
 
+void AOutercorpCharacter::EquipToolSlot1()
+{
+	// Don't process hotkey if in construction mode or UI is open
+	if (bIsInConstructionMode || IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// Check if tool slot 1 has a valid tool assigned
+	if (ToolSlots.IsValidIndex(0) && ToolSlots[0] && ToolSlots[0]->bIsEquippable)
+	{
+		// Try to find this tool in inventory
+		if (InventoryComponent)
+		{
+			int32 SlotIndex = InventoryComponent->FindItemByID(ToolSlots[0]->ItemID);
+			if (SlotIndex != -1)
+			{
+				FInventoryItem Item = InventoryComponent->GetItemAtSlot(SlotIndex);
+				if (Item.IsValid())
+				{
+					EquipToolFromInventory(Item);
+				}
+			}
+		}
+	}
+}
+
+void AOutercorpCharacter::EquipToolSlot2()
+{
+	// Don't process hotkey if in construction mode or UI is open
+	if (bIsInConstructionMode || IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// Check if tool slot 2 has a valid tool assigned
+	if (ToolSlots.IsValidIndex(1) && ToolSlots[1] && ToolSlots[1]->bIsEquippable)
+	{
+		// Try to find this tool in inventory
+		if (InventoryComponent)
+		{
+			int32 SlotIndex = InventoryComponent->FindItemByID(ToolSlots[1]->ItemID);
+			if (SlotIndex != -1)
+			{
+				FInventoryItem Item = InventoryComponent->GetItemAtSlot(SlotIndex);
+				if (Item.IsValid())
+				{
+					EquipToolFromInventory(Item);
+				}
+			}
+		}
+	}
+}
+
+void AOutercorpCharacter::EquipToolSlot3()
+{
+	// Don't process hotkey if in construction mode or UI is open
+	if (bIsInConstructionMode || IsAnyUIWidgetOpen())
+	{
+		return;
+	}
+
+	// Check if tool slot 3 has a valid tool assigned
+	if (ToolSlots.IsValidIndex(2) && ToolSlots[2] && ToolSlots[2]->bIsEquippable)
+	{
+		// Try to find this tool in inventory
+		if (InventoryComponent)
+		{
+			int32 SlotIndex = InventoryComponent->FindItemByID(ToolSlots[2]->ItemID);
+			if (SlotIndex != -1)
+			{
+				FInventoryItem Item = InventoryComponent->GetItemAtSlot(SlotIndex);
+				if (Item.IsValid())
+				{
+					EquipToolFromInventory(Item);
+				}
+			}
+		}
+	}
+}
+
 void AOutercorpCharacter::ToggleDeleteMode()
 {
 	if (bIsInDeleteMode)
@@ -4800,6 +4911,14 @@ bool AOutercorpCharacter::AreSocketTypesCompatible(FName SocketType1, FName Sock
 // Equipment/Tool System Implementation
 // ============================================================================
 
+void AOutercorpCharacter::SetEquippableState(EEquippableState NewState)
+{
+	EEquippableState OldState = EquippableState;
+	EquippableState = NewState;
+
+	UE_LOG(LogTemp, Log, TEXT("SetEquippableState: %d -> %d"), static_cast<int32>(OldState), static_cast<int32>(NewState));
+}
+
 void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& InventoryItem)
 {
 	if (!InventoryItem.IsValid() || !InventoryItem.ItemData)
@@ -4823,13 +4942,31 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& Inventory
 		UnequipCurrentTool();
 	}
 
-	// Spawn a generic equippable tool actor
+	// Spawn the appropriate tool actor based on tool type
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
 	SpawnParams.Instigator = this;
 
+	// Determine which tool class to spawn based on tool type
+	TSubclassOf<AEquippableTool> ToolClassToSpawn = AEquippableTool::StaticClass();
+
+	// Harvesting tools (Axe, Pickaxe, Shovel, Sickle, Knife) use HarvestingTool class
+	switch (InventoryItem.ItemData->ToolType)
+	{
+		case EToolType::Axe:
+		case EToolType::Pickaxe:
+		case EToolType::Shovel:
+		case EToolType::Sickle:
+		case EToolType::Knife:
+			ToolClassToSpawn = AHarvestingTool::StaticClass();
+			break;
+		default:
+			ToolClassToSpawn = AEquippableTool::StaticClass();
+			break;
+	}
+
 	EquippedTool = GetWorld()->SpawnActor<AEquippableTool>(
-		AEquippableTool::StaticClass(),
+		ToolClassToSpawn,
 		FVector::ZeroVector,
 		FRotator::ZeroRotator,
 		SpawnParams
@@ -4931,24 +5068,30 @@ void AOutercorpCharacter::ToggleEquipTool()
 
 void AOutercorpCharacter::StartToolUse()
 {
-	if (!EquippedTool)
+	if (EquippedTool)
 	{
-		return;
+		// Delegate to the equipped tool
+		EquippedTool->StartPrimaryUse();
 	}
-
-	// Delegate to the equipped tool
-	EquippedTool->StartPrimaryUse();
+	else
+	{
+		// Unarmed harvesting - interact with what we're looking at
+		PerformUnarmedHarvest();
+	}
 }
 
 void AOutercorpCharacter::StopToolUse()
 {
-	if (!EquippedTool)
+	if (EquippedTool)
 	{
-		return;
+		// Delegate to the equipped tool
+		EquippedTool->StopPrimaryUse();
 	}
-
-	// Delegate to the equipped tool
-	EquippedTool->StopPrimaryUse();
+	else
+	{
+		// Stop unarmed harvesting
+		StopUnarmedHarvest();
+	}
 }
 
 void AOutercorpCharacter::StartToolSecondaryUse()
@@ -4971,6 +5114,82 @@ void AOutercorpCharacter::StopToolSecondaryUse()
 
 	// Delegate to the equipped tool
 	EquippedTool->StopSecondaryUse();
+}
+
+void AOutercorpCharacter::PerformUnarmedHarvest()
+{
+	// Check cooldown
+	if (bUnarmedOnCooldown)
+	{
+		return;
+	}
+
+	if (InteractionManagerComponent)
+	{
+		// Use the existing interaction system to harvest with bare hands
+		InteractionManagerComponent->Interact();
+
+		// Set cooldown
+		bUnarmedOnCooldown = true;
+		GetWorld()->GetTimerManager().SetTimer(
+			UnarmedCooldownTimerHandle,
+			this,
+			&AOutercorpCharacter::ResetUnarmedCooldown,
+			UnarmedHarvestCooldown,
+			false
+		);
+	}
+
+	// Handle continuous hold if enabled
+	if (bUnarmedRequiresContinuousHold && !GetWorld()->GetTimerManager().IsTimerActive(UnarmedContinuousTimerHandle))
+	{
+		bHoldingUnarmedHarvest = true;
+		GetWorld()->GetTimerManager().SetTimer(
+			UnarmedContinuousTimerHandle,
+			this,
+			&AOutercorpCharacter::UnarmedContinuousTick,
+			UnarmedHarvestCooldown,
+			true
+		);
+	}
+}
+
+void AOutercorpCharacter::StopUnarmedHarvest()
+{
+	bHoldingUnarmedHarvest = false;
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(UnarmedContinuousTimerHandle);
+	}
+}
+
+void AOutercorpCharacter::ResetUnarmedCooldown()
+{
+	bUnarmedOnCooldown = false;
+}
+
+void AOutercorpCharacter::UnarmedContinuousTick()
+{
+	if (!bHoldingUnarmedHarvest)
+	{
+		StopUnarmedHarvest();
+		return;
+	}
+
+	if (InteractionManagerComponent && !bUnarmedOnCooldown)
+	{
+		InteractionManagerComponent->Interact();
+
+		// Set cooldown
+		bUnarmedOnCooldown = true;
+		GetWorld()->GetTimerManager().SetTimer(
+			UnarmedCooldownTimerHandle,
+			this,
+			&AOutercorpCharacter::ResetUnarmedCooldown,
+			UnarmedHarvestCooldown,
+			false
+		);
+	}
 }
 
 bool AOutercorpCharacter::HasToolEquipped() const

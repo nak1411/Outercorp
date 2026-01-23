@@ -58,6 +58,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	void Interact();
 
+	/** Perform interaction with non-harvestable objects only (e.g., pickupable items, NPCs) */
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	void InteractNonHarvestable();
+
 	/** Get the current interactable actor (if any) */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Interaction")
 	AActor* GetCurrentInteractableActor() const;
@@ -95,9 +99,6 @@ protected:
 	UPROPERTY()
 	mutable TWeakObjectPtr<APCGHarvestableManager> CachedHarvestableManager;
 
-	/** Find the PCG harvestable manager in the level */
-	APCGHarvestableManager* GetHarvestableManager() const;
-
 	/** Pending ISM component for conversion */
 	UPROPERTY()
 	TWeakObjectPtr<UInstancedStaticMeshComponent> PendingISMComponent;
@@ -134,9 +135,22 @@ protected:
 public:
 	/** Check if looking at a harvestable ISM instance */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Interaction")
-	bool IsLookingAtHarvestableInstance() const { return bLookingAtHarvestableISM; }
+	bool IsLookingAtHarvestableISM() const { return bLookingAtHarvestableISM; }
 
 	/** Get the name of the harvestable being looked at */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Interaction")
 	FText GetPendingHarvestableName() const;
+
+	/** Get the PCG harvestable manager */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Interaction")
+	APCGHarvestableManager* GetHarvestableManager() const;
+
+	/** Get pending ISM component being looked at */
+	TWeakObjectPtr<UInstancedStaticMeshComponent> GetPendingISMComponent() const { return PendingISMComponent; }
+
+	/** Get pending instance index being looked at */
+	int32 GetPendingInstanceIndex() const { return PendingInstanceIndex; }
+
+	/** Clear pending ISM state after conversion */
+	void ClearPendingISMState();
 };

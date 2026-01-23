@@ -14,6 +14,7 @@
 #include "InventorySlotWidget.h"
 #include "QuantityInputDialog.h"
 #include "OutercorpCharacter.h"
+#include "ContextMenuWidget.h"
 #include "Engine/Texture2D.h"
 #include "Input/Reply.h"
 #include "GameFramework/PlayerController.h"
@@ -1339,6 +1340,32 @@ void UInventoryListRowWidget::SetCurrentContextMenu(UUserWidget *ContextMenu)
 	{
 		CurrentContextMenu = ContextMenu;
 	}
+}
+
+void UInventoryListRowWidget::SetCurrentContextMenuWithItemData(UUserWidget *ContextMenu)
+{
+	// Close any existing menu first
+	CloseCurrentContextMenu();
+
+	if (!ContextMenu)
+	{
+		return;
+	}
+
+	// Set as the current context menu
+	CurrentContextMenu = ContextMenu;
+
+	// If it's a ContextMenuWidget, set the equippable flag
+	if (UContextMenuWidget *ContextMenuWidget = Cast<UContextMenuWidget>(ContextMenu))
+	{
+		ContextMenuWidget->bIsItemEquippable = IsCurrentItemEquippable();
+		ContextMenuWidget->OwningSlot = this;
+	}
+}
+
+bool UInventoryListRowWidget::IsCurrentItemEquippable() const
+{
+	return ItemData && ItemData->Item.IsValid() && ItemData->Item.ItemData && ItemData->Item.ItemData->bIsEquippable;
 }
 
 UUserWidget *UInventoryListRowWidget::GetCurrentContextMenu()
