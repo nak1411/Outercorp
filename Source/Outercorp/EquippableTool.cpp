@@ -613,8 +613,6 @@ bool AEquippableTool::PlayUseAnimation(UAnimMontage *Animation)
 
 		// Bind to notify events on the first-person anim instance
 		FPAnimInstance->OnPlayMontageNotifyBegin.AddUniqueDynamic(this, &AEquippableTool::HandleMontageNotify);
-
-		UE_LOG(LogTemp, Log, TEXT("Playing animation montage on FP mesh: %s"), *Animation->GetName());
 	}
 
 	// Play on third-person mesh (full body) for shadows and other players
@@ -623,8 +621,6 @@ bool AEquippableTool::PlayUseAnimation(UAnimMontage *Animation)
 	{
 		UAnimInstance *TPAnimInstance = ThirdPersonCharacterMesh->GetAnimInstance();
 		TPAnimInstance->Montage_Play(Animation, PlayRate);
-
-		UE_LOG(LogTemp, Log, TEXT("Playing animation montage on TP mesh: %s"), *Animation->GetName());
 	}
 
 	return true;

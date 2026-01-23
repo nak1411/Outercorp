@@ -405,9 +405,6 @@ void AHarvestingTool::PlayHitFeedback(const FVector &HitLocation)
 	// Play hit effect
 	if (HitEffect)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Spawning HitEffect '%s' at location: %s"),
-			   *HitEffect->GetName(), *HitLocation.ToString());
-
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 			World,
 			HitEffect,
