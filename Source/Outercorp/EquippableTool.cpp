@@ -76,10 +76,10 @@ void AEquippableTool::Tick(float DeltaTime)
 	// Check for pending action when montage finishes (single-click mode only)
 	if (bPendingAction && bIsEquipped && !bRequiresContinuousHold && OwningCharacter)
 	{
-		USkeletalMeshComponent* CharacterMesh = OwningCharacter->GetFirstPersonMesh();
+		USkeletalMeshComponent *CharacterMesh = OwningCharacter->GetFirstPersonMesh();
 		if (CharacterMesh && CharacterMesh->GetAnimInstance())
 		{
-			UAnimInstance* AnimInstance = CharacterMesh->GetAnimInstance();
+			UAnimInstance *AnimInstance = CharacterMesh->GetAnimInstance();
 
 			// If montage finished, play the queued action
 			if (!AnimInstance->Montage_IsPlaying(PrimaryUseAnimation))
@@ -92,7 +92,7 @@ void AEquippableTool::Tick(float DeltaTime)
 	}
 }
 
-void AEquippableTool::EquipTool(AOutercorpCharacter* Character)
+void AEquippableTool::EquipTool(AOutercorpCharacter *Character)
 {
 	if (!Character)
 	{
@@ -104,7 +104,7 @@ void AEquippableTool::EquipTool(AOutercorpCharacter* Character)
 	OnEquipped(Character);
 }
 
-void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter* Character)
+void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter *Character)
 {
 	if (!Character)
 	{
@@ -118,7 +118,7 @@ void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter* Character)
 	Character->SetEquippableState(ToolAnimationState);
 
 	// Get character's first-person mesh
-	USkeletalMeshComponent* CharacterFPMesh = Character->GetFirstPersonMesh();
+	USkeletalMeshComponent *CharacterFPMesh = Character->GetFirstPersonMesh();
 	if (!CharacterFPMesh)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Character first-person mesh is null!"));
@@ -126,18 +126,18 @@ void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter* Character)
 	}
 
 	// Determine which mesh to use (skeletal first-person mesh or static item mesh as fallback)
-	USceneComponent* MeshToAttach = nullptr;
+	USceneComponent *MeshToAttach = nullptr;
 	bool bUseSkeletalMesh = FirstPersonMesh && FirstPersonMesh->GetSkeletalMeshAsset();
 
 	if (bUseSkeletalMesh)
 	{
 		MeshToAttach = FirstPersonMesh;
-		UE_LOG(LogTemp, Log, TEXT("Using skeletal FirstPersonMesh for equipped tool"));
+		// UE_LOG(LogTemp, Log, TEXT("Using skeletal FirstPersonMesh for equipped tool"));
 	}
 	else if (ItemMesh && ItemMesh->GetStaticMesh())
 	{
 		MeshToAttach = ItemMesh;
-		UE_LOG(LogTemp, Log, TEXT("Using static ItemMesh for equipped tool (no skeletal mesh assigned)"));
+		// UE_LOG(LogTemp, Log, TEXT("Using static ItemMesh for equipped tool (no skeletal mesh assigned)"));
 	}
 	else
 	{
@@ -149,19 +149,21 @@ void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter* Character)
 	if (CharacterFPMesh && MeshToAttach)
 	{
 		// Log available sockets for debugging
+		/*
 		TArray<FName> SocketNames = CharacterFPMesh->GetAllSocketNames();
 		UE_LOG(LogTemp, Log, TEXT("Available sockets on character mesh:"));
 		for (const FName& SocketName : SocketNames)
 		{
 			UE_LOG(LogTemp, Log, TEXT("  - %s"), *SocketName.ToString());
 		}
+		*/
 
 		// Try common socket names if AttachSocketName doesn't exist
 		FName SocketToUse = AttachSocketName;
 		if (!CharacterFPMesh->DoesSocketExist(AttachSocketName))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Socket '%s' not found on character mesh. Trying common alternatives..."),
-				*AttachSocketName.ToString());
+				   *AttachSocketName.ToString());
 
 			// Try common socket names
 			TArray<FName> CommonSockets = {
@@ -169,11 +171,10 @@ void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter* Character)
 				FName("hand_rSocket"),
 				FName("GripPoint"),
 				FName("WeaponSocket"),
-				FName("RightHandSocket")
-			};
+				FName("RightHandSocket")};
 
 			bool bFoundSocket = false;
-			for (const FName& CommonSocket : CommonSockets)
+			for (const FName &CommonSocket : CommonSockets)
 			{
 				if (CharacterFPMesh->DoesSocketExist(CommonSocket))
 				{
@@ -196,46 +197,51 @@ void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter* Character)
 			EAttachmentRule::SnapToTarget,
 			EAttachmentRule::SnapToTarget,
 			EAttachmentRule::SnapToTarget,
-			true  // Weld simulated bodies
+			true // Weld simulated bodies
 		);
 
 		MeshToAttach->AttachToComponent(
 			CharacterFPMesh,
 			AttachRules,
-			SocketToUse
-		);
+			SocketToUse);
 
 		// Set owner for visibility
 		SetOwner(Character);
 
 		// Configure mesh visibility for first-person view
-		if (USkeletalMeshComponent* SkelMesh = Cast<USkeletalMeshComponent>(MeshToAttach))
+		if (USkeletalMeshComponent *SkelMesh = Cast<USkeletalMeshComponent>(MeshToAttach))
 		{
 			SkelMesh->SetOnlyOwnerSee(false);
 			SkelMesh->SetOwnerNoSee(false);
 			SkelMesh->SetCastShadow(true);
 			SkelMesh->SetVisibility(true, true);
 			SkelMesh->SetHiddenInGame(false);
+			/*
 			UE_LOG(LogTemp, Log, TEXT("Skeletal mesh attached and configured - Asset: %s, Visible: %s, HiddenInGame: %s"),
 				SkelMesh->GetSkeletalMeshAsset() ? *SkelMesh->GetSkeletalMeshAsset()->GetName() : TEXT("NULL"),
 				SkelMesh->IsVisible() ? TEXT("true") : TEXT("false"),
 				SkelMesh->bHiddenInGame ? TEXT("true") : TEXT("false"));
+			*/
 		}
-		else if (UStaticMeshComponent* StaticMesh = Cast<UStaticMeshComponent>(MeshToAttach))
+		else if (UStaticMeshComponent *StaticMesh = Cast<UStaticMeshComponent>(MeshToAttach))
 		{
 			StaticMesh->SetOnlyOwnerSee(false);
 			StaticMesh->SetOwnerNoSee(false);
 			StaticMesh->SetCastShadow(true);
 			StaticMesh->SetVisibility(true, true);
 			StaticMesh->SetHiddenInGame(false);
+			/*
 			UE_LOG(LogTemp, Log, TEXT("Static mesh attached and configured - Mesh: %s, Visible: %s"),
 				StaticMesh->GetStaticMesh() ? *StaticMesh->GetStaticMesh()->GetName() : TEXT("NULL"),
 				StaticMesh->IsVisible() ? TEXT("true") : TEXT("false"));
+			*/
 		}
 
+		/*
 		UE_LOG(LogTemp, Log, TEXT("Tool mesh attached to socket: %s, Attach Parent: %s"),
 			*SocketToUse.ToString(),
 			MeshToAttach->GetAttachParent() ? *MeshToAttach->GetAttachParent()->GetName() : TEXT("NULL"));
+		*/
 	}
 
 	// Disable collision when equipped
@@ -247,8 +253,10 @@ void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter* Character)
 		UGameplayStatics::PlaySound2D(this, EquipSound);
 	}
 
+	/*
 	UE_LOG(LogTemp, Log, TEXT("Tool '%s' equipped by '%s'"),
 		*GetName(), *Character->GetName());
+	*/
 }
 
 void AEquippableTool::UnequipTool()
@@ -263,7 +271,7 @@ void AEquippableTool::OnUnequipped_Implementation()
 	// Unbind montage notify delegate before clearing OwningCharacter
 	if (OwningCharacter)
 	{
-		USkeletalMeshComponent* FirstPersonCharacterMesh = OwningCharacter->GetFirstPersonMesh();
+		USkeletalMeshComponent *FirstPersonCharacterMesh = OwningCharacter->GetFirstPersonMesh();
 		if (FirstPersonCharacterMesh && FirstPersonCharacterMesh->GetAnimInstance())
 		{
 			FirstPersonCharacterMesh->GetAnimInstance()->OnPlayMontageNotifyBegin.RemoveDynamic(this, &AEquippableTool::HandleMontageNotify);
@@ -391,8 +399,7 @@ void AEquippableTool::StopPrimaryUse_Implementation()
 				this,
 				&AEquippableTool::ResetCooldown,
 				UsageCooldown,
-				false
-			);
+				false);
 		}
 	}
 	// Single-click mode: no cooldown, allow immediate re-use
@@ -451,8 +458,7 @@ void AEquippableTool::StopSecondaryUse_Implementation()
 			this,
 			&AEquippableTool::ResetCooldown,
 			UsageCooldown,
-			false
-		);
+			false);
 	}
 }
 
@@ -481,7 +487,7 @@ void AEquippableTool::OnToolHitNotify_Implementation()
 	UE_LOG(LogTemp, Log, TEXT("Tool '%s' received ToolHit notify"), *GetName());
 }
 
-void AEquippableTool::HandleMontageNotify(FName NotifyName, const FBranchingPointNotifyPayload& BranchingPointPayload)
+void AEquippableTool::HandleMontageNotify(FName NotifyName, const FBranchingPointNotifyPayload &BranchingPointPayload)
 {
 	// Note: ToolHit is handled via AnimNotify_ToolHit class, not branching point notifies
 	// This callback is kept for other potential montage notifies but does NOT trigger tool hits
@@ -562,37 +568,37 @@ void AEquippableTool::StopCurrentMontage()
 	}
 
 	// Stop on first-person mesh
-	USkeletalMeshComponent* FirstPersonCharacterMesh = OwningCharacter->GetFirstPersonMesh();
+	USkeletalMeshComponent *FirstPersonCharacterMesh = OwningCharacter->GetFirstPersonMesh();
 	if (FirstPersonCharacterMesh && FirstPersonCharacterMesh->GetAnimInstance())
 	{
 		FirstPersonCharacterMesh->GetAnimInstance()->Montage_Stop(0.15f);
 	}
 
 	// Stop on third-person mesh
-	USkeletalMeshComponent* ThirdPersonCharacterMesh = OwningCharacter->GetMesh();
+	USkeletalMeshComponent *ThirdPersonCharacterMesh = OwningCharacter->GetMesh();
 	if (ThirdPersonCharacterMesh && ThirdPersonCharacterMesh->GetAnimInstance())
 	{
 		ThirdPersonCharacterMesh->GetAnimInstance()->Montage_Stop(0.15f);
 	}
 }
 
-bool AEquippableTool::PlayUseAnimation(UAnimMontage* Animation)
+bool AEquippableTool::PlayUseAnimation(UAnimMontage *Animation)
 {
 	if (!Animation || !OwningCharacter)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("PlayUseAnimation: Animation=%s, OwningCharacter=%s"),
-			Animation ? *Animation->GetName() : TEXT("NULL"),
-			OwningCharacter ? *OwningCharacter->GetName() : TEXT("NULL"));
+			   Animation ? *Animation->GetName() : TEXT("NULL"),
+			   OwningCharacter ? *OwningCharacter->GetName() : TEXT("NULL"));
 		return false;
 	}
 
 	float PlayRate = 1.0f;
 
 	// Play on first-person mesh (arms)
-	USkeletalMeshComponent* FirstPersonCharacterMesh = OwningCharacter->GetFirstPersonMesh();
+	USkeletalMeshComponent *FirstPersonCharacterMesh = OwningCharacter->GetFirstPersonMesh();
 	if (FirstPersonCharacterMesh && FirstPersonCharacterMesh->GetAnimInstance())
 	{
-		UAnimInstance* FPAnimInstance = FirstPersonCharacterMesh->GetAnimInstance();
+		UAnimInstance *FPAnimInstance = FirstPersonCharacterMesh->GetAnimInstance();
 
 		// For single-click mode: don't interrupt, only play if not already playing
 		if (!bRequiresContinuousHold && FPAnimInstance->Montage_IsPlaying(Animation))
@@ -612,10 +618,10 @@ bool AEquippableTool::PlayUseAnimation(UAnimMontage* Animation)
 	}
 
 	// Play on third-person mesh (full body) for shadows and other players
-	USkeletalMeshComponent* ThirdPersonCharacterMesh = OwningCharacter->GetMesh();
+	USkeletalMeshComponent *ThirdPersonCharacterMesh = OwningCharacter->GetMesh();
 	if (ThirdPersonCharacterMesh && ThirdPersonCharacterMesh->GetAnimInstance())
 	{
-		UAnimInstance* TPAnimInstance = ThirdPersonCharacterMesh->GetAnimInstance();
+		UAnimInstance *TPAnimInstance = ThirdPersonCharacterMesh->GetAnimInstance();
 		TPAnimInstance->Montage_Play(Animation, PlayRate);
 
 		UE_LOG(LogTemp, Log, TEXT("Playing animation montage on TP mesh: %s"), *Animation->GetName());
@@ -624,7 +630,7 @@ bool AEquippableTool::PlayUseAnimation(UAnimMontage* Animation)
 	return true;
 }
 
-void AEquippableTool::InitializeFromItemData(UInventoryItemData* InItemData)
+void AEquippableTool::InitializeFromItemData(UInventoryItemData *InItemData)
 {
 	if (!InItemData)
 	{
@@ -673,16 +679,20 @@ void AEquippableTool::InitializeFromItemData(UInventoryItemData* InItemData)
 	if (FirstPersonSkeletalMesh && FirstPersonMesh)
 	{
 		FirstPersonMesh->SetSkeletalMesh(FirstPersonSkeletalMesh);
-		UE_LOG(LogTemp, Log, TEXT("Set FirstPersonMesh skeletal mesh to: %s"), *FirstPersonSkeletalMesh->GetName());
+		// UE_LOG(LogTemp, Log, TEXT("Set FirstPersonMesh skeletal mesh to: %s"), *FirstPersonSkeletalMesh->GetName());
 	}
 	else
 	{
+		/*
 		UE_LOG(LogTemp, Warning, TEXT("No FirstPersonSkeletalMesh to set (FPMesh: %s, SkeletalMesh: %s)"),
 			FirstPersonMesh ? TEXT("Valid") : TEXT("NULL"),
 			FirstPersonSkeletalMesh ? *FirstPersonSkeletalMesh->GetName() : TEXT("NULL"));
+		*/
 	}
 
+	/*
 	UE_LOG(LogTemp, Log, TEXT("Tool initialized from item: %s (ToolFirstPersonMesh in data: %s)"),
 		*InItemData->ItemName.ToString(),
 		InItemData->ToolFirstPersonMesh ? *InItemData->ToolFirstPersonMesh->GetName() : TEXT("NULL"));
+	*/
 }

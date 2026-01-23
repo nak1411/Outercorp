@@ -104,10 +104,10 @@ AOutercorpCharacter::AOutercorpCharacter()
 
 	// Initialize construction mode variables
 	bIsInConstructionMode = false;
-	bSnapModeEnabled = true; // Default to snapping enabled
-	bRotationSnapEnabled = false; // Default to free rotation (hold key to enable snap)
+	bSnapModeEnabled = true;		   // Default to snapping enabled
+	bRotationSnapEnabled = false;	   // Default to free rotation (hold key to enable snap)
 	CurrentPlacementDistance = 300.0f; // Start at max placement distance
-	CurrentGhostRotation = 0.0f; // Start at 0 degrees rotation
+	CurrentGhostRotation = 0.0f;	   // Start at 0 degrees rotation
 	bIsHoldingRightClick = false;
 	SnapTwistOffset = 0.0f; // Start with no twist offset
 	bIsCurrentlySnapped = false;
@@ -318,9 +318,13 @@ void AOutercorpCharacter::BeginPlay()
 				else
 				{
 					if (!WindowCanvas)
-					{					}
+					{
+						UE_LOG(LogTemp, Warning, TEXT("WindowCanvas not found in BaseHUDWidget"));
+					}
 					if (!ModularWindowClass)
-					{					}
+					{
+						UE_LOG(LogTemp, Warning, TEXT("ModularWindowClass not set in Character"));
+					}
 				}
 			}
 		}
@@ -337,18 +341,22 @@ void AOutercorpCharacter::BeginPlay()
 
 		// Create and display the interaction prompt widget
 		if (InteractionPromptWidgetClass)
-		{			InteractionPromptWidget = CreateWidget<UInteractionPromptWidget>(GetWorld(), InteractionPromptWidgetClass);
+		{
+			InteractionPromptWidget = CreateWidget<UInteractionPromptWidget>(GetWorld(), InteractionPromptWidgetClass);
 			if (InteractionPromptWidget)
-			{				InteractionPromptWidget->AddToViewport(2); // Above crosshair
+			{
+				InteractionPromptWidget->AddToViewport(2); // Above crosshair
 
 				// Manually initialize the interaction system
 				InteractionPromptWidget->InitializeInteraction();
 			}
 			else
-			{			}
+			{
+			}
 		}
 		else
-		{		}
+		{
+		}
 
 		// Create and display the construction mode border widget
 		if (ConstructionModeBorderWidgetClass)
@@ -581,7 +589,9 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::InteractReleased);
 	}
 	else
-	{	}
+	{
+		UE_LOG(LogTemp, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
+	}
 }
 
 void AOutercorpCharacter::MoveInput(const FInputActionValue &Value)
@@ -756,7 +766,8 @@ void AOutercorpCharacter::InteractPressed()
 
 	// If already holding an item, place it
 	if (HeldItemData)
-	{		DropHeldItem();
+	{
+		DropHeldItem();
 		return;
 	}
 	// Set the flag that we're holding interact
@@ -770,8 +781,7 @@ void AOutercorpCharacter::InteractPressed()
 			this,
 			&AOutercorpCharacter::PickupAndHoldItem,
 			InteractHoldDelay,
-			false
-		);
+			false);
 	}
 	// NOTE: Harvesting is now only handled through left-click with equipped tools (ToolUseAction)
 	// The E key is reserved for picking up/placing items only
@@ -823,14 +833,14 @@ void AOutercorpCharacter::PickupAndHoldItem()
 		return;
 	}
 
-	AActor* InteractableActor = InteractionManagerComponent->GetCurrentInteractableActor();
+	AActor *InteractableActor = InteractionManagerComponent->GetCurrentInteractableActor();
 	if (!InteractableActor)
 	{
 		return;
 	}
 
 	// Check if it's a pickupable item
-	APickupableItem* PickupItem = Cast<APickupableItem>(InteractableActor);
+	APickupableItem *PickupItem = Cast<APickupableItem>(InteractableActor);
 	if (!PickupItem)
 	{
 		return;
@@ -844,7 +854,8 @@ void AOutercorpCharacter::PickupAndHoldItem()
 
 	// Store the item data and quantity before destroying
 	if (!PickupItem->ItemData)
-	{		return;
+	{
+		return;
 	}
 
 	// IMMEDIATELY disable physics, collision, and hide the item to prevent any flicker/movement
@@ -884,7 +895,7 @@ void AOutercorpCharacter::PickupAndHoldItem()
 		int32 NumMaterials = PickupItem->ItemMesh->GetNumMaterials();
 		for (int32 i = 0; i < NumMaterials; i++)
 		{
-			UMaterialInterface* OriginalMaterial = PickupItem->ItemMesh->GetMaterial(i);
+			UMaterialInterface *OriginalMaterial = PickupItem->ItemMesh->GetMaterial(i);
 			if (OriginalMaterial)
 			{
 				PlacementGhost->SetMaterial(i, OriginalMaterial);
@@ -902,15 +913,18 @@ void AOutercorpCharacter::PickupAndHoldItem()
 		}
 
 		// NOW make it visible after positioning
-		PlacementGhost->SetVisibility(true);	}
+		PlacementGhost->SetVisibility(true);
+	}
 
 	// DESTROY the original item (already hidden, so no flicker)
-	PickupItem->Destroy();}
+	PickupItem->Destroy();
+}
 
 void AOutercorpCharacter::DropHeldItem()
 {
 	if (!HeldItemData)
-	{		return;
+	{
+		return;
 	}
 
 	if (!bHasValidPlacement)
@@ -922,12 +936,11 @@ void AOutercorpCharacter::DropHeldItem()
 		// Use the configured PickupableItemClass if set, otherwise fall back to base class
 		TSubclassOf<APickupableItem> ClassToSpawn = PickupableItemClass ? PickupableItemClass : TSubclassOf<APickupableItem>(APickupableItem::StaticClass());
 
-		APickupableItem* RestoredItem = GetWorld()->SpawnActor<APickupableItem>(
+		APickupableItem *RestoredItem = GetWorld()->SpawnActor<APickupableItem>(
 			ClassToSpawn,
 			PlacementLocation,
 			FRotator::ZeroRotator,
-			SpawnParams
-		);
+			SpawnParams);
 
 		if (RestoredItem)
 		{
@@ -956,16 +969,16 @@ void AOutercorpCharacter::DropHeldItem()
 				FTimerHandle PhysicsEnableTimer;
 				FTimerDelegate PhysicsDelegate;
 				PhysicsDelegate.BindLambda([CapturedMesh = RestoredItem->ItemMesh]()
-				{
+										   {
 					if (CapturedMesh && CapturedMesh->IsValidLowLevel())
 					{
 						CapturedMesh->SetSimulatePhysics(true);
-					}
-				});
+					} });
 				GetWorld()->GetTimerManager().SetTimer(PhysicsEnableTimer, PhysicsDelegate, 0.1f, false);
 			}
 
-			RestoredItem->StartDropCooldown();		}
+			RestoredItem->StartDropCooldown();
+		}
 
 		// Hide the ghost
 		if (PlacementGhost)
@@ -991,12 +1004,11 @@ void AOutercorpCharacter::DropHeldItem()
 	// Use the configured PickupableItemClass if set, otherwise fall back to base class
 	TSubclassOf<APickupableItem> ClassToSpawn = PickupableItemClass ? PickupableItemClass : TSubclassOf<APickupableItem>(APickupableItem::StaticClass());
 
-	APickupableItem* NewItem = GetWorld()->SpawnActor<APickupableItem>(
+	APickupableItem *NewItem = GetWorld()->SpawnActor<APickupableItem>(
 		ClassToSpawn,
 		PlacementLocation,
 		FRotator::ZeroRotator,
-		SpawnParams
-	);
+		SpawnParams);
 
 	if (NewItem)
 	{
@@ -1012,17 +1024,20 @@ void AOutercorpCharacter::DropHeldItem()
 		// Apply the stored scale to match the original item
 		if (NewItem->ItemMesh)
 		{
-			NewItem->ItemMesh->SetWorldScale3D(HeldItemScale);		}
+			NewItem->ItemMesh->SetWorldScale3D(HeldItemScale);
+		}
 		// Check if physics should be enabled based on item data and placement type
 		bool bShouldEnablePhysics = false;
 		if (HeldItemData->bCanFreePlacement)
 		{
 			// For free placement items, use the bEnablePhysicsOnPlacement setting
-			bShouldEnablePhysics = HeldItemData->bEnablePhysicsOnPlacement;		}
+			bShouldEnablePhysics = HeldItemData->bEnablePhysicsOnPlacement;
+		}
 		else
 		{
 			// For surface-placed items, always enable physics after a delay
-			bShouldEnablePhysics = true;		}
+			bShouldEnablePhysics = true;
+		}
 
 		// Handle physics setup
 		if (NewItem->ItemMesh)
@@ -1037,11 +1052,10 @@ void AOutercorpCharacter::DropHeldItem()
 				FTimerHandle PhysicsEnableTimer;
 				FTimerDelegate PhysicsDelegate;
 				PhysicsDelegate.BindLambda([CapturedMesh = NewItem->ItemMesh]()
-				{
+										   {
 					if (CapturedMesh && CapturedMesh->IsValidLowLevel())
 					{
-						CapturedMesh->SetSimulatePhysics(true);					}
-				});
+						CapturedMesh->SetSimulatePhysics(true);					} });
 				GetWorld()->GetTimerManager().SetTimer(PhysicsEnableTimer, PhysicsDelegate, 0.1f, false);
 			}
 			else
@@ -1050,14 +1064,17 @@ void AOutercorpCharacter::DropHeldItem()
 				NewItem->ItemMesh->SetSimulatePhysics(false);
 				NewItem->ItemMesh->SetEnableGravity(false);
 				NewItem->ItemMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-				NewItem->ItemMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);			}
+				NewItem->ItemMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+			}
 		}
 
 		// Start drop cooldown so player can't immediately pick it up again
 		NewItem->StartDropCooldown();
 	}
 	else
-	{	}
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to spawn new item when dropping."));
+	}
 
 	// Clear the held item data (ghost already hidden above before spawning)
 	HeldItemData = nullptr;
@@ -1092,8 +1109,7 @@ void AOutercorpCharacter::UpdatePlacementPreview()
 		CameraLocation,
 		TraceEnd,
 		ECC_Visibility,
-		QueryParams
-	);
+		QueryParams);
 
 	if (bHit)
 	{
@@ -1109,7 +1125,8 @@ void AOutercorpCharacter::UpdatePlacementPreview()
 			FVector ScaledMax = ItemBounds.Max * HeldItemScale;
 
 			// Offset by the scaled bottom of the mesh so it sits on the surface
-			BottomOffset = FVector(0, 0, -ScaledMin.Z);		}
+			BottomOffset = FVector(0, 0, -ScaledMin.Z);
+		}
 
 		PlacementLocation = HitResult.Location + BottomOffset;
 		bHasValidPlacement = true;
@@ -1127,7 +1144,7 @@ void AOutercorpCharacter::UpdatePlacementPreview()
 		{
 			// Free placement allowed - can place anywhere within max distance
 			PlacementLocation = TraceEnd;
-			bHasValidPlacement = true;  // Valid because free placement is allowed
+			bHasValidPlacement = true; // Valid because free placement is allowed
 
 			PlacementGhost->SetWorldLocation(PlacementLocation);
 			PlacementGhost->SetWorldRotation(FRotator::ZeroRotator);
@@ -1187,7 +1204,8 @@ void AOutercorpCharacter::OpenInventory_Implementation()
 		BringWindowToFront(InventoryWindow);
 	}
 	else
-	{	}
+	{
+	}
 
 	APlayerController *PC = Cast<APlayerController>(GetController());
 	if (PC)
@@ -1204,11 +1222,13 @@ void AOutercorpCharacter::OpenInventory_Implementation()
 void AOutercorpCharacter::BindInventoryEvents()
 {
 	if (!InventoryWidget)
-	{		return;
+	{
+		return;
 	}
 
 	if (!InventoryComponent)
-	{		return;
+	{
+		return;
 	}
 
 	// Bind to close event
@@ -1221,14 +1241,16 @@ void AOutercorpCharacter::BindInventoryEvents()
 UCanvasPanel *AOutercorpCharacter::GetHUDCanvas() const
 {
 	if (!BaseHUDWidget)
-	{		return nullptr;
+	{
+		return nullptr;
 	}
 
 	// Try to get the canvas panel named "WindowCanvas" from the HUD widget
 	UCanvasPanel *Canvas = Cast<UCanvasPanel>(BaseHUDWidget->GetWidgetFromName(FName("WindowCanvas")));
 
 	if (!Canvas)
-	{	}
+	{
+	}
 
 	return Canvas;
 }
@@ -1325,7 +1347,8 @@ void AOutercorpCharacter::OpenCharacter_Implementation()
 void AOutercorpCharacter::BindCharacterEvents()
 {
 	if (!CharacterWidget)
-	{		return;
+	{
+		return;
 	}
 
 	// Bind to close event
@@ -1491,7 +1514,8 @@ void AOutercorpCharacter::DebugPrintWidgetType(UUserWidget *Widget) const
 void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindow)
 {
 	if (!ModularWindow)
-	{		return;
+	{
+		return;
 	}
 
 	// Store the modular window reference
@@ -1500,17 +1524,20 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindo
 	// Get the ChildWidgetCanvas from the modular window
 	UCanvasPanel *ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
-	{		return;
+	{
+		return;
 	}
 
 	// Create the character widget
 	if (!CharacterWidgetClass)
-	{		return;
+	{
+		return;
 	}
 
 	CharacterWidget = CreateWidget<UCharacterWidget>(GetWorld(), CharacterWidgetClass);
 	if (!CharacterWidget)
-	{		return;
+	{
+		return;
 	}
 
 	// Add the character widget to the child canvas
@@ -1556,7 +1583,8 @@ void AOutercorpCharacter::SetupCharacterWidgetInWindow(UUserWidget *ModularWindo
 void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget *ModularWindow)
 {
 	if (!ModularWindow)
-	{		return;
+	{
+		return;
 	}
 
 	// Store the modular window reference
@@ -1565,17 +1593,20 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget *ModularWindo
 	// Get the ChildWidgetCanvas from the modular window
 	UCanvasPanel *ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
-	{		return;
+	{
+		return;
 	}
 
 	// Create the inventory widget
 	if (!InventoryWidgetClass)
-	{		return;
+	{
+		return;
 	}
 
 	InventoryWidget = CreateWidget<UInventoryWidget>(GetWorld(), InventoryWidgetClass);
 	if (!InventoryWidget)
-	{		return;
+	{
+		return;
 	}
 
 	// Add the inventory widget to the child canvas
@@ -1621,7 +1652,8 @@ void AOutercorpCharacter::SetupInventoryWidgetInWindow(UUserWidget *ModularWindo
 void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget *ModularWindow)
 {
 	if (!ModularWindow)
-	{		return;
+	{
+		return;
 	}
 
 	// Store the modular window reference
@@ -1630,17 +1662,20 @@ void AOutercorpCharacter::SetupItemInfoWidgetInWindow(UUserWidget *ModularWindow
 	// Get the ChildWidgetCanvas from the modular window
 	UCanvasPanel *ChildCanvas = Cast<UCanvasPanel>(ModularWindow->GetWidgetFromName(FName("ChildWidgetCanvas")));
 	if (!ChildCanvas)
-	{		return;
+	{
+		return;
 	}
 
 	// Create the item info widget
 	if (!ItemInfoWidgetClass)
-	{		return;
+	{
+		return;
 	}
 
 	ItemInfoWidget = CreateWidget<UUserWidget>(GetWorld(), ItemInfoWidgetClass);
 	if (!ItemInfoWidget)
-	{		return;
+	{
+		return;
 	}
 
 	// Add the item info widget to the child canvas
@@ -1690,7 +1725,7 @@ void AOutercorpCharacter::OpenItemInfo(const FInventoryItem &Item)
 		// Call SetItemInfo on the widget if it's a UItemInfoWidget
 		if (ItemInfoWidget)
 		{
-			UItemInfoWidget* InfoWidget = Cast<UItemInfoWidget>(ItemInfoWidget);
+			UItemInfoWidget *InfoWidget = Cast<UItemInfoWidget>(ItemInfoWidget);
 			if (InfoWidget)
 			{
 				InfoWidget->SetItemInfo(Item);
@@ -1701,7 +1736,9 @@ void AOutercorpCharacter::OpenItemInfo(const FInventoryItem &Item)
 		UpdateItemInfoDisplay();
 	}
 	else
-	{	}
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ItemInfoWindow is not valid in OpenItemInfo"));
+	}
 
 	// Ensure UI input mode is enabled
 	APlayerController *PC = Cast<APlayerController>(GetController());
@@ -1817,7 +1854,8 @@ void AOutercorpCharacter::SaveUILayout()
 {
 	UOutercorpSaveGame *SaveGameInstance = Cast<UOutercorpSaveGame>(UGameplayStatics::CreateSaveGameObject(UOutercorpSaveGame::StaticClass()));
 	if (!SaveGameInstance)
-	{		return;
+	{
+		return;
 	}
 
 	// Minimum valid window size to prevent saving collapsed/invalid states
@@ -1966,7 +2004,8 @@ void AOutercorpCharacter::LoadUILayout()
 
 	UOutercorpSaveGame *LoadedGame = Cast<UOutercorpSaveGame>(UGameplayStatics::LoadGameFromSlot(UOutercorpSaveGame::SaveSlotName, UOutercorpSaveGame::UserIndex));
 	if (!LoadedGame)
-	{		return;
+	{
+		return;
 	}
 
 	// Minimum valid window size to prevent loading collapsed/invalid states
@@ -2155,7 +2194,7 @@ void AOutercorpCharacter::OnWindowLayoutChanged()
 	SaveUILayout();
 }
 
-void AOutercorpCharacter::OnWindowClicked(UWindow* ClickedWindow)
+void AOutercorpCharacter::OnWindowClicked(UWindow *ClickedWindow)
 {
 	if (ClickedWindow)
 	{
@@ -2178,14 +2217,14 @@ void AOutercorpCharacter::OnItemInfoWindowInteractStart()
 	BringWindowToFront(ItemInfoWindow);
 }
 
-void AOutercorpCharacter::BringWindowToFront(UUserWidget* Window)
+void AOutercorpCharacter::BringWindowToFront(UUserWidget *Window)
 {
 	if (!Window)
 	{
 		return;
 	}
 
-	UWindow* WindowObj = Cast<UWindow>(Window);
+	UWindow *WindowObj = Cast<UWindow>(Window);
 	if (!WindowObj)
 	{
 		return;
@@ -2193,11 +2232,11 @@ void AOutercorpCharacter::BringWindowToFront(UUserWidget* Window)
 
 	// Find the highest Z-order among all managed windows
 	int32 HighestZOrder = 0;
-	for (UUserWidget* ManagedWindow : ManagedWindows)
+	for (UUserWidget *ManagedWindow : ManagedWindows)
 	{
 		if (ManagedWindow && ManagedWindow != Window)
 		{
-			UWindow* ManagedWindowObj = Cast<UWindow>(ManagedWindow);
+			UWindow *ManagedWindowObj = Cast<UWindow>(ManagedWindow);
 			if (ManagedWindowObj)
 			{
 				int32 ZOrder = ManagedWindowObj->GetZOrder();
@@ -2213,14 +2252,14 @@ void AOutercorpCharacter::BringWindowToFront(UUserWidget* Window)
 	WindowObj->SetZOrder(HighestZOrder + 1);
 }
 
-void AOutercorpCharacter::RegisterWindow(UUserWidget* Window)
+void AOutercorpCharacter::RegisterWindow(UUserWidget *Window)
 {
 	if (Window && !ManagedWindows.Contains(Window))
 	{
 		ManagedWindows.Add(Window);
 
 		// Bind to the window clicked event
-		UWindow* WindowObj = Cast<UWindow>(Window);
+		UWindow *WindowObj = Cast<UWindow>(Window);
 		if (WindowObj)
 		{
 			// Create a lambda to capture the window pointer
@@ -2235,16 +2274,20 @@ void AOutercorpCharacter::RegisterWindow(UUserWidget* Window)
 void AOutercorpCharacter::SetupNotificationCanvas()
 {
 	if (!NotificationComponent)
-	{		return;
+	{
+		return;
 	}
 
 	// Get the HUD canvas to add notifications to
-	UCanvasPanel* HUDCanvas = GetHUDCanvas();
+	UCanvasPanel *HUDCanvas = GetHUDCanvas();
 	if (HUDCanvas)
 	{
-		NotificationComponent->NotificationCanvas = HUDCanvas;	}
+		NotificationComponent->NotificationCanvas = HUDCanvas;
+	}
 	else
-	{	}
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Could not find HUD Canvas for notifications"));
+	}
 }
 
 void AOutercorpCharacter::SetCrosshairVisibility(bool bVisible)
@@ -2254,7 +2297,7 @@ void AOutercorpCharacter::SetCrosshairVisibility(bool bVisible)
 		return;
 	}
 
-	UWidget* HUDCrosshair = BaseHUDWidget->GetWidgetFromName(FName("WBP_Crosshair"));
+	UWidget *HUDCrosshair = BaseHUDWidget->GetWidgetFromName(FName("WBP_Crosshair"));
 	if (HUDCrosshair)
 	{
 		HUDCrosshair->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -2270,24 +2313,25 @@ void AOutercorpCharacter::UpdateConstructionControlsVisibility()
 
 	// Try to get the Border widget that wraps the construction controls text
 	// Make sure the Border is named "ConstructionControlsBorder" in the Blueprint and has "Is Variable" checked
-	UWidget* ConstructionControlsWidget = BaseHUDWidget->GetWidgetFromName(FName("ConstructionControlsBorder"));
+	UWidget *ConstructionControlsWidget = BaseHUDWidget->GetWidgetFromName(FName("ConstructionControlsBorder"));
 
 	// If not found via GetWidgetFromName, try searching in the root canvas
 	if (!ConstructionControlsWidget)
 	{
 		// Get the root widget (should be a canvas)
-		UPanelWidget* RootPanel = Cast<UPanelWidget>(BaseHUDWidget->GetRootWidget());
+		UPanelWidget *RootPanel = Cast<UPanelWidget>(BaseHUDWidget->GetRootWidget());
 		if (RootPanel)
 		{
 			// Search through all children recursively
-			TFunction<UWidget*(UPanelWidget*)> FindConstructionControlsRecursive;
-			FindConstructionControlsRecursive = [&](UPanelWidget* Panel) -> UWidget*
+			TFunction<UWidget *(UPanelWidget *)> FindConstructionControlsRecursive;
+			FindConstructionControlsRecursive = [&](UPanelWidget *Panel) -> UWidget *
 			{
-				if (!Panel) return nullptr;
+				if (!Panel)
+					return nullptr;
 
 				for (int32 i = 0; i < Panel->GetChildrenCount(); ++i)
 				{
-					UWidget* Child = Panel->GetChildAt(i);
+					UWidget *Child = Panel->GetChildAt(i);
 					if (Child)
 					{
 						if (Child->GetFName() == FName("ConstructionControlsBorder"))
@@ -2296,10 +2340,11 @@ void AOutercorpCharacter::UpdateConstructionControlsVisibility()
 						}
 
 						// Recursively search if this child is also a panel
-						if (UPanelWidget* ChildPanel = Cast<UPanelWidget>(Child))
+						if (UPanelWidget *ChildPanel = Cast<UPanelWidget>(Child))
 						{
-							UWidget* Found = FindConstructionControlsRecursive(ChildPanel);
-							if (Found) return Found;
+							UWidget *Found = FindConstructionControlsRecursive(ChildPanel);
+							if (Found)
+								return Found;
 						}
 					}
 				}
@@ -2356,7 +2401,8 @@ void AOutercorpCharacter::EnterConstructionMode()
 
 	// Can't enter if holding an item
 	if (HeldItemData)
-	{		return;
+	{
+		return;
 	}
 
 	// If in delete mode, exit it first
@@ -2423,7 +2469,7 @@ void AOutercorpCharacter::EnterConstructionMode()
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	// Use the current slot's data (we already validated it exists above)
-	UConstructionPartData* DataToUse = ConstructionPartSlots[CurrentConstructionSlot];
+	UConstructionPartData *DataToUse = ConstructionPartSlots[CurrentConstructionSlot];
 
 	// Use the Blueprint class from the DataAsset if specified, otherwise fallback to ConstructionPartClass
 	TSubclassOf<AConstructionPart> ClassToSpawn = DataToUse->PartBlueprintClass ? DataToUse->PartBlueprintClass : ConstructionPartClass;
@@ -2432,8 +2478,7 @@ void AOutercorpCharacter::EnterConstructionMode()
 		ClassToSpawn,
 		FVector::ZeroVector,
 		FRotator::ZeroRotator,
-		SpawnParams
-	);
+		SpawnParams);
 
 	if (ConstructionGhostPart)
 	{
@@ -2450,7 +2495,7 @@ void AOutercorpCharacter::EnterConstructionMode()
 			// Get MeshComponent's offset from actor root
 			FVector MeshRelLoc = ConstructionGhostPart->MeshComponent->GetRelativeLocation();
 
-			for (UBoxComponent* BoundComp : ConstructionGhostPart->OverlapBounds)
+			for (UBoxComponent *BoundComp : ConstructionGhostPart->OverlapBounds)
 			{
 				if (BoundComp)
 				{
@@ -2480,12 +2525,13 @@ void AOutercorpCharacter::EnterConstructionMode()
 		if (NotificationComponent)
 		{
 			FString ModeText = FString::Printf(TEXT("Construction Mode: ON | Rotation: %s"),
-				bRotationSnapEnabled ? TEXT("SNAP") : TEXT("FREE"));
+											   bRotationSnapEnabled ? TEXT("SNAP") : TEXT("FREE"));
 			NotificationComponent->ShowSimpleNotification(FText::FromString(ModeText), ENotificationType::Info, 2.0f);
 		}
 	}
 	else
-	{		bIsInConstructionMode = false;
+	{
+		bIsInConstructionMode = false;
 	}
 }
 
@@ -2542,7 +2588,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 	bool bFoundGroundPoint = false;
 	FVector PlacementPos;
 	FRotator PlacementRot = FRotator::ZeroRotator;
-	CurrentSnapTarget = nullptr; // Store the part we're snapping to for overlap checks
+	CurrentSnapTarget = nullptr;	  // Store the part we're snapping to for overlap checks
 	CurrentTargetSnapPoint = nullptr; // Store the target snap point for rotation testing
 
 	// Try snap point snapping using Arrow components (snapping.txt guide)
@@ -2568,9 +2614,9 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 		bool bHitSomething = GetWorld()->LineTraceSingleByChannel(TraceHit, CameraLocation, TraceEnd, ECC_Visibility, TraceParams);
 
-		AConstructionPart* TargetPart = nullptr;
-		UArrowComponent* BestTargetSnapPoint = nullptr;
-		UArrowComponent* BestGhostSnapPoint = nullptr;
+		AConstructionPart *TargetPart = nullptr;
+		UArrowComponent *BestTargetSnapPoint = nullptr;
+		UArrowComponent *BestGhostSnapPoint = nullptr;
 		FVector SearchLocation = TraceEnd; // Default search location
 
 		if (bHitSomething)
@@ -2583,32 +2629,34 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		// This is useful for parts with hollow geometry (like racks)
 		if (!TargetPart)
 		{
-			TArray<AActor*> FoundParts;
+			TArray<AActor *> FoundParts;
 			UGameplayStatics::GetAllActorsOfClass(GetWorld(), AConstructionPart::StaticClass(), FoundParts);
 
 			float ClosestSnapDist = FLT_MAX;
-			AConstructionPart* BestPart = nullptr;
+			AConstructionPart *BestPart = nullptr;
 
 			// Instead of finding closest part, find the part with a snap point closest to our aim ray
-			for (AActor* Actor : FoundParts)
+			for (AActor *Actor : FoundParts)
 			{
-				AConstructionPart* Part = Cast<AConstructionPart>(Actor);
+				AConstructionPart *Part = Cast<AConstructionPart>(Actor);
 				if (!Part || Part == ConstructionGhostPart || Part == HeldConstructionPart || Part->CurrentState == EConstructionPartState::InInventory)
 				{
 					continue;
 				}
 
 				// Check if any of this part's snap points are close to our aim ray
-				for (UArrowComponent* SnapPoint : Part->SnapPoints)
+				for (UArrowComponent *SnapPoint : Part->SnapPoints)
 				{
-					if (!SnapPoint) continue;
+					if (!SnapPoint)
+						continue;
 
 					FVector SnapLocation = SnapPoint->GetComponentLocation();
 					FVector ToSnap = SnapLocation - CameraLocation;
 					float ProjectionLength = FVector::DotProduct(ToSnap, CameraForward);
 
 					// Only consider snap points in front of camera
-					if (ProjectionLength < 50.0f) continue;
+					if (ProjectionLength < 50.0f)
+						continue;
 
 					FVector ClosestPointOnRay = CameraLocation + (CameraForward * ProjectionLength);
 					float DistFromRay = FVector::Dist(SnapLocation, ClosestPointOnRay);
@@ -2632,9 +2680,10 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			// STEP 3B: Choose best target snap point based on camera aim direction
 			// Find the snap point that's closest to our camera's aim line
 			float ClosestDist = FLT_MAX;
-			for (UArrowComponent* TargetSnap : TargetPart->SnapPoints)
+			for (UArrowComponent *TargetSnap : TargetPart->SnapPoints)
 			{
-				if (!TargetSnap) continue;
+				if (!TargetSnap)
+					continue;
 
 				FVector SnapLocation = TargetSnap->GetComponentLocation();
 
@@ -2675,9 +2724,10 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				float BestDot = -1.0f;
 				float BestDistance = FLT_MAX;
 
-				for (UArrowComponent* GhostSnap : ConstructionGhostPart->SnapPoints)
+				for (UArrowComponent *GhostSnap : ConstructionGhostPart->SnapPoints)
 				{
-					if (!GhostSnap) continue;
+					if (!GhostSnap)
+						continue;
 
 					FVector GhostForward = GhostSnap->GetForwardVector();
 					float Dot = FVector::DotProduct(GhostForward, DesiredNormal);
@@ -2717,7 +2767,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		{
 			bFoundSnapPoint = true;
 			bIsCurrentlySnapped = true;
-			CurrentSnapTarget = TargetPart; // Store for overlap checking
+			CurrentSnapTarget = TargetPart;				  // Store for overlap checking
 			CurrentTargetSnapPoint = BestTargetSnapPoint; // Store for rotation testing
 
 			// STEP 5: Compute rotation - align normals then apply 90° twist
@@ -2792,7 +2842,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				float NormalizedOffset = FMath::Fmod(SnapTwistOffset, 360.0f);
 				if (NormalizedOffset == 90.0f)
 				{
-					ActualRotation = 90.0f;  // Perpendicular right
+					ActualRotation = 90.0f; // Perpendicular right
 				}
 				else if (NormalizedOffset == 270.0f)
 				{
@@ -2849,19 +2899,19 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			// For top/bottom snaps, ALWAYS check overlaps (ignore bAllowOverlap)
 			// For other snaps, respect the bAllowOverlap setting
 			bool bShouldCheckOverlap = bIsTopBottomSnap ||
-				(ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap);
+									   (ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap);
 
 			if (bShouldCheckOverlap)
 			{
 				if (bIsTopBottomSnap || ConstructionGhostPart->OverlapBounds.Num() > 0)
 				{
 					// Get all nearby construction parts
-					TArray<AActor*> AllParts;
+					TArray<AActor *> AllParts;
 					UGameplayStatics::GetAllActorsOfClass(GetWorld(), AConstructionPart::StaticClass(), AllParts);
 
-					for (AActor* Actor : AllParts)
+					for (AActor *Actor : AllParts)
 					{
-						AConstructionPart* OtherPart = Cast<AConstructionPart>(Actor);
+						AConstructionPart *OtherPart = Cast<AConstructionPart>(Actor);
 						if (!OtherPart || OtherPart == ConstructionGhostPart || OtherPart == TargetPart)
 						{
 							continue;
@@ -2879,16 +2929,18 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 						if (ConstructionGhostPart->OverlapBounds.Num() > 0 && OtherPart->OverlapBounds.Num() > 0)
 						{
 							// Detailed bounds checking
-							for (UBoxComponent* GhostBound : ConstructionGhostPart->OverlapBounds)
+							for (UBoxComponent *GhostBound : ConstructionGhostPart->OverlapBounds)
 							{
-								if (!GhostBound) continue;
+								if (!GhostBound)
+									continue;
 
 								FVector GhostCenter = PlacementPos + PlacementRot.RotateVector(GhostBound->GetRelativeLocation());
 								FVector GhostExtent = GhostBound->GetScaledBoxExtent();
 
-								for (UBoxComponent* OtherBound : OtherPart->OverlapBounds)
+								for (UBoxComponent *OtherBound : OtherPart->OverlapBounds)
 								{
-									if (!OtherBound) continue;
+									if (!OtherBound)
+										continue;
 
 									FVector OtherCenter = OtherPart->GetActorLocation() + OtherPart->GetActorRotation().RotateVector(OtherBound->GetRelativeLocation());
 									FVector OtherExtent = OtherBound->GetScaledBoxExtent();
@@ -2904,7 +2956,8 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 									}
 								}
 
-								if (bPartsOverlap) break;
+								if (bPartsOverlap)
+									break;
 							}
 						}
 						else if (ConstructionGhostPart->MeshComponent && OtherPart->MeshComponent && ConstructionGhostPart->MeshComponent->GetStaticMesh())
@@ -2954,7 +3007,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 	// Track overlap from ground placement
 	bool bHasOverlap = false;
-	AActor* GroundActor = nullptr; // Track the ground/surface actor to exclude from overlap checks
+	AActor *GroundActor = nullptr; // Track the ground/surface actor to exclude from overlap checks
 
 	// Check if we should skip ground snapping when bAllowFloorOverlap is enabled
 	bool bSkipGroundSnap = ConstructionGhostPart && ConstructionGhostPart->PartData && ConstructionGhostPart->PartData->bAllowFloorOverlap;
@@ -2971,7 +3024,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		// Use a sphere trace for more stable ground detection (reduces flickering at distance)
 		float SphereRadius = 10.0f; // Small sphere to smooth out minor surface variations
 		if (GetWorld()->SweepSingleByChannel(HitResult, CameraLocation, TraceEnd, FQuat::Identity,
-			ECC_Visibility, FCollisionShape::MakeSphere(SphereRadius), QueryParams))
+											 ECC_Visibility, FCollisionShape::MakeSphere(SphereRadius), QueryParams))
 		{
 			bFoundGroundPoint = true;
 			GroundActor = HitResult.GetActor(); // Store ground actor to exclude from overlap checks
@@ -3003,7 +3056,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				{
 					// Calculate combined bounds from all OverlapBounds
 					bool bFirstBound = true;
-					for (UBoxComponent* BoundComp : ConstructionGhostPart->OverlapBounds)
+					for (UBoxComponent *BoundComp : ConstructionGhostPart->OverlapBounds)
 					{
 						if (BoundComp)
 						{
@@ -3040,12 +3093,12 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 				// Also check against all placed construction parts
 				if (!bHasOverlap)
 				{
-					TArray<AActor*> AllConstructionParts;
+					TArray<AActor *> AllConstructionParts;
 					UGameplayStatics::GetAllActorsOfClass(GetWorld(), AConstructionPart::StaticClass(), AllConstructionParts);
 
-					for (AActor* PartActor : AllConstructionParts)
+					for (AActor *PartActor : AllConstructionParts)
 					{
-						AConstructionPart* OtherPart = Cast<AConstructionPart>(PartActor);
+						AConstructionPart *OtherPart = Cast<AConstructionPart>(PartActor);
 						if (!OtherPart || OtherPart == ConstructionGhostPart ||
 							OtherPart->CurrentState == EConstructionPartState::InInventory ||
 							OtherPart->CurrentState == EConstructionPartState::GhostPreview)
@@ -3057,7 +3110,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 						if (OtherPart->OverlapBounds.Num() > 0)
 						{
 							// Check each overlap bound of the target part
-							for (UBoxComponent* TargetBound : OtherPart->OverlapBounds)
+							for (UBoxComponent *TargetBound : OtherPart->OverlapBounds)
 							{
 								if (TargetBound)
 								{
@@ -3191,13 +3244,13 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 		// OVERRIDE: For snapped placements, ALWAYS check overlaps regardless of bAllowOverlap
 		// This ensures rotated crates don't overlap with adjacent crates
 		bool bShouldDoFinalCheck = (ConstructionGhostPart->PartData && !ConstructionGhostPart->PartData->bAllowOverlap) ||
-			bIsCurrentlySnapped;
+								   bIsCurrentlySnapped;
 
 		if (bShouldDoFinalCheck)
 		{
 
 			// Check all overlap bounds (supports multiple bounds for complex shapes)
-			TArray<UBoxComponent*> BoundsToCheck;
+			TArray<UBoxComponent *> BoundsToCheck;
 
 			if (ConstructionGhostPart->OverlapBounds.Num() > 0)
 			{
@@ -3215,9 +3268,10 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 			QueryParams.AddIgnoredActor(this);
 
 			// Check each overlap bound
-			for (UBoxComponent* OverlapBound : BoundsToCheck)
+			for (UBoxComponent *OverlapBound : BoundsToCheck)
 			{
-				if (!OverlapBound) continue;
+				if (!OverlapBound)
+					continue;
 
 				TArray<FOverlapResult> Overlaps;
 				FVector OverlapCheckCenter = PlacementPos;
@@ -3228,7 +3282,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 				// Query against multiple channels to catch all construction parts
 				// Some parts may use WorldStatic, others WorldDynamic, or Visibility
-				TArray<ECollisionChannel> ChannelsToCheck = { ECC_WorldStatic, ECC_WorldDynamic, ECC_Visibility };
+				TArray<ECollisionChannel> ChannelsToCheck = {ECC_WorldStatic, ECC_WorldDynamic, ECC_Visibility};
 
 				for (ECollisionChannel Channel : ChannelsToCheck)
 				{
@@ -3239,18 +3293,17 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 						PlacementRot.Quaternion(),
 						Channel,
 						CollisionShape,
-						QueryParams
-					);
+						QueryParams);
 					Overlaps.Append(ChannelOverlaps);
 				}
 
-
 				if (Overlaps.Num() > 0)
 				{
-					for (const FOverlapResult& Overlap : Overlaps)
+					for (const FOverlapResult &Overlap : Overlaps)
 					{
-						AActor* OverlapActor = Overlap.GetActor();
-						if (!OverlapActor) continue;
+						AActor *OverlapActor = Overlap.GetActor();
+						if (!OverlapActor)
+							continue;
 
 						// Skip the ground/surface actor we're placing on
 						if (GroundActor && OverlapActor == GroundActor)
@@ -3265,7 +3318,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 						}
 
 						// Check if it's a placed construction part
-						AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
+						AConstructionPart *OverlapPart = Cast<AConstructionPart>(OverlapActor);
 						if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
 						{
 							// For snapped placements, verify overlap with bounds checking to avoid false positives
@@ -3277,16 +3330,18 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 								if (ConstructionGhostPart->OverlapBounds.Num() > 0 && OverlapPart->OverlapBounds.Num() > 0)
 								{
 									// Detailed bounds checking
-									for (UBoxComponent* GhostBound : ConstructionGhostPart->OverlapBounds)
+									for (UBoxComponent *GhostBound : ConstructionGhostPart->OverlapBounds)
 									{
-										if (!GhostBound) continue;
+										if (!GhostBound)
+											continue;
 
 										FVector GhostCenter = PlacementPos + PlacementRot.RotateVector(GhostBound->GetRelativeLocation());
 										FVector GhostExtent = GhostBound->GetScaledBoxExtent();
 
-										for (UBoxComponent* OtherBound : OverlapPart->OverlapBounds)
+										for (UBoxComponent *OtherBound : OverlapPart->OverlapBounds)
 										{
-											if (!OtherBound) continue;
+											if (!OtherBound)
+												continue;
 
 											FVector OtherCenter = OverlapPart->GetActorLocation() + OverlapPart->GetActorRotation().RotateVector(OtherBound->GetRelativeLocation());
 											FVector OtherExtent = OtherBound->GetScaledBoxExtent();
@@ -3307,7 +3362,8 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 											}
 										}
 
-										if (bHasRealOverlap) break;
+										if (bHasRealOverlap)
+											break;
 									}
 								}
 								else
@@ -3333,7 +3389,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 								// Check if we're actually overlapping with any of the target part's bounds
 								bool bOverlapsWithTargetBounds = false;
-								for (UBoxComponent* TargetBound : OverlapPart->OverlapBounds)
+								for (UBoxComponent *TargetBound : OverlapPart->OverlapBounds)
 								{
 									if (TargetBound)
 									{
@@ -3392,7 +3448,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 				// Query against multiple channels to catch all construction parts
 				// Some parts may use WorldStatic, others WorldDynamic, or Visibility
-				TArray<ECollisionChannel> ChannelsToCheck = { ECC_WorldStatic, ECC_WorldDynamic, ECC_Visibility };
+				TArray<ECollisionChannel> ChannelsToCheck = {ECC_WorldStatic, ECC_WorldDynamic, ECC_Visibility};
 
 				for (ECollisionChannel Channel : ChannelsToCheck)
 				{
@@ -3403,18 +3459,17 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 						PlacementRot.Quaternion(),
 						Channel,
 						CollisionShape,
-						QueryParams
-					);
+						QueryParams);
 					Overlaps.Append(ChannelOverlaps);
 				}
 
-
 				if (Overlaps.Num() > 0)
 				{
-					for (const FOverlapResult& Overlap : Overlaps)
+					for (const FOverlapResult &Overlap : Overlaps)
 					{
-						AActor* OverlapActor = Overlap.GetActor();
-						if (!OverlapActor) continue;
+						AActor *OverlapActor = Overlap.GetActor();
+						if (!OverlapActor)
+							continue;
 
 						// Skip the ground/surface actor we're placing on
 						if (GroundActor && OverlapActor == GroundActor)
@@ -3429,7 +3484,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 						}
 
 						// Check if it's a placed construction part
-						AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
+						AConstructionPart *OverlapPart = Cast<AConstructionPart>(OverlapActor);
 						if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
 						{
 							// For snapped placements, verify overlap with bounds checking to avoid false positives
@@ -3441,16 +3496,18 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 								if (ConstructionGhostPart->OverlapBounds.Num() > 0 && OverlapPart->OverlapBounds.Num() > 0)
 								{
 									// Detailed bounds checking
-									for (UBoxComponent* GhostBound : ConstructionGhostPart->OverlapBounds)
+									for (UBoxComponent *GhostBound : ConstructionGhostPart->OverlapBounds)
 									{
-										if (!GhostBound) continue;
+										if (!GhostBound)
+											continue;
 
 										FVector GhostCenter = PlacementPos + PlacementRot.RotateVector(GhostBound->GetRelativeLocation());
 										FVector GhostExtent = GhostBound->GetScaledBoxExtent();
 
-										for (UBoxComponent* OtherBound : OverlapPart->OverlapBounds)
+										for (UBoxComponent *OtherBound : OverlapPart->OverlapBounds)
 										{
-											if (!OtherBound) continue;
+											if (!OtherBound)
+												continue;
 
 											FVector OtherCenter = OverlapPart->GetActorLocation() + OverlapPart->GetActorRotation().RotateVector(OtherBound->GetRelativeLocation());
 											FVector OtherExtent = OtherBound->GetScaledBoxExtent();
@@ -3471,7 +3528,8 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 											}
 										}
 
-										if (bHasRealOverlap) break;
+										if (bHasRealOverlap)
+											break;
 									}
 								}
 								else
@@ -3497,7 +3555,7 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 
 								// Check if we're actually overlapping with any of the target part's bounds
 								bool bOverlapsWithTargetBounds = false;
-								for (UBoxComponent* TargetBound : OverlapPart->OverlapBounds)
+								for (UBoxComponent *TargetBound : OverlapPart->OverlapBounds)
 								{
 									if (TargetBound)
 									{
@@ -3567,7 +3625,8 @@ void AOutercorpCharacter::UpdateConstructionPreview()
 void AOutercorpCharacter::PlaceConstructionPart()
 {
 	if (!bIsInConstructionMode || !ConstructionGhostPart || !bHasValidPlacement)
-	{		return;
+	{
+		return;
 	}
 
 	// Spawn the actual construction part at the ghost location
@@ -3575,15 +3634,14 @@ void AOutercorpCharacter::PlaceConstructionPart()
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 	// Use the Blueprint class from the DataAsset if specified, otherwise fallback to ConstructionPartClass
-	UConstructionPartData* DataToUse = ConstructionGhostPart->PartData;
+	UConstructionPartData *DataToUse = ConstructionGhostPart->PartData;
 	TSubclassOf<AConstructionPart> ClassToSpawn = (DataToUse && DataToUse->PartBlueprintClass) ? DataToUse->PartBlueprintClass : ConstructionPartClass;
 
-	AConstructionPart* NewPart = GetWorld()->SpawnActor<AConstructionPart>(
+	AConstructionPart *NewPart = GetWorld()->SpawnActor<AConstructionPart>(
 		ClassToSpawn,
 		ConstructionGhostPart->GetActorLocation(),
 		ConstructionGhostPart->GetActorRotation(),
-		SpawnParams
-	);
+		SpawnParams);
 
 	if (NewPart)
 	{
@@ -3597,7 +3655,8 @@ void AOutercorpCharacter::PlaceConstructionPart()
 		// If we have a target to snap to, attach
 		if (TargetConstructionPart && TargetSocketName != NAME_None && GhostSocketName != NAME_None)
 		{
-			NewPart->AttachToPart(TargetConstructionPart, TargetSocketName, GhostSocketName);		}
+			NewPart->AttachToPart(TargetConstructionPart, TargetSocketName, GhostSocketName);
+		}
 		else
 		{
 			// Free placement - just set to Placed state
@@ -3622,7 +3681,9 @@ void AOutercorpCharacter::PlaceConstructionPart()
 		}
 	}
 	else
-	{	}
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to spawn construction part"));
+	}
 
 	// Reset ghost rotation for next placement
 	CurrentGhostRotation = 0.0f;
@@ -3668,12 +3729,11 @@ void AOutercorpCharacter::ToggleSnapMode()
 		NotificationComponent->ShowSimpleNotification(
 			FText::FromString(ModeText),
 			ENotificationType::Info,
-			2.0f
-		);
+			2.0f);
 	}
 }
 
-bool AOutercorpCharacter::TestRotationForValidSnap(float TestRotationOffset, AConstructionPart* TargetPart, UArrowComponent* TargetSnapPoint) const
+bool AOutercorpCharacter::TestRotationForValidSnap(float TestRotationOffset, AConstructionPart *TargetPart, UArrowComponent *TargetSnapPoint) const
 {
 	if (!ConstructionGhostPart || !TargetPart || !TargetSnapPoint)
 	{
@@ -3688,12 +3748,13 @@ bool AOutercorpCharacter::TestRotationForValidSnap(float TestRotationOffset, ACo
 	FVector DesiredNormal = -TargetSnapPoint->GetForwardVector();
 
 	// Find a compatible snap point at this rotation
-	UArrowComponent* CompatibleGhostSnap = nullptr;
+	UArrowComponent *CompatibleGhostSnap = nullptr;
 
 	// Test each ghost snap point at this rotation to see if any would be compatible
-	for (UArrowComponent* GhostSnap : ConstructionGhostPart->SnapPoints)
+	for (UArrowComponent *GhostSnap : ConstructionGhostPart->SnapPoints)
 	{
-		if (!GhostSnap) continue;
+		if (!GhostSnap)
+			continue;
 
 		// Get the ghost snap's forward vector as if rotated by TestRotationOffset
 		// We need to rotate the snap point's RELATIVE forward by the test rotation
@@ -3773,15 +3834,16 @@ bool AOutercorpCharacter::TestRotationForValidSnap(float TestRotationOffset, ACo
 		FRotator TestPlacementRot = TestFinalRotation.Rotator();
 
 		// Check overlap using the same logic as main placement
-		TArray<UBoxComponent*> BoundsToCheck = ConstructionGhostPart->OverlapBounds;
+		TArray<UBoxComponent *> BoundsToCheck = ConstructionGhostPart->OverlapBounds;
 
 		FCollisionQueryParams QueryParams;
 		QueryParams.AddIgnoredActor(ConstructionGhostPart);
 		QueryParams.AddIgnoredActor(this);
 
-		for (UBoxComponent* OverlapBound : BoundsToCheck)
+		for (UBoxComponent *OverlapBound : BoundsToCheck)
 		{
-			if (!OverlapBound) continue;
+			if (!OverlapBound)
+				continue;
 
 			TArray<FOverlapResult> Overlaps;
 			FVector OverlapCheckCenter = TestPosition;
@@ -3790,7 +3852,7 @@ bool AOutercorpCharacter::TestRotationForValidSnap(float TestRotationOffset, ACo
 
 			FCollisionShape CollisionShape = FCollisionShape::MakeBox(BoxExtent);
 
-			TArray<ECollisionChannel> ChannelsToCheck = { ECC_WorldStatic, ECC_WorldDynamic, ECC_Visibility };
+			TArray<ECollisionChannel> ChannelsToCheck = {ECC_WorldStatic, ECC_WorldDynamic, ECC_Visibility};
 
 			for (ECollisionChannel Channel : ChannelsToCheck)
 			{
@@ -3801,17 +3863,17 @@ bool AOutercorpCharacter::TestRotationForValidSnap(float TestRotationOffset, ACo
 					TestPlacementRot.Quaternion(),
 					Channel,
 					CollisionShape,
-					QueryParams
-				);
+					QueryParams);
 				Overlaps.Append(ChannelOverlaps);
 			}
 
 			if (Overlaps.Num() > 0)
 			{
-				for (const FOverlapResult& Overlap : Overlaps)
+				for (const FOverlapResult &Overlap : Overlaps)
 				{
-					AActor* OverlapActor = Overlap.GetActor();
-					if (!OverlapActor) continue;
+					AActor *OverlapActor = Overlap.GetActor();
+					if (!OverlapActor)
+						continue;
 
 					// Skip the part we're snapping to
 					if (OverlapActor == TargetPart)
@@ -3820,14 +3882,14 @@ bool AOutercorpCharacter::TestRotationForValidSnap(float TestRotationOffset, ACo
 					}
 
 					// Check if it's a placed construction part
-					AConstructionPart* OverlapPart = Cast<AConstructionPart>(OverlapActor);
+					AConstructionPart *OverlapPart = Cast<AConstructionPart>(OverlapActor);
 					if (OverlapPart && OverlapPart->CurrentState == EConstructionPartState::Placed)
 					{
 						// Check against overlap bounds
 						if (OverlapPart->OverlapBounds.Num() > 0)
 						{
 							bool bOverlapsWithTargetBounds = false;
-							for (UBoxComponent* TargetBound : OverlapPart->OverlapBounds)
+							for (UBoxComponent *TargetBound : OverlapPart->OverlapBounds)
 							{
 								if (TargetBound)
 								{
@@ -3882,13 +3944,13 @@ bool AOutercorpCharacter::TestRotationForValidSnap(float TestRotationOffset, ACo
 	return true;
 }
 
-void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value)
+void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue &Value)
 {
 	// Allow adjustment when in construction mode, move mode, OR holding a pickupable item
 	bool bHoldingPickupableItem = (HeldItemData != nullptr && PlacementGhost && PlacementGhost->IsVisible());
 
 	if ((!bIsInConstructionMode && !bIsInMoveMode && !bHoldingPickupableItem) ||
-	    (!ConstructionGhostPart && !bHoldingPickupableItem))
+		(!ConstructionGhostPart && !bHoldingPickupableItem))
 	{
 		return;
 	}
@@ -3927,8 +3989,10 @@ void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value
 			}
 
 			// Wrap around 0-360
-			while (SnapTwistOffset >= 360.0f) SnapTwistOffset -= 360.0f;
-			while (SnapTwistOffset < 0.0f) SnapTwistOffset += 360.0f;
+			while (SnapTwistOffset >= 360.0f)
+				SnapTwistOffset -= 360.0f;
+			while (SnapTwistOffset < 0.0f)
+				SnapTwistOffset += 360.0f;
 		}
 		else
 		{
@@ -3945,8 +4009,10 @@ void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value
 				float TestOffset = OriginalOffset + (RotationDirection * (i + 1));
 
 				// Wrap to 0-360 range
-				while (TestOffset >= 360.0f) TestOffset -= 360.0f;
-				while (TestOffset < 0.0f) TestOffset += 360.0f;
+				while (TestOffset >= 360.0f)
+					TestOffset -= 360.0f;
+				while (TestOffset < 0.0f)
+					TestOffset += 360.0f;
 
 				// Test if this rotation would result in a valid snap
 				if (TestRotationForValidSnap(TestOffset, CurrentSnapTarget, CurrentTargetSnapPoint))
@@ -3966,8 +4032,10 @@ void AOutercorpCharacter::AdjustPlacementDistance(const FInputActionValue& Value
 				{
 					float TestOffset = OriginalOffset + (RotationDirection * (i + 1));
 
-					while (TestOffset >= 360.0f) TestOffset -= 360.0f;
-					while (TestOffset < 0.0f) TestOffset += 360.0f;
+					while (TestOffset >= 360.0f)
+						TestOffset -= 360.0f;
+					while (TestOffset < 0.0f)
+						TestOffset += 360.0f;
 
 					if (TestRotationForValidSnap(TestOffset, CurrentSnapTarget, CurrentTargetSnapPoint))
 					{
@@ -4043,8 +4111,7 @@ void AOutercorpCharacter::ToggleRotationSnap()
 		NotificationComponent->ShowSimpleNotification(
 			FText::FromString(ModeText),
 			ENotificationType::Info,
-			2.0f
-		);
+			2.0f);
 	}
 }
 
@@ -4064,8 +4131,7 @@ void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
 			NotificationComponent->ShowSimpleNotification(
 				FText::FromString(FString::Printf(TEXT("Construction slot %d is empty"), SlotIndex + 1)),
 				ENotificationType::Warning,
-				2.0f
-			);
+				2.0f);
 		}
 		return;
 	}
@@ -4078,8 +4144,7 @@ void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
 			NotificationComponent->ShowSimpleNotification(
 				FText::FromString(FString::Printf(TEXT("Construction slot %d is empty"), SlotIndex + 1)),
 				ENotificationType::Warning,
-				2.0f
-			);
+				2.0f);
 		}
 		return;
 	}
@@ -4099,7 +4164,7 @@ void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	// Initialize with the selected slot's data
-	UConstructionPartData* DataToUse = ConstructionPartSlots[SlotIndex];
+	UConstructionPartData *DataToUse = ConstructionPartSlots[SlotIndex];
 
 	// Use the Blueprint class from the DataAsset if specified, otherwise fallback to ConstructionPartClass
 	TSubclassOf<AConstructionPart> ClassToSpawn = DataToUse->PartBlueprintClass ? DataToUse->PartBlueprintClass : ConstructionPartClass;
@@ -4108,8 +4173,7 @@ void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
 		ClassToSpawn,
 		FVector::ZeroVector,
 		FRotator::ZeroRotator,
-		SpawnParams
-	);
+		SpawnParams);
 
 	if (ConstructionGhostPart)
 	{
@@ -4125,7 +4189,7 @@ void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
 			// Get MeshComponent's offset from actor root
 			FVector MeshRelLoc = ConstructionGhostPart->MeshComponent->GetRelativeLocation();
 
-			for (UBoxComponent* BoundComp : ConstructionGhostPart->OverlapBounds)
+			for (UBoxComponent *BoundComp : ConstructionGhostPart->OverlapBounds)
 			{
 				if (BoundComp)
 				{
@@ -4155,7 +4219,6 @@ void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
 		// Reset rotation
 		CurrentGhostRotation = 0.0f;
 
-
 		// Show notification
 		if (NotificationComponent)
 		{
@@ -4167,8 +4230,7 @@ void AOutercorpCharacter::SwitchConstructionPartSlot(int32 SlotIndex)
 			NotificationComponent->ShowSimpleNotification(
 				FText::FromString(FString::Printf(TEXT("Slot %d: %s"), SlotIndex + 1, *PartName)),
 				ENotificationType::Info,
-				2.0f
-			);
+				2.0f);
 		}
 	}
 }
@@ -4320,8 +4382,7 @@ void AOutercorpCharacter::EnterDeleteMode()
 		NotificationComponent->ShowSimpleNotification(
 			FText::FromString("Delete Mode: ON"),
 			ENotificationType::Warning,
-			2.0f
-		);
+			2.0f);
 	}
 }
 
@@ -4336,7 +4397,7 @@ void AOutercorpCharacter::ExitDeleteMode()
 		if (HighlightedPartForDeletion->MeshComponent)
 		{
 			// The AConstructionPart class handles restoring materials when ghost preview ends
-			HighlightedPartForDeletion->SetGhostPreview(true); // Temporarily set to valid
+			HighlightedPartForDeletion->SetGhostPreview(true);									// Temporarily set to valid
 			HighlightedPartForDeletion->SetPartState(HighlightedPartForDeletion->CurrentState); // Restore to current state
 		}
 		HighlightedPartForDeletion = nullptr;
@@ -4347,8 +4408,7 @@ void AOutercorpCharacter::ExitDeleteMode()
 		NotificationComponent->ShowSimpleNotification(
 			FText::FromString("Delete Mode: OFF"),
 			ENotificationType::Info,
-			2.0f
-		);
+			2.0f);
 	}
 }
 
@@ -4376,10 +4436,9 @@ void AOutercorpCharacter::UpdateDeleteModeHighlight()
 		CameraLocation,
 		TraceEnd,
 		ECC_Visibility,
-		QueryParams
-	);
+		QueryParams);
 
-	AConstructionPart* HitPart = nullptr;
+	AConstructionPart *HitPart = nullptr;
 	if (bHit && HitResult.GetActor())
 	{
 		HitPart = Cast<AConstructionPart>(HitResult.GetActor());
@@ -4449,22 +4508,21 @@ void AOutercorpCharacter::DeleteHighlightedPart()
 	}
 
 	// Clear all socket connections before destroying
-	for (FAttachmentPoint& AttachPoint : HighlightedPartForDeletion->AttachmentPoints)
+	for (FAttachmentPoint &AttachPoint : HighlightedPartForDeletion->AttachmentPoints)
 	{
 		// Clear all connections in the new Connections array
-		for (const FSocketConnection& Connection : AttachPoint.Connections)
+		for (const FSocketConnection &Connection : AttachPoint.Connections)
 		{
-			if (AConstructionPart* ConnectedPart = Cast<AConstructionPart>(Connection.ConnectedPart))
+			if (AConstructionPart *ConnectedPart = Cast<AConstructionPart>(Connection.ConnectedPart))
 			{
 				// Find and remove the reverse connection in the connected part
-				for (FAttachmentPoint& OtherAttachPoint : ConnectedPart->AttachmentPoints)
+				for (FAttachmentPoint &OtherAttachPoint : ConnectedPart->AttachmentPoints)
 				{
 					if (OtherAttachPoint.SocketName == Connection.ConnectedSocket)
 					{
 						// Remove connections pointing back to the part we're deleting
-						OtherAttachPoint.Connections.RemoveAll([this](const FSocketConnection& Conn) {
-							return Conn.ConnectedPart == HighlightedPartForDeletion;
-						});
+						OtherAttachPoint.Connections.RemoveAll([this](const FSocketConnection &Conn)
+															   { return Conn.ConnectedPart == HighlightedPartForDeletion; });
 						break;
 					}
 				}
@@ -4491,8 +4549,7 @@ void AOutercorpCharacter::DeleteHighlightedPart()
 		NotificationComponent->ShowSimpleNotification(
 			FText::FromString(NotificationText),
 			ENotificationType::Warning,
-			1.5f
-		);
+			1.5f);
 	}
 }
 
@@ -4547,8 +4604,7 @@ void AOutercorpCharacter::EnterMoveMode()
 		NotificationComponent->ShowSimpleNotification(
 			FText::FromString("Move Mode: ON - Click to pick up parts"),
 			ENotificationType::Info,
-			2.0f
-		);
+			2.0f);
 	}
 
 	// Update construction controls visibility
@@ -4594,8 +4650,7 @@ void AOutercorpCharacter::ExitMoveMode()
 		NotificationComponent->ShowSimpleNotification(
 			FText::FromString("Move Mode: OFF"),
 			ENotificationType::Info,
-			2.0f
-		);
+			2.0f);
 	}
 
 	// Update construction controls visibility
@@ -4626,10 +4681,9 @@ void AOutercorpCharacter::UpdateMoveModeHighlight()
 		CameraLocation,
 		TraceEnd,
 		ECC_Visibility,
-		QueryParams
-	);
+		QueryParams);
 
-	AConstructionPart* HitPart = nullptr;
+	AConstructionPart *HitPart = nullptr;
 	if (bHit && HitResult.GetActor())
 	{
 		HitPart = Cast<AConstructionPart>(HitResult.GetActor());
@@ -4735,8 +4789,7 @@ void AOutercorpCharacter::PickupOrPlaceMovePart()
 				NotificationComponent->ShowSimpleNotification(
 					FText::FromString(FString::Printf(TEXT("%s Placed"), *PartName)),
 					ENotificationType::Success,
-					1.5f
-				);
+					1.5f);
 			}
 
 			// Clear held part and ghost
@@ -4756,8 +4809,7 @@ void AOutercorpCharacter::PickupOrPlaceMovePart()
 				NotificationComponent->ShowSimpleNotification(
 					FText::FromString("Invalid placement - part returned"),
 					ENotificationType::Warning,
-					1.5f
-				);
+					1.5f);
 			}
 
 			// Restore visibility and collision
@@ -4785,7 +4837,7 @@ void AOutercorpCharacter::PickupOrPlaceMovePart()
 
 		// IMPORTANT: Clear all socket connections before moving
 		// This disconnects the part from any attached parts
-		for (FAttachmentPoint& AttachPoint : HeldConstructionPart->AttachmentPoints)
+		for (FAttachmentPoint &AttachPoint : HeldConstructionPart->AttachmentPoints)
 		{
 			if (AttachPoint.bIsOccupied || AttachPoint.Connections.Num() > 0)
 			{
@@ -4797,7 +4849,7 @@ void AOutercorpCharacter::PickupOrPlaceMovePart()
 		HeldConstructionPart->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
 		// Store the original part data and transform
-		UConstructionPartData* PartData = HeldConstructionPart->PartData;
+		UConstructionPartData *PartData = HeldConstructionPart->PartData;
 		FVector OriginalScale = HeldConstructionPart->GetActorScale3D();
 
 		// Create a ghost copy for preview (using the same actor class)
@@ -4814,8 +4866,7 @@ void AOutercorpCharacter::PickupOrPlaceMovePart()
 				ClassToSpawn,
 				FVector::ZeroVector,
 				FRotator::ZeroRotator,
-				SpawnParams
-			);
+				SpawnParams);
 
 			if (ConstructionGhostPart)
 			{
@@ -4835,7 +4886,7 @@ void AOutercorpCharacter::PickupOrPlaceMovePart()
 					// Get MeshComponent's offset from actor root
 					FVector MeshRelLoc = ConstructionGhostPart->MeshComponent->GetRelativeLocation();
 
-					for (UBoxComponent* BoundComp : ConstructionGhostPart->OverlapBounds)
+					for (UBoxComponent *BoundComp : ConstructionGhostPart->OverlapBounds)
 					{
 						if (BoundComp)
 						{
@@ -4894,8 +4945,7 @@ void AOutercorpCharacter::PickupOrPlaceMovePart()
 			NotificationComponent->ShowSimpleNotification(
 				FText::FromString(FString::Printf(TEXT("%s Picked Up - Move and rotate, click to place"), *PartName)),
 				ENotificationType::Info,
-				2.5f
-			);
+				2.5f);
 		}
 	}
 }
@@ -4916,10 +4966,10 @@ void AOutercorpCharacter::SetEquippableState(EEquippableState NewState)
 	EEquippableState OldState = EquippableState;
 	EquippableState = NewState;
 
-	UE_LOG(LogTemp, Log, TEXT("SetEquippableState: %d -> %d"), static_cast<int32>(OldState), static_cast<int32>(NewState));
+	// UE_LOG(LogTemp, Log, TEXT("SetEquippableState: %d -> %d"), static_cast<int32>(OldState), static_cast<int32>(NewState));
 }
 
-void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& InventoryItem)
+void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem &InventoryItem)
 {
 	if (!InventoryItem.IsValid() || !InventoryItem.ItemData)
 	{
@@ -4953,24 +5003,23 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& Inventory
 	// Harvesting tools (Axe, Pickaxe, Shovel, Sickle, Knife) use HarvestingTool class
 	switch (InventoryItem.ItemData->ToolType)
 	{
-		case EToolType::Axe:
-		case EToolType::Pickaxe:
-		case EToolType::Shovel:
-		case EToolType::Sickle:
-		case EToolType::Knife:
-			ToolClassToSpawn = AHarvestingTool::StaticClass();
-			break;
-		default:
-			ToolClassToSpawn = AEquippableTool::StaticClass();
-			break;
+	case EToolType::Axe:
+	case EToolType::Pickaxe:
+	case EToolType::Shovel:
+	case EToolType::Sickle:
+	case EToolType::Knife:
+		ToolClassToSpawn = AHarvestingTool::StaticClass();
+		break;
+	default:
+		ToolClassToSpawn = AEquippableTool::StaticClass();
+		break;
 	}
 
 	EquippedTool = GetWorld()->SpawnActor<AEquippableTool>(
 		ToolClassToSpawn,
 		FVector::ZeroVector,
 		FRotator::ZeroRotator,
-		SpawnParams
-	);
+		SpawnParams);
 
 	if (EquippedTool)
 	{
@@ -4988,8 +5037,7 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem& Inventory
 		{
 			FText NotificationText = FText::Format(
 				FText::FromString(TEXT("{0} Equipped")),
-				InventoryItem.ItemData->ItemName
-			);
+				InventoryItem.ItemData->ItemName);
 			NotificationComponent->ShowNotification(NotificationText);
 		}
 	}
@@ -5014,8 +5062,7 @@ void AOutercorpCharacter::UnequipCurrentTool()
 	{
 		FText NotificationText = FText::Format(
 			FText::FromString(TEXT("{0} Unequipped")),
-			EquippedToolItemData->ItemName
-		);
+			EquippedToolItemData->ItemName);
 		NotificationComponent->ShowNotification(NotificationText);
 	}
 
@@ -5041,7 +5088,7 @@ void AOutercorpCharacter::ToggleEquipTool()
 	TArray<FInventoryItem> AllItems = InventoryComponent->GetAllItems();
 
 	// Find the first equippable tool
-	for (const FInventoryItem& Item : AllItems)
+	for (const FInventoryItem &Item : AllItems)
 	{
 		if (Item.ItemData && Item.ItemData->bIsEquippable && Item.ItemData->Category == EItemCategory::Tool)
 		{
@@ -5061,8 +5108,7 @@ void AOutercorpCharacter::ToggleEquipTool()
 	if (NotificationComponent)
 	{
 		NotificationComponent->ShowNotification(
-			FText::FromString(TEXT("No tools in inventory to equip"))
-		);
+			FText::FromString(TEXT("No tools in inventory to equip")));
 	}
 }
 
@@ -5136,8 +5182,7 @@ void AOutercorpCharacter::PerformUnarmedHarvest()
 			this,
 			&AOutercorpCharacter::ResetUnarmedCooldown,
 			UnarmedHarvestCooldown,
-			false
-		);
+			false);
 	}
 
 	// Handle continuous hold if enabled
@@ -5149,8 +5194,7 @@ void AOutercorpCharacter::PerformUnarmedHarvest()
 			this,
 			&AOutercorpCharacter::UnarmedContinuousTick,
 			UnarmedHarvestCooldown,
-			true
-		);
+			true);
 	}
 }
 
@@ -5187,8 +5231,7 @@ void AOutercorpCharacter::UnarmedContinuousTick()
 			this,
 			&AOutercorpCharacter::ResetUnarmedCooldown,
 			UnarmedHarvestCooldown,
-			false
-		);
+			false);
 	}
 }
 

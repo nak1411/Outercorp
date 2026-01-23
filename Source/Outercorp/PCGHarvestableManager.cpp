@@ -14,8 +14,8 @@ static TAutoConsoleVariable<int32> CVarPCGManagerDebug(
 	TEXT("Harvesting.Debug.PCGManager"),
 	0,
 	TEXT("Show PCG Manager debug visualization (instance conversion tracking).\n")
-	TEXT("0: Disabled (default)\n")
-	TEXT("1: Enabled"),
+		TEXT("0: Disabled (default)\n")
+			TEXT("1: Enabled"),
 	ECVF_Default);
 
 APCGHarvestableManager::APCGHarvestableManager()
@@ -78,7 +78,7 @@ void APCGHarvestableManager::Tick(float DeltaTime)
 	}
 }
 
-void APCGHarvestableManager::RegisterISMComponent(UInstancedStaticMeshComponent* ISMComponent)
+void APCGHarvestableManager::RegisterISMComponent(UInstancedStaticMeshComponent *ISMComponent)
 {
 	if (!ISMComponent)
 	{
@@ -86,7 +86,7 @@ void APCGHarvestableManager::RegisterISMComponent(UInstancedStaticMeshComponent*
 	}
 
 	// Check if already tracked
-	for (const auto& Tracked : TrackedISMComponents)
+	for (const auto &Tracked : TrackedISMComponents)
 	{
 		if (Tracked.Get() == ISMComponent)
 		{
@@ -94,15 +94,21 @@ void APCGHarvestableManager::RegisterISMComponent(UInstancedStaticMeshComponent*
 		}
 	}
 
+	UStaticMesh *Mesh = ISMComponent->GetStaticMesh();
+	/*
+	UE_LOG(LogTemp, Log, TEXT("PCGHarvestableManager: Registered tracking for ISM component %s (Mesh: %s, Instances: %d)"),
+		   *ISMComponent->GetName(),
+		   Mesh ? *Mesh->GetName() : TEXT("None"),
+		   ISMComponent->GetInstanceCount());
+	*/
+
 	TrackedISMComponents.Add(ISMComponent);
 }
 
-void APCGHarvestableManager::UnregisterISMComponent(UInstancedStaticMeshComponent* ISMComponent)
+void APCGHarvestableManager::UnregisterISMComponent(UInstancedStaticMeshComponent *ISMComponent)
 {
-	TrackedISMComponents.RemoveAll([ISMComponent](const TWeakObjectPtr<UInstancedStaticMeshComponent>& Weak)
-	{
-		return Weak.Get() == ISMComponent;
-	});
+	TrackedISMComponents.RemoveAll([ISMComponent](const TWeakObjectPtr<UInstancedStaticMeshComponent> &Weak)
+								   { return Weak.Get() == ISMComponent; });
 }
 
 void APCGHarvestableManager::DiscoverISMComponents()
@@ -110,7 +116,7 @@ void APCGHarvestableManager::DiscoverISMComponents()
 	// Note: We don't empty TrackedISMComponents here to support incremental discovery
 	// RegisterISMComponent() already checks for duplicates
 
-	UWorld* World = GetWorld();
+	UWorld *World = GetWorld();
 	if (!World)
 	{
 		return;
@@ -119,16 +125,16 @@ void APCGHarvestableManager::DiscoverISMComponents()
 	// Find all ISM components in the level
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
-		AActor* Actor = *It;
+		AActor *Actor = *It;
 		if (!Actor)
 		{
 			continue;
 		}
 
-		TArray<UInstancedStaticMeshComponent*> Components;
+		TArray<UInstancedStaticMeshComponent *> Components;
 		Actor->GetComponents<UInstancedStaticMeshComponent>(Components);
 
-		for (UInstancedStaticMeshComponent* ISMComp : Components)
+		for (UInstancedStaticMeshComponent *ISMComp : Components)
 		{
 			if (!ISMComp)
 			{
@@ -136,16 +142,23 @@ void APCGHarvestableManager::DiscoverISMComponents()
 			}
 
 			// Check if this ISM has a mesh
-			UStaticMesh* Mesh = ISMComp->GetStaticMesh();
+			UStaticMesh *Mesh = ISMComp->GetStaticMesh();
 			if (!Mesh)
 			{
 				continue;
 			}
 
 			// Check if we have a mapping for this mesh
-			const FPCGResourceMapping* Mapping = GetMappingForMesh(Mesh);
+			const FPCGResourceMapping *Mapping = GetMappingForMesh(Mesh);
 			if (!Mapping)
 			{
+				/*
+				if (CVarPCGManagerDebug.GetValueOnGameThread())
+				{
+					UE_LOG(LogTemp, Warning, TEXT("PCGHarvestableManager: Discovery skipped component %s (Mesh: %s) - No mapping found"),
+						   *ISMComp->GetName(), Mesh ? *Mesh->GetName() : TEXT("None"));
+				}
+				*/
 				continue;
 			}
 
@@ -153,7 +166,7 @@ void APCGHarvestableManager::DiscoverISMComponents()
 			if (ISMComponentTags.Num() > 0)
 			{
 				bool bHasMatchingTag = false;
-				for (const FName& Tag : ISMComponentTags)
+				for (const FName &Tag : ISMComponentTags)
 				{
 					if (ISMComp->ComponentHasTag(Tag))
 					{
@@ -167,12 +180,27 @@ void APCGHarvestableManager::DiscoverISMComponents()
 				}
 			}
 
-			// Enable collision on this HISM/ISM component if it's disabled
+			// Enable collision on this HISM/ISM component if it's disabled or relies on complex collision that might be missing
 			// PCG often disables collision for performance - we need it for interaction
-			if (bAutoEnableCollision && ISMComp->GetCollisionEnabled() == ECollisionEnabled::NoCollision)
+			bool bNeedsCollisionFix = ISMComp->GetCollisionEnabled() == ECollisionEnabled::NoCollision;
+
+			// Also fix if it doesn't block Visibility channel (required for line traces)
+			if (!bNeedsCollisionFix && ISMComp->GetCollisionResponseToChannel(ECC_Visibility) != ECR_Block)
 			{
+				bNeedsCollisionFix = true;
+			}
+
+			if (bAutoEnableCollision && bNeedsCollisionFix)
+			{
+				/*
+				UE_LOG(LogTemp, Log, TEXT("PCGHarvestableManager: Fixing collision for ISM %s (Mesh: %s)"),
+					   *ISMComp->GetName(), Mesh ? *Mesh->GetName() : TEXT("None"));
+				*/
+
 				ISMComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-				ISMComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+
+				// Note: We don't clear all channels to Ignore anymore, as we might overwrite desired settings.
+				// We just ensure Visibility is blocked.
 				ISMComp->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
 				// Force recreation of physics state so per-instance bodies are created
@@ -185,14 +213,14 @@ void APCGHarvestableManager::DiscoverISMComponents()
 	}
 }
 
-const FPCGResourceMapping* APCGHarvestableManager::GetMappingForMesh(UStaticMesh* Mesh) const
+const FPCGResourceMapping *APCGHarvestableManager::GetMappingForMesh(UStaticMesh *Mesh) const
 {
 	if (!Mesh)
 	{
 		return nullptr;
 	}
 
-	for (const FPCGResourceMapping& Mapping : ResourceMappings)
+	for (const FPCGResourceMapping &Mapping : ResourceMappings)
 	{
 		if (Mapping.ResourceData && Mapping.ResourceData->ContainsMesh(Mesh))
 		{
@@ -203,9 +231,9 @@ const FPCGResourceMapping* APCGHarvestableManager::GetMappingForMesh(UStaticMesh
 	return nullptr;
 }
 
-bool APCGHarvestableManager::GetMappingForMeshBP(UStaticMesh* Mesh, FPCGResourceMapping& OutMapping) const
+bool APCGHarvestableManager::GetMappingForMeshBP(UStaticMesh *Mesh, FPCGResourceMapping &OutMapping) const
 {
-	const FPCGResourceMapping* Mapping = GetMappingForMesh(Mesh);
+	const FPCGResourceMapping *Mapping = GetMappingForMesh(Mesh);
 	if (Mapping)
 	{
 		OutMapping = *Mapping;
@@ -214,19 +242,18 @@ bool APCGHarvestableManager::GetMappingForMeshBP(UStaticMesh* Mesh, FPCGResource
 	return false;
 }
 
-
-AHarvestableResourceActor* APCGHarvestableManager::ConvertInstance(UInstancedStaticMeshComponent* ISMComponent, int32 InstanceIndex)
+AHarvestableResourceActor *APCGHarvestableManager::ConvertInstance(UInstancedStaticMeshComponent *ISMComponent, int32 InstanceIndex)
 {
 	if (!ISMComponent || InstanceIndex < 0 || InstanceIndex >= ISMComponent->GetInstanceCount())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ConvertInstance: Invalid ISM component or instance index %d (count: %d)"),
-			InstanceIndex, ISMComponent ? ISMComponent->GetInstanceCount() : -1);
+			   InstanceIndex, ISMComponent ? ISMComponent->GetInstanceCount() : -1);
 		return nullptr;
 	}
 
 	// Get mesh and find mapping
-	UStaticMesh* Mesh = ISMComponent->GetStaticMesh();
-	const FPCGResourceMapping* Mapping = GetMappingForMesh(Mesh);
+	UStaticMesh *Mesh = ISMComponent->GetStaticMesh();
+	const FPCGResourceMapping *Mapping = GetMappingForMesh(Mesh);
 	if (!Mapping || !Mapping->ResourceData)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ConvertInstance: No mapping found for mesh %s"), Mesh ? *Mesh->GetName() : TEXT("null"));
@@ -246,7 +273,7 @@ AHarvestableResourceActor* APCGHarvestableManager::ConvertInstance(UInstancedSta
 	if (ConvertedInstances.Contains(InstanceHash))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ConvertInstance: Instance already in ConvertedInstances set (hash: %llu) at location %.0f, %.0f, %.0f"),
-			InstanceHash, InstanceTransform.GetLocation().X, InstanceTransform.GetLocation().Y, InstanceTransform.GetLocation().Z);
+			   InstanceHash, InstanceTransform.GetLocation().X, InstanceTransform.GetLocation().Y, InstanceTransform.GetLocation().Z);
 		return nullptr;
 	}
 
@@ -262,7 +289,7 @@ AHarvestableResourceActor* APCGHarvestableManager::ConvertInstance(UInstancedSta
 
 	// Spawn the actor FIRST before hiding the instance
 	// This way if spawn fails, we can remove from converted set and try again
-	AHarvestableResourceActor* SpawnedActor = SpawnResourceActor(*Mapping, ISMComponent, InstanceIndex, InstanceTransform);
+	AHarvestableResourceActor *SpawnedActor = SpawnResourceActor(*Mapping, ISMComponent, InstanceIndex, InstanceTransform);
 	if (SpawnedActor)
 	{
 		// Hide the original ISM instance AFTER successful spawn
@@ -276,7 +303,7 @@ AHarvestableResourceActor* APCGHarvestableManager::ConvertInstance(UInstancedSta
 		Info.InstanceIndex = InstanceIndex;
 		Info.OriginalTransform = InstanceTransform;
 		Info.bInstanceHidden = true;
-		Info.InstanceHash = InstanceHash;  // Store the hash for later removal
+		Info.InstanceHash = InstanceHash; // Store the hash for later removal
 		SpawnedResources.Add(Info);
 
 		// Bind events
@@ -293,8 +320,8 @@ AHarvestableResourceActor* APCGHarvestableManager::ConvertInstance(UInstancedSta
 			// Draw conversion location
 			DrawDebugSphere(GetWorld(), InstanceTransform.GetLocation(), 100.0f, 12, FColor::Orange, false, 5.0f, 0, 3.0f);
 			DrawDebugString(GetWorld(), InstanceTransform.GetLocation() + FVector(0, 0, 200.0f),
-				FString::Printf(TEXT("CONVERTED\nPlayer Z Delta: %.1f"), ZDelta),
-				nullptr, FColor::Orange, 5.0f);
+							FString::Printf(TEXT("CONVERTED\nPlayer Z Delta: %.1f"), ZDelta),
+							nullptr, FColor::Orange, 5.0f);
 
 			// If significant Z change, highlight it in red
 			if (FMath::Abs(ZDelta) > 10.0f)
@@ -325,17 +352,12 @@ void APCGHarvestableManager::PerformUpdate()
 	CheckForDespawn();
 
 	// Clean up stale weak pointers
-	TrackedISMComponents.RemoveAll([](const TWeakObjectPtr<UInstancedStaticMeshComponent>& Weak)
-	{
-		return !Weak.IsValid();
-	});
+	TrackedISMComponents.RemoveAll([](const TWeakObjectPtr<UInstancedStaticMeshComponent> &Weak)
+								   { return !Weak.IsValid(); });
 
-	SpawnedResources.RemoveAll([](const FSpawnedResourceInfo& Info)
-	{
-		return !Info.SpawnedActor.IsValid();
-	});
+	SpawnedResources.RemoveAll([](const FSpawnedResourceInfo &Info)
+							   { return !Info.SpawnedActor.IsValid(); });
 }
-
 
 void APCGHarvestableManager::CheckForDespawn()
 {
@@ -348,14 +370,14 @@ void APCGHarvestableManager::CheckForDespawn()
 
 	for (int32 i = SpawnedResources.Num() - 1; i >= 0; i--)
 	{
-		FSpawnedResourceInfo& Info = SpawnedResources[i];
+		FSpawnedResourceInfo &Info = SpawnedResources[i];
 
 		if (!Info.SpawnedActor.IsValid())
 		{
 			continue;
 		}
 
-		AHarvestableResourceActor* Actor = Info.SpawnedActor.Get();
+		AHarvestableResourceActor *Actor = Info.SpawnedActor.Get();
 
 		// Don't despawn depleted resources (they're waiting to respawn)
 		if (Actor->bIsDepleted)
@@ -388,9 +410,9 @@ void APCGHarvestableManager::CheckForDespawn()
 	}
 }
 
-AHarvestableResourceActor* APCGHarvestableManager::SpawnResourceActor(const FPCGResourceMapping& Mapping, UInstancedStaticMeshComponent* ISMComponent, int32 InstanceIndex, const FTransform& InstanceTransform)
+AHarvestableResourceActor *APCGHarvestableManager::SpawnResourceActor(const FPCGResourceMapping &Mapping, UInstancedStaticMeshComponent *ISMComponent, int32 InstanceIndex, const FTransform &InstanceTransform)
 {
-	UWorld* World = GetWorld();
+	UWorld *World = GetWorld();
 	if (!World || !Mapping.ResourceData || !ISMComponent)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("SpawnResourceActor: Invalid world/mapping/component"));
@@ -398,8 +420,8 @@ AHarvestableResourceActor* APCGHarvestableManager::SpawnResourceActor(const FPCG
 	}
 
 	// Get the mesh entry for per-mesh settings
-	UStaticMesh* SourceMesh = ISMComponent->GetStaticMesh();
-	const FHarvestableSourceMesh* MeshEntry = Mapping.ResourceData->GetSourceMeshEntry(SourceMesh);
+	UStaticMesh *SourceMesh = ISMComponent->GetStaticMesh();
+	const FHarvestableSourceMesh *MeshEntry = Mapping.ResourceData->GetSourceMeshEntry(SourceMesh);
 
 	// Determine actor class to spawn from mesh entry
 	TSubclassOf<AHarvestableResourceActor> ActorClass = MeshEntry ? MeshEntry->ActorClass : nullptr;
@@ -412,12 +434,11 @@ AHarvestableResourceActor* APCGHarvestableManager::SpawnResourceActor(const FPCG
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	AHarvestableResourceActor* SpawnedActor = World->SpawnActor<AHarvestableResourceActor>(
+	AHarvestableResourceActor *SpawnedActor = World->SpawnActor<AHarvestableResourceActor>(
 		ActorClass,
 		InstanceTransform.GetLocation(),
 		InstanceTransform.GetRotation().Rotator(),
-		SpawnParams
-	);
+		SpawnParams);
 
 	if (SpawnedActor)
 	{
@@ -437,13 +458,13 @@ AHarvestableResourceActor* APCGHarvestableManager::SpawnResourceActor(const FPCG
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("SpawnResourceActor: World->SpawnActor returned null for class %s at location %.0f, %.0f, %.0f"),
-			*ActorClass->GetName(), InstanceTransform.GetLocation().X, InstanceTransform.GetLocation().Y, InstanceTransform.GetLocation().Z);
+			   *ActorClass->GetName(), InstanceTransform.GetLocation().X, InstanceTransform.GetLocation().Y, InstanceTransform.GetLocation().Z);
 	}
 
 	return SpawnedActor;
 }
 
-void APCGHarvestableManager::HideInstance(UInstancedStaticMeshComponent* ISMComponent, int32 InstanceIndex)
+void APCGHarvestableManager::HideInstance(UInstancedStaticMeshComponent *ISMComponent, int32 InstanceIndex)
 {
 	if (!ISMComponent || InstanceIndex < 0 || InstanceIndex >= ISMComponent->GetInstanceCount())
 	{
@@ -451,7 +472,7 @@ void APCGHarvestableManager::HideInstance(UInstancedStaticMeshComponent* ISMComp
 	}
 
 	// Check if this is a HISM component (PCG typically uses these)
-	UHierarchicalInstancedStaticMeshComponent* HISMComp = Cast<UHierarchicalInstancedStaticMeshComponent>(ISMComponent);
+	UHierarchicalInstancedStaticMeshComponent *HISMComp = Cast<UHierarchicalInstancedStaticMeshComponent>(ISMComponent);
 
 	if (HISMComp)
 	{
@@ -467,7 +488,7 @@ void APCGHarvestableManager::HideInstance(UInstancedStaticMeshComponent* ISMComp
 	}
 }
 
-void APCGHarvestableManager::RestoreInstance(UInstancedStaticMeshComponent* ISMComponent, int32 InstanceIndex, const FTransform& OriginalTransform)
+void APCGHarvestableManager::RestoreInstance(UInstancedStaticMeshComponent *ISMComponent, int32 InstanceIndex, const FTransform &OriginalTransform)
 {
 	if (!ISMComponent)
 	{
@@ -479,7 +500,7 @@ void APCGHarvestableManager::RestoreInstance(UInstancedStaticMeshComponent* ISMC
 	ISMComponent->AddInstance(OriginalTransform, true);
 }
 
-uint64 APCGHarvestableManager::GenerateInstanceHash(UInstancedStaticMeshComponent* ISMComponent, int32 InstanceIndex) const
+uint64 APCGHarvestableManager::GenerateInstanceHash(UInstancedStaticMeshComponent *ISMComponent, int32 InstanceIndex) const
 {
 	// Use transform location as unique identifier since instance indices shift when instances are removed
 	// This ensures we track unique world positions rather than volatile indices
@@ -504,7 +525,7 @@ uint64 APCGHarvestableManager::GenerateInstanceHash(UInstancedStaticMeshComponen
 	return ComponentHash ^ (IndexHash << 32);
 }
 
-void APCGHarvestableManager::OnResourceDepleted(AHarvestableResourceActor* Resource)
+void APCGHarvestableManager::OnResourceDepleted(AHarvestableResourceActor *Resource)
 {
 	if (!Resource)
 	{
@@ -512,7 +533,7 @@ void APCGHarvestableManager::OnResourceDepleted(AHarvestableResourceActor* Resou
 	}
 
 	// Find the spawned resource info
-	for (FSpawnedResourceInfo& Info : SpawnedResources)
+	for (FSpawnedResourceInfo &Info : SpawnedResources)
 	{
 		if (Info.SpawnedActor.Get() == Resource)
 		{
@@ -523,7 +544,7 @@ void APCGHarvestableManager::OnResourceDepleted(AHarvestableResourceActor* Resou
 	}
 }
 
-void APCGHarvestableManager::OnResourceRespawned(AHarvestableResourceActor* Resource)
+void APCGHarvestableManager::OnResourceRespawned(AHarvestableResourceActor *Resource)
 {
 	// Resource has respawned - nothing special needed
 	// The actor is still valid and the ISM instance is still hidden
@@ -536,7 +557,7 @@ void APCGHarvestableManager::DrawDebugInfo()
 		return;
 	}
 
-	UWorld* World = GetWorld();
+	UWorld *World = GetWorld();
 	if (!World)
 	{
 		return;
@@ -548,7 +569,7 @@ void APCGHarvestableManager::DrawDebugInfo()
 	DrawDebugSphere(World, PlayerLocation, DespawnDistance, 16, FColor::Red, false, UpdateInterval);
 
 	// Draw lines to spawned resources
-	for (const FSpawnedResourceInfo& Info : SpawnedResources)
+	for (const FSpawnedResourceInfo &Info : SpawnedResources)
 	{
 		if (Info.SpawnedActor.IsValid())
 		{

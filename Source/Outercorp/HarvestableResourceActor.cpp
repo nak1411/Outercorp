@@ -1,6 +1,7 @@
 // HarvestableResourceActor.cpp
 
 #include "HarvestableResourceActor.h"
+#include "HarvestableResourceData.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -21,16 +22,16 @@ static TAutoConsoleVariable<int32> CVarHarvestableDebugCollision(
 	TEXT("Harvesting.Debug.Collision"),
 	0,
 	TEXT("Show collision debug visualization for harvestable resources.\n")
-	TEXT("0: Disabled (default)\n")
-	TEXT("1: Enabled"),
+		TEXT("0: Disabled (default)\n")
+			TEXT("1: Enabled"),
 	ECVF_Default);
 
 static TAutoConsoleVariable<int32> CVarHarvestableShowHealth(
 	TEXT("Harvesting.Debug.ShowHealth"),
 	0,
 	TEXT("Show health bars above harvestable resources.\n")
-	TEXT("0: Disabled (default)\n")
-	TEXT("1: Enabled"),
+		TEXT("0: Disabled (default)\n")
+			TEXT("1: Enabled"),
 	ECVF_Default);
 
 AHarvestableResourceActor::AHarvestableResourceActor()
@@ -74,6 +75,7 @@ AHarvestableResourceActor::AHarvestableResourceActor()
 	bIsDirectPickup = false;
 	DirectPickupItem = nullptr;
 	DirectPickupQuantity = 1;
+	bIsDestructionMesh = false;
 }
 
 void AHarvestableResourceActor::BeginPlay()
@@ -107,41 +109,37 @@ void AHarvestableResourceActor::Tick(float DeltaTime)
 
 	// Debug collision visualization (toggleable via console OR data asset)
 	bool bShowCollisionDebug = CVarHarvestableDebugCollision.GetValueOnGameThread() || (ResourceData && ResourceData->bDebugShowCollision);
-	if (bShowCollisionDebug)
+	if (bShowCollisionDebug && ResourceMesh)
 	{
-		if (InteractionVolume)
+		FVector MeshLocation = ResourceMesh->GetComponentLocation();
+
+		// Draw mesh collision state
+		ECollisionEnabled::Type CollisionType = ResourceMesh->GetCollisionEnabled();
+		FColor CollisionColor = FColor::Blue;
+		FString CollisionStr = TEXT("NoCollision");
+		if (CollisionType == ECollisionEnabled::QueryOnly)
 		{
-			FVector BoxCenter = InteractionVolume->GetComponentLocation();
-			FVector BoxExtent = InteractionVolume->GetScaledBoxExtent();
-			FQuat BoxRotation = InteractionVolume->GetComponentQuat();
-
-			// Green = QueryOnly, Red = physics enabled, Blue = NoCollision
-			FColor BoxColor = FColor::Blue;
-			if (InteractionVolume->GetCollisionEnabled() == ECollisionEnabled::QueryOnly)
-			{
-				BoxColor = FColor::Green;
-			}
-			else if (InteractionVolume->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
-			{
-				BoxColor = FColor::Red;
-			}
-
-			DrawDebugBox(GetWorld(), BoxCenter, BoxExtent, BoxRotation, BoxColor, false, -1.0f, 0, 2.0f);
-
-			// Draw collision info text
-			FString CollisionInfo = FString::Printf(TEXT("InteractionVolume: %d\nMesh Collision: %d"),
-				static_cast<int32>(InteractionVolume->GetCollisionEnabled()),
-				ResourceMesh ? static_cast<int32>(ResourceMesh->GetCollisionEnabled()) : -1);
-			DrawDebugString(GetWorld(), BoxCenter + FVector(0, 0, BoxExtent.Z + 50.0f), CollisionInfo, nullptr, FColor::White, 0.0f);
+			CollisionColor = FColor::Green;
+			CollisionStr = TEXT("QueryOnly");
+		}
+		else if (CollisionType == ECollisionEnabled::QueryAndPhysics)
+		{
+			CollisionColor = FColor::Red;
+			CollisionStr = TEXT("QueryAndPhysics");
+		}
+		else if (CollisionType == ECollisionEnabled::PhysicsOnly)
+		{
+			CollisionColor = FColor::Yellow;
+			CollisionStr = TEXT("PhysicsOnly");
 		}
 
-		// Draw debug sphere for ResourceMesh bounds
-		if (ResourceMesh && ResourceMesh->GetStaticMesh())
-		{
-			FBoxSphereBounds Bounds = ResourceMesh->Bounds;
-			// Yellow sphere for mesh bounds
-			DrawDebugSphere(GetWorld(), Bounds.Origin, Bounds.SphereRadius * 0.1f, 8, FColor::Yellow, false, -1.0f, 0, 1.0f);
-		}
+		// Draw debug sphere for mesh bounds
+		FBoxSphereBounds Bounds = ResourceMesh->Bounds;
+		DrawDebugSphere(GetWorld(), Bounds.Origin, Bounds.SphereRadius, 12, CollisionColor, false, -1.0f, 0, 2.0f);
+
+		// Draw collision info text
+		FString CollisionInfo = FString::Printf(TEXT("%s\nMesh: %s"), *CollisionStr, *ResourceMesh->GetName());
+		DrawDebugString(GetWorld(), MeshLocation + FVector(0, 0, 150.0f), CollisionInfo, nullptr, FColor::White, 0.0f);
 	}
 
 	// Health display (toggleable via console OR data asset)
@@ -190,7 +188,7 @@ void AHarvestableResourceActor::Tick(float DeltaTime)
 // INTERACTABLE INTERFACE
 // ============================================
 
-void AHarvestableResourceActor::OnLookAt_Implementation(AActor* LookingActor)
+void AHarvestableResourceActor::OnLookAt_Implementation(AActor *LookingActor)
 {
 	if (InteractableComponent && ResourceData && ResourceData->bHighlightOnLookAt)
 	{
@@ -198,7 +196,7 @@ void AHarvestableResourceActor::OnLookAt_Implementation(AActor* LookingActor)
 	}
 }
 
-void AHarvestableResourceActor::OnLookAway_Implementation(AActor* LookingActor)
+void AHarvestableResourceActor::OnLookAway_Implementation(AActor *LookingActor)
 {
 	if (InteractableComponent)
 	{
@@ -206,9 +204,9 @@ void AHarvestableResourceActor::OnLookAway_Implementation(AActor* LookingActor)
 	}
 }
 
-void AHarvestableResourceActor::OnInteract_Implementation(AActor* InteractingActor)
+void AHarvestableResourceActor::OnInteract_Implementation(AActor *InteractingActor)
 {
-	AOutercorpCharacter* Character = Cast<AOutercorpCharacter>(InteractingActor);
+	AOutercorpCharacter *Character = Cast<AOutercorpCharacter>(InteractingActor);
 	if (!Character || !ResourceData || bIsDepleted)
 	{
 		return;
@@ -217,7 +215,7 @@ void AHarvestableResourceActor::OnInteract_Implementation(AActor* InteractingAct
 	// Handle direct pickup mode
 	if (bIsDirectPickup && DirectPickupItem)
 	{
-		UInventoryComponent* Inventory = Character->GetInventoryComponent();
+		UInventoryComponent *Inventory = Character->GetInventoryComponent();
 		if (Inventory)
 		{
 			int32 OutSlotIndex;
@@ -235,29 +233,34 @@ void AHarvestableResourceActor::OnInteract_Implementation(AActor* InteractingAct
 	int32 ToolTier = 0;
 	float BaseDamage = ResourceData->HandHarvestDamage;
 
-	AEquippableTool* EquippedTool = Character->GetEquippedTool();
+	AEquippableTool *EquippedTool = Character->GetEquippedTool();
 	if (EquippedTool)
 	{
 		// Check if tool has harvest properties via metadata
 		if (EquippedTool->ItemData)
 		{
-			const FString* ToolTypeStr = EquippedTool->ItemData->Metadata.Find(TEXT("HarvestToolType"));
+			const FString *ToolTypeStr = EquippedTool->ItemData->Metadata.Find(TEXT("HarvestToolType"));
 			if (ToolTypeStr)
 			{
-				if (*ToolTypeStr == TEXT("Axe")) ToolType = EHarvestToolType::Axe;
-				else if (*ToolTypeStr == TEXT("Pickaxe")) ToolType = EHarvestToolType::Pickaxe;
-				else if (*ToolTypeStr == TEXT("Shovel")) ToolType = EHarvestToolType::Shovel;
-				else if (*ToolTypeStr == TEXT("Sickle")) ToolType = EHarvestToolType::Sickle;
-				else if (*ToolTypeStr == TEXT("Knife")) ToolType = EHarvestToolType::Knife;
+				if (*ToolTypeStr == TEXT("Axe"))
+					ToolType = EHarvestToolType::Axe;
+				else if (*ToolTypeStr == TEXT("Pickaxe"))
+					ToolType = EHarvestToolType::Pickaxe;
+				else if (*ToolTypeStr == TEXT("Shovel"))
+					ToolType = EHarvestToolType::Shovel;
+				else if (*ToolTypeStr == TEXT("Sickle"))
+					ToolType = EHarvestToolType::Sickle;
+				else if (*ToolTypeStr == TEXT("Knife"))
+					ToolType = EHarvestToolType::Knife;
 			}
 
-			const FString* TierStr = EquippedTool->ItemData->Metadata.Find(TEXT("ToolTier"));
+			const FString *TierStr = EquippedTool->ItemData->Metadata.Find(TEXT("ToolTier"));
 			if (TierStr)
 			{
 				ToolTier = FCString::Atoi(**TierStr);
 			}
 
-			const FString* DamageStr = EquippedTool->ItemData->Metadata.Find(TEXT("HarvestDamage"));
+			const FString *DamageStr = EquippedTool->ItemData->Metadata.Find(TEXT("HarvestDamage"));
 			if (DamageStr)
 			{
 				BaseDamage = FCString::Atof(**DamageStr);
@@ -299,7 +302,7 @@ FText AHarvestableResourceActor::GetInteractionPrompt_Implementation() const
 	return FText::FromString(TEXT("Harvest"));
 }
 
-bool AHarvestableResourceActor::CanInteract_Implementation(AActor* InteractingActor) const
+bool AHarvestableResourceActor::CanInteract_Implementation(AActor *InteractingActor) const
 {
 	return !bIsDepleted && ResourceData != nullptr;
 }
@@ -322,7 +325,7 @@ bool AHarvestableResourceActor::ShouldHighlight_Implementation() const
 // HARVESTING
 // ============================================
 
-bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter* Harvester, EHarvestToolType ToolType, int32 ToolTier, float BaseDamage)
+bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter *Harvester, EHarvestToolType ToolType, int32 ToolTier, float BaseDamage)
 {
 	if (!ResourceData || bIsDepleted)
 	{
@@ -342,8 +345,7 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter* Harveste
 			Harvester->GetNotificationComponent()->ShowSimpleNotification(
 				FText::FromString(TEXT("Wrong tool! Cannot harvest this resource.")),
 				ENotificationType::Error,
-				2.0f
-			);
+				2.0f);
 		}
 		return false;
 	}
@@ -366,7 +368,7 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter* Harveste
 	// Update material strength parameter based on damage (trunk is material slot 2)
 	if (ResourceMesh)
 	{
-		UMaterialInstanceDynamic* MatInstance = Cast<UMaterialInstanceDynamic>(ResourceMesh->GetMaterial(2));
+		UMaterialInstanceDynamic *MatInstance = Cast<UMaterialInstanceDynamic>(ResourceMesh->GetMaterial(2));
 
 		if (!MatInstance)
 		{
@@ -377,22 +379,22 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter* Harveste
 		{
 			float DamageRatio = 1.0f - GetHealthPercent();
 			MatInstance->SetScalarParameterValue(FName(TEXT("Strength")), DamageRatio);
-			UE_LOG(LogTemp, Warning, TEXT("Updated Strength to %.2f on %s"), DamageRatio, *ResourceMesh->GetName());
+			// UE_LOG(LogTemp, Warning, TEXT("Updated Strength to %.2f on %s"), DamageRatio, *ResourceMesh->GetName());
 		}
 	}
 
 	// Check if depleted
 	bool bWasDepleted = CurrentHealth <= 0.0f;
 
-	// Only spawn yields when fully depleted
+	// Only spawn yields when fully depleted (and only for destruction meshes like trunks, not original trees)
 	TArray<FHarvestYield> Yields;
-	if (bWasDepleted)
+	if (bWasDepleted && bIsDestructionMesh)
 	{
 		// Use tool effectiveness yield multiplier
 		float FinalYieldMultiplier = YieldMultiplier;
 
 		// Roll for main yields from per-mesh data
-		for (const FHarvestYield& Yield : MeshHarvestYields)
+		for (const FHarvestYield &Yield : MeshHarvestYields)
 		{
 			if (ToolTier < Yield.RequiredToolTier)
 			{
@@ -412,7 +414,7 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter* Harveste
 		}
 
 		// Add depletion bonus yields
-		for (const FHarvestYield& Yield : MeshDepletionBonusYields)
+		for (const FHarvestYield &Yield : MeshDepletionBonusYields)
 		{
 			if (ToolTier < Yield.RequiredToolTier)
 			{
@@ -435,17 +437,23 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter* Harveste
 	// Spawn yield items and show notifications
 	if (Yields.Num() > 0)
 	{
-		FVector SpawnLocation = GetActorLocation() + FVector(0, 0, 50.0f);
+		// Spawn yields at the center of the trunk's collision bounds
+		FVector SpawnLocation = GetActorLocation();
+		if (ResourceMesh)
+		{
+			FBox CollisionBounds = ResourceMesh->Bounds.GetBox();
+			SpawnLocation = CollisionBounds.GetCenter();
+		}
 		SpawnYieldItems(Yields, SpawnLocation);
 
 		// Show notification for each yield type
-		if (UNotificationComponent* NotificationComp = Harvester->GetNotificationComponent())
+		if (UNotificationComponent *NotificationComp = Harvester->GetNotificationComponent())
 		{
-			for (const FHarvestYield& Yield : Yields)
+			for (const FHarvestYield &Yield : Yields)
 			{
 				if (Yield.ItemData && Yield.MinQuantity > 0)
 				{
-					UTexture2D* ItemIcon = Yield.ItemData->ItemIcon.LoadSynchronous();
+					UTexture2D *ItemIcon = Yield.ItemData->ItemIcon.LoadSynchronous();
 					NotificationComp->ShowItemHarvestedNotification(Yield.ItemData->ItemName, Yield.MinQuantity, ItemIcon);
 				}
 			}
@@ -464,13 +472,13 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter* Harveste
 	// Handle depletion
 	if (bWasDepleted)
 	{
-		Deplete();
+		Deplete(Harvester);
 	}
 
 	return true;
 }
 
-void AHarvestableResourceActor::SpawnYieldItems(const TArray<FHarvestYield>& Yields, const FVector& SpawnLocation)
+void AHarvestableResourceActor::SpawnYieldItems(const TArray<FHarvestYield> &Yields, const FVector &SpawnLocation)
 {
 	TSubclassOf<APickupableItem> PickupClass = GetPickupItemClass();
 	if (!PickupClass)
@@ -478,21 +486,25 @@ void AHarvestableResourceActor::SpawnYieldItems(const TArray<FHarvestYield>& Yie
 		return;
 	}
 
-	UWorld* World = GetWorld();
+	UWorld *World = GetWorld();
 	if (!World)
 	{
 		return;
 	}
 
-	for (const FHarvestYield& Yield : Yields)
+	// Get the mesh component's rotation for spawning relative to the trunk's pivot
+	FRotator MeshRotation = ResourceMesh ? ResourceMesh->GetComponentRotation() : GetActorRotation();
+
+	for (const FHarvestYield &Yield : Yields)
 	{
 		if (!Yield.ItemData || Yield.MinQuantity <= 0)
 		{
 			continue;
 		}
 
-		// Calculate base spawn location with yield-specific offset
-		FVector YieldBaseLocation = SpawnLocation + Yield.SpawnOffset;
+		// Calculate base spawn location with yield-specific offset (in local space, rotated by mesh orientation)
+		FVector LocalOffset = MeshRotation.RotateVector(Yield.SpawnOffset);
+		FVector YieldBaseLocation = SpawnLocation + LocalOffset;
 
 		// Spawn individual items for each unit of quantity
 		for (int32 i = 0; i < Yield.MinQuantity; ++i)
@@ -502,26 +514,28 @@ void AHarvestableResourceActor::SpawnYieldItems(const TArray<FHarvestYield>& Yie
 			// Only expand the spiral if SpawnRandomRadius > 0, otherwise keep items close together
 			float SpiralExpansion = (Yield.SpawnRandomRadius > 0.0f) ? (i * 40.0f) : (i * 5.0f);
 			float Radius = Yield.SpawnRandomRadius + SpiralExpansion;
-			FVector RandomOffset = FVector(
+			FVector LocalRandomOffset = FVector(
 				FMath::Cos(Angle) * Radius,
 				FMath::Sin(Angle) * Radius,
 				Yield.SpawnHeightOffset + (i * 20.0f) // Use yield's height offset
 			);
 
-			FVector FinalLocation = YieldBaseLocation + RandomOffset;
+			// Rotate spiral pattern by mesh orientation so it adapts to trunk's rotation
+			FVector WorldRandomOffset = MeshRotation.RotateVector(LocalRandomOffset);
+			FVector FinalLocation = YieldBaseLocation + WorldRandomOffset;
 			FRotator SpawnRotation = FRotator(0, FMath::RandRange(0.0f, 360.0f), 0);
 
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-			APickupableItem* SpawnedItem = World->SpawnActor<APickupableItem>(PickupClass, FinalLocation, SpawnRotation, SpawnParams);
+			APickupableItem *SpawnedItem = World->SpawnActor<APickupableItem>(PickupClass, FinalLocation, SpawnRotation, SpawnParams);
 			if (SpawnedItem)
 			{
 				// Initialize the item properly (this sets up mesh, interaction, etc.)
 				SpawnedItem->InitializeItem(Yield.ItemData, 1);
 
 				// Configure physics based on yield settings
-				if (UStaticMeshComponent* MeshComp = SpawnedItem->ItemMesh)
+				if (UStaticMeshComponent *MeshComp = SpawnedItem->ItemMesh)
 				{
 					if (Yield.bEnablePhysics)
 					{
@@ -533,7 +547,9 @@ void AHarvestableResourceActor::SpawnYieldItems(const TArray<FHarvestYield>& Yie
 
 						// Radial impulse outward from center + upward
 						FVector OutwardDir = (FinalLocation - YieldBaseLocation).GetSafeNormal2D();
-						FVector Impulse = OutwardDir * FMath::RandRange(150.0f, 300.0f) + FVector(0, 0, FMath::RandRange(300.0f, 500.0f));
+						float HorizontalImpulse = ResourceData ? FMath::RandRange(ResourceData->MinHorizontalImpulse, ResourceData->MaxHorizontalImpulse) : FMath::RandRange(150.0f, 300.0f);
+						float VerticalImpulse = ResourceData ? FMath::RandRange(ResourceData->MinVerticalImpulse, ResourceData->MaxVerticalImpulse) : FMath::RandRange(300.0f, 500.0f);
+						FVector Impulse = OutwardDir * HorizontalImpulse + FVector(0, 0, VerticalImpulse);
 						MeshComp->AddImpulse(Impulse);
 					}
 					else
@@ -563,7 +579,7 @@ float AHarvestableResourceActor::GetHealthPercent() const
 // INITIALIZATION
 // ============================================
 
-void AHarvestableResourceActor::InitializeFromData(UHarvestableResourceData* Data)
+void AHarvestableResourceActor::InitializeFromData(UHarvestableResourceData *Data)
 {
 	ResourceData = Data;
 	if (!ResourceData)
@@ -581,7 +597,7 @@ void AHarvestableResourceActor::InitializeFromData(UHarvestableResourceData* Dat
 	// Look up direct pickup settings from source mesh if not already set
 	if (ResourceMesh && ResourceMesh->GetStaticMesh())
 	{
-		const FHarvestableSourceMesh* MeshEntry = ResourceData->GetSourceMeshEntry(ResourceMesh->GetStaticMesh());
+		const FHarvestableSourceMesh *MeshEntry = ResourceData->GetSourceMeshEntry(ResourceMesh->GetStaticMesh());
 		if (MeshEntry)
 		{
 			bIsDirectPickup = MeshEntry->bDirectPickup;
@@ -612,7 +628,7 @@ void AHarvestableResourceActor::InitializeFromData(UHarvestableResourceData* Dat
 	UpdateVisualState();
 }
 
-void AHarvestableResourceActor::InitializeFromPCGInstance(UHarvestableResourceData* Data, UInstancedStaticMeshComponent* ISMComponent, int32 InstanceIndex, const FTransform& InstanceTransform)
+void AHarvestableResourceActor::InitializeFromPCGInstance(UHarvestableResourceData *Data, UInstancedStaticMeshComponent *ISMComponent, int32 InstanceIndex, const FTransform &InstanceTransform)
 {
 	// Store PCG reference info
 	SourceISMComponent = ISMComponent;
@@ -629,8 +645,8 @@ void AHarvestableResourceActor::InitializeFromPCGInstance(UHarvestableResourceDa
 	DirectPickupQuantity = 1;
 	if (Data && ISMComponent)
 	{
-		UStaticMesh* SourceMesh = ISMComponent->GetStaticMesh();
-		const FHarvestableSourceMesh* MeshEntry = Data->GetSourceMeshEntry(SourceMesh);
+		UStaticMesh *SourceMesh = ISMComponent->GetStaticMesh();
+		const FHarvestableSourceMesh *MeshEntry = Data->GetSourceMeshEntry(SourceMesh);
 		if (MeshEntry)
 		{
 			MeshDisplayName = MeshEntry->DisplayName;
@@ -661,11 +677,11 @@ void AHarvestableResourceActor::InitializeFromPCGInstance(UHarvestableResourceDa
 		// This ensures we can update the Strength parameter for the WPO effect
 		if (ISMComponent->GetNumMaterials() > 2)
 		{
-			UMaterialInterface* TrunkMaterial = ISMComponent->GetMaterial(2);
+			UMaterialInterface *TrunkMaterial = ISMComponent->GetMaterial(2);
 			if (TrunkMaterial)
 			{
 				// Create dynamic instance from the trunk material itself
-				UMaterialInstanceDynamic* DynMat = UMaterialInstanceDynamic::Create(TrunkMaterial, ResourceMesh);
+				UMaterialInstanceDynamic *DynMat = UMaterialInstanceDynamic::Create(TrunkMaterial, ResourceMesh);
 				ResourceMesh->SetMaterial(2, DynMat);
 				DynMat->SetScalarParameterValue(FName(TEXT("Strength")), 0.0f);
 			}
@@ -690,7 +706,7 @@ void AHarvestableResourceActor::UpdateVisualState()
 	float HealthPercent = GetHealthPercent();
 
 	// Find appropriate destruction stage
-	const FHarvestStage* Stage = ResourceData->GetStageForHealth(HealthPercent);
+	const FHarvestStage *Stage = ResourceData->GetStageForHealth(HealthPercent);
 	if (Stage)
 	{
 		// Apply stage mesh if specified
@@ -710,13 +726,19 @@ void AHarvestableResourceActor::UpdateVisualState()
 	}
 }
 
-void AHarvestableResourceActor::Deplete()
+void AHarvestableResourceActor::Deplete(AOutercorpCharacter *Harvester)
 {
 	bIsDepleted = true;
 	CurrentHealth = 0.0f;
 
 	// Play depletion feedback
 	PlayDepletionFeedback();
+
+	// Spawn stump and trunk if meshes are configured (but not if this is already a destruction mesh)
+	if (!bIsDestructionMesh)
+	{
+		SpawnDestructionMeshes(Harvester);
+	}
 
 	// Start respawn timer if applicable
 	if (ResourceData && ResourceData->bCanRespawn)
@@ -730,13 +752,18 @@ void AHarvestableResourceActor::Deplete()
 		ResourceMesh->SetVisibility(false);
 		// Disable collision on mesh so traces can hit spawned items below
 		ResourceMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ResourceMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
 	}
 
 	// Disable interaction
 	if (InteractionVolume)
 	{
 		InteractionVolume->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		InteractionVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
 	}
+
+	// Completely disable collision on actor to ensure no phantom blocking
+	SetActorEnableCollision(false);
 
 	// Broadcast event
 	OnResourceDepleted.Broadcast(this);
@@ -748,6 +775,9 @@ void AHarvestableResourceActor::Respawn()
 	{
 		return;
 	}
+
+	// Re-enable actor collision
+	SetActorEnableCollision(true);
 
 	bIsDepleted = false;
 	CurrentHealth = MeshMaxHealth;
@@ -811,14 +841,14 @@ void AHarvestableResourceActor::HandleRespawnTimer(float DeltaTime)
 	}
 }
 
-void AHarvestableResourceActor::PlayHarvestFeedback(const FVector& HitLocation)
+void AHarvestableResourceActor::PlayHarvestFeedback(const FVector &HitLocation)
 {
 	if (!ResourceData)
 	{
 		return;
 	}
 
-	UWorld* World = GetWorld();
+	UWorld *World = GetWorld();
 	if (!World)
 	{
 		return;
@@ -837,8 +867,7 @@ void AHarvestableResourceActor::PlayHarvestFeedback(const FVector& HitLocation)
 			World,
 			ResourceData->HarvestNiagaraEffect,
 			HitLocation,
-			GetActorRotation()
-		);
+			GetActorRotation());
 	}
 	else if (ResourceData->HarvestParticle)
 	{
@@ -846,14 +875,13 @@ void AHarvestableResourceActor::PlayHarvestFeedback(const FVector& HitLocation)
 			World,
 			ResourceData->HarvestParticle,
 			HitLocation,
-			GetActorRotation()
-		);
+			GetActorRotation());
 	}
 
 	// Play camera shake
 	if (ResourceData->HarvestCameraShake)
 	{
-		APlayerController* PC = World->GetFirstPlayerController();
+		APlayerController *PC = World->GetFirstPlayerController();
 		if (PC)
 		{
 			PC->ClientStartCameraShake(ResourceData->HarvestCameraShake, ResourceData->CameraShakeIntensity);
@@ -887,4 +915,158 @@ TSubclassOf<APickupableItem> AHarvestableResourceActor::GetPickupItemClass() con
 		CachedClass = APickupableItem::StaticClass();
 	}
 	return CachedClass;
+}
+
+void AHarvestableResourceActor::SpawnDestructionMeshes(AOutercorpCharacter *Harvester)
+{
+	if (!ResourceData || !GetWorld())
+	{
+		return;
+	}
+
+	// Only trees have stump/trunk mechanics - check if using tree-specific data
+	UTreeHarvestableResourceData *TreeData = Cast<UTreeHarvestableResourceData>(ResourceData);
+	if (!TreeData)
+	{
+		return; // Not a tree resource, skip destruction mesh spawning
+	}
+
+	FVector SpawnLocation = GetActorLocation();
+	FRotator SpawnRotation = GetActorRotation();
+	FVector SpawnScale = GetActorScale3D();
+
+	// Spawn stump - static, stays in place
+	if (TreeData->StumpMesh && ResourceMesh)
+	{
+		FActorSpawnParameters StumpParams;
+		StumpParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		AHarvestableResourceActor *StumpActor = GetWorld()->SpawnActor<AHarvestableResourceActor>(SpawnLocation, SpawnRotation, StumpParams);
+		if (StumpActor && StumpActor->ResourceMesh)
+		{
+			StumpActor->SetActorLabel(TEXT("Stump"));
+			StumpActor->SetActorScale3D(SpawnScale);
+			StumpActor->bIsDepleted = true;
+			StumpActor->bIsDestructionMesh = true;
+
+			// Copy mesh settings from this actor but use stump mesh
+			StumpActor->ResourceMesh->SetStaticMesh(TreeData->StumpMesh);
+
+			// Re-enable collision (constructor disables it by default)
+			StumpActor->ResourceMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			StumpActor->ResourceMesh->SetCollisionResponseToAllChannels(ECR_Block);
+
+			StumpActor->ResourceMesh->SetSimulatePhysics(false);
+
+			// Disable InteractionVolume on stump since we use mesh collision
+			if (StumpActor->InteractionVolume)
+			{
+				StumpActor->InteractionVolume->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				StumpActor->InteractionVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
+			}
+
+			if (TreeData->StumpMaterial)
+			{
+				StumpActor->ResourceMesh->SetMaterial(0, TreeData->StumpMaterial);
+			}
+			else if (ResourceMesh->GetMaterial(0))
+			{
+				StumpActor->ResourceMesh->SetMaterial(0, ResourceMesh->GetMaterial(0));
+			}
+		}
+	}
+
+	// Spawn trunk - dynamic, has physics to fall
+	if (TreeData->TrunkMesh && ResourceMesh)
+	{
+		FVector TrunkSpawnLocation = SpawnLocation + TreeData->TrunkSpawnOffset;
+		FRotator TrunkSpawnRotation = SpawnRotation;
+
+		FActorSpawnParameters TrunkParams;
+		TrunkParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		AHarvestableResourceActor *TrunkActor = GetWorld()->SpawnActor<AHarvestableResourceActor>(TrunkSpawnLocation, TrunkSpawnRotation, TrunkParams);
+		if (TrunkActor && TrunkActor->ResourceMesh)
+		{
+			TrunkActor->SetActorLabel(TEXT("Trunk"));
+			TrunkActor->SetActorScale3D(SpawnScale);
+
+			// Copy mesh settings from this actor but use trunk mesh
+			TrunkActor->ResourceMesh->SetStaticMesh(TreeData->TrunkMesh);
+
+			if (TreeData->TrunkMaterial)
+			{
+				TrunkActor->ResourceMesh->SetMaterial(0, TreeData->TrunkMaterial);
+			}
+			else if (ResourceMesh->GetMaterial(0))
+			{
+				TrunkActor->ResourceMesh->SetMaterial(0, ResourceMesh->GetMaterial(0));
+			}
+
+			// Initialize the trunk as a harvestable resource
+			TrunkActor->ResourceData = TreeData; // Use the casted TreeData
+			TrunkActor->MeshDisplayName = FText::FromString(TEXT("Tree Trunk"));
+			TrunkActor->bIsDestructionMesh = true;
+
+			// Trunk has reduced health compared to the original tree
+			TrunkActor->MeshMaxHealth = MeshMaxHealth * 0.6f;
+			TrunkActor->CurrentHealth = TrunkActor->MeshMaxHealth;
+			TrunkActor->bIsDepleted = false;
+
+			// Configure trunk-specific yields - logs from the main tree yields
+			TrunkActor->MeshHarvestYields = MeshHarvestYields;
+			TrunkActor->MeshDepletionBonusYields = MeshDepletionBonusYields;
+
+			// Disable InteractionVolume on trunk to prevent ghost collision at spawn point
+			// The trunk mesh is simulating physics and moving, effectively detaching from the root where InteractionVolume lives
+			if (TrunkActor->InteractionVolume)
+			{
+				TrunkActor->InteractionVolume->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				TrunkActor->InteractionVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
+			}
+
+			// Set up collision for harvesting (mesh collision for interaction)
+			TrunkActor->ResourceMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+			TrunkActor->ResourceMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+			TrunkActor->ResourceMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+			// Re-enable physics for falling/tipping
+			TrunkActor->ResourceMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			TrunkActor->ResourceMesh->SetCollisionResponseToAllChannels(ECR_Block);
+
+			// Configure physics from tree data asset
+			TrunkActor->ResourceMesh->SetMassOverrideInKg(NAME_None, TreeData->TrunkMass, true);
+			TrunkActor->ResourceMesh->SetLinearDamping(0.0f); // No linear damping for tipping
+			TrunkActor->ResourceMesh->SetAngularDamping(TreeData->TrunkAngularDamping);
+
+			// Enable physics simulation using editor collision settings
+			TrunkActor->ResourceMesh->SetSimulatePhysics(true);
+
+			// Determine direction away from player (on XY plane only)
+			FVector AwayDirection = FVector(1, 0, 0); // Default: positive X
+			if (Harvester)
+			{
+				FVector PlayerForward = Harvester->GetActorForwardVector();
+				// Direction away from player (opposite of where they're looking)
+				AwayDirection = FVector(-PlayerForward.X, -PlayerForward.Y, 0).GetSafeNormal();
+			}
+
+			// Apply rotation axis perpendicular to away direction
+			FVector RotationAxis = FVector::CrossProduct(FVector(0, 0, 1), AwayDirection).GetSafeNormal();
+
+			// Apply angular velocity to tip trunk away from player
+			float TipAngularVelocity = TreeData->TrunkTippingImpulse / 100.0f;
+			TrunkActor->ResourceMesh->SetPhysicsAngularVelocityInRadians(-RotationAxis * TipAngularVelocity);
+
+			// Lock translation to prevent sliding - only allow rotation
+			FBodyInstance *BodyInstance = TrunkActor->ResourceMesh->GetBodyInstance();
+			if (BodyInstance)
+			{
+				BodyInstance->bLockXTranslation = true;
+				BodyInstance->bLockYTranslation = true;
+				BodyInstance->bLockZTranslation = true;
+				BodyInstance->bLockZRotation = true; // Lock yaw to prevent spinning
+			}
+		}
+	}
 }

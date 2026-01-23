@@ -62,19 +62,19 @@ public:
 
 	/** Sound played when swinging the tool */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Feedback")
-	USoundBase* SwingSound;
+	USoundBase *SwingSound;
 
 	/** Sound played on hit */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Feedback")
-	USoundBase* HitSound;
+	USoundBase *HitSound;
 
 	/** Sound played when hitting nothing */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Feedback")
-	USoundBase* MissSound;
+	USoundBase *MissSound;
 
 	/** Niagara effect on hit */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Feedback")
-	UNiagaraSystem* HitEffect;
+	UNiagaraSystem *HitEffect;
 
 	/** Camera shake on hit */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Feedback")
@@ -91,11 +91,14 @@ public:
 protected:
 	/** Currently targeted resource (if any) */
 	UPROPERTY(BlueprintReadOnly, Category = "Harvesting")
-	AHarvestableResourceActor* TargetedResource;
+	AHarvestableResourceActor *TargetedResource;
 
 	/** Whether we're currently in a swing */
 	UPROPERTY(BlueprintReadOnly, Category = "Harvesting")
 	bool bIsSwinging;
+
+	/** Whether the hit has been delivered for the current swing */
+	bool bHitDelivered;
 
 	/** Timer for swing cooldown */
 	FTimerHandle SwingTimerHandle;
@@ -114,7 +117,7 @@ public:
 	virtual void OnToolHitNotify_Implementation() override;
 
 	/** Initialize harvesting properties from item data */
-	virtual void InitializeFromItemData(UInventoryItemData* InItemData) override;
+	virtual void InitializeFromItemData(UInventoryItemData *InItemData) override;
 
 	// ============================================
 	// HARVESTING FUNCTIONS
@@ -132,8 +135,7 @@ public:
 	 * @return The harvestable resource actor if found, nullptr otherwise
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Harvesting")
-	AHarvestableResourceActor* FindTargetResource();
-
+	AHarvestableResourceActor *FindTargetResource();
 
 protected:
 	/** Called when swing animation completes */
@@ -143,11 +145,11 @@ protected:
 	void PlaySwingFeedback();
 
 	/** Play hit feedback effects */
-	void PlayHitFeedback(const FVector& HitLocation);
+	void PlayHitFeedback(const FVector &HitLocation);
 
 	/** Play miss feedback effects */
 	void PlayMissFeedback();
 
 	/** Get the actual impact point on the target resource */
-	FVector GetImpactPoint(AHarvestableResourceActor* Resource) const;
+	FVector GetImpactPoint(AHarvestableResourceActor *Resource) const;
 };

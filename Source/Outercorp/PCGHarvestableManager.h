@@ -21,8 +21,8 @@ struct FPCGResourceMapping
 {
 	GENERATED_BODY()
 
-	/** Resource data asset containing all harvesting and PCG settings */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mapping", meta = (AllowedClasses = "/Script/Outercorp.HarvestableResourceData"))
+	/** Resource data asset containing all harvesting and PCG settings (can be base or tree-specific) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mapping")
 	TObjectPtr<UHarvestableResourceData> ResourceData = nullptr;
 
 	FPCGResourceMapping() = default;

@@ -13,6 +13,7 @@ class UStaticMeshComponent;
 class UBoxComponent;
 class UInteractableComponent;
 class UHarvestableResourceData;
+class UTreeHarvestableResourceData;
 class UInventoryItemData;
 class APickupableItem;
 class AOutercorpCharacter;
@@ -138,6 +139,14 @@ protected:
 	UPROPERTY()
 	int32 CurrentStageIndex;
 
+	/** Last harvester for determining trunk fall direction */
+	UPROPERTY()
+	AOutercorpCharacter* LastHarvester;
+
+	/** If true, this is a spawned destruction mesh (trunk/stump) and won't spawn further destruction meshes */
+	UPROPERTY()
+	bool bIsDestructionMesh;
+
 	// ============================================
 	// EVENTS
 	// ============================================
@@ -232,7 +241,7 @@ public:
 	 * Deplete this resource (called when health reaches 0)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Resource")
-	void Deplete();
+	void Deplete(AOutercorpCharacter* Harvester = nullptr);
 
 	/**
 	 * Respawn this resource (reset to full health)
@@ -258,4 +267,7 @@ protected:
 
 	/** Get pickup item class for spawning */
 	TSubclassOf<APickupableItem> GetPickupItemClass() const;
+
+	/** Spawn stump and trunk meshes when fully depleted */
+	void SpawnDestructionMeshes(AOutercorpCharacter* Harvester = nullptr);
 };

@@ -27,6 +27,8 @@ struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 
+class AHarvestableResourceActor;
+
 /**
  *  A basic first person character
  */
@@ -102,7 +104,7 @@ protected:
 
 	/** Array tracking all managed windows for Z-order management */
 	UPROPERTY()
-	TArray<UUserWidget*> ManagedWindows;
+	TArray<UUserWidget *> ManagedWindows;
 
 	/** Current base Z-order value for windows */
 	int32 CurrentWindowZOrder = 100;
@@ -289,11 +291,11 @@ protected:
 
 	/** Material for valid placement ghost (assign in Blueprint - should be blue/green) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
-	class UMaterialInterface* ValidPlacementMaterial;
+	class UMaterialInterface *ValidPlacementMaterial;
 
 	/** Material for invalid placement ghost (assign in Blueprint - should be red) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
-	class UMaterialInterface* InvalidPlacementMaterial;
+	class UMaterialInterface *InvalidPlacementMaterial;
 
 	/** Base construction part class to spawn (all parts use this class with different data assets) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
@@ -301,11 +303,11 @@ protected:
 
 	/** Construction part slots for hotkey switching (index 0 = hotkey 1, index 1 = hotkey 2, etc.) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
-	TArray<class UConstructionPartData*> ConstructionPartSlots;
+	TArray<class UConstructionPartData *> ConstructionPartSlots;
 
 	/** Tool item data slots for hotkey equipping (index 0 = hotkey 1, index 1 = hotkey 2, etc.) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Equipment")
-	TArray<class UInventoryItemData*> ToolSlots;
+	TArray<class UInventoryItemData *> ToolSlots;
 
 	/** Pickupable item class to spawn when dropping items (set to Blueprint class in BP_FirstPersonCharacter) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
@@ -314,11 +316,11 @@ protected:
 protected:
 	/** Ghost/preview mesh for placement */
 	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
-	class UStaticMeshComponent* PlacementGhost;
+	class UStaticMeshComponent *PlacementGhost;
 
 	/** Dynamic material instance for the ghost */
 	UPROPERTY()
-	class UMaterialInstanceDynamic* GhostMaterialInstance;
+	class UMaterialInstanceDynamic *GhostMaterialInstance;
 
 	/** Current valid placement location */
 	FVector PlacementLocation;
@@ -363,11 +365,11 @@ protected:
 
 	/** Currently snapped target part (cached for rotation testing) */
 	UPROPERTY()
-	class AConstructionPart* CurrentSnapTarget;
+	class AConstructionPart *CurrentSnapTarget;
 
 	/** Currently active target snap point (cached for rotation testing) */
 	UPROPERTY()
-	class UArrowComponent* CurrentTargetSnapPoint;
+	class UArrowComponent *CurrentTargetSnapPoint;
 
 	/** Current placement distance from camera */
 	UPROPERTY(BlueprintReadWrite, Category = "Construction")
@@ -395,11 +397,11 @@ protected:
 
 	/** Currently highlighted construction part for deletion */
 	UPROPERTY()
-	class AConstructionPart* HighlightedPartForDeletion;
+	class AConstructionPart *HighlightedPartForDeletion;
 
 	/** Material for highlighting parts in delete mode */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
-	class UMaterialInterface* DeleteHighlightMaterial;
+	class UMaterialInterface *DeleteHighlightMaterial;
 
 	/** Whether in move mode */
 	UPROPERTY(BlueprintReadOnly, Category = "Construction")
@@ -407,19 +409,19 @@ protected:
 
 	/** Currently highlighted construction part for moving */
 	UPROPERTY()
-	class AConstructionPart* HighlightedPartForMove;
+	class AConstructionPart *HighlightedPartForMove;
 
 	/** Currently held construction part in move mode */
 	UPROPERTY()
-	class AConstructionPart* HeldConstructionPart;
+	class AConstructionPart *HeldConstructionPart;
 
 	/** Material for highlighting parts in move mode */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction")
-	class UMaterialInterface* MoveHighlightMaterial;
+	class UMaterialInterface *MoveHighlightMaterial;
 
 	/** Current construction part ghost (for socket-based placement) */
 	UPROPERTY()
-	class AConstructionPart* ConstructionGhostPart;
+	class AConstructionPart *ConstructionGhostPart;
 
 	/** Cached ground offset for current ghost (calculated once to prevent jitter) */
 	float CachedGroundOffset;
@@ -429,14 +431,14 @@ protected:
 
 	/** Target construction part to snap to */
 	UPROPERTY()
-	class AConstructionPart* TargetConstructionPart;
+	class AConstructionPart *TargetConstructionPart;
 
 	/** Socket on the ghost part we're using for attachment */
 	FName GhostSocketName;
 
 	/** Stored item data from picked up item (for spawning new item) */
 	UPROPERTY()
-	class UInventoryItemData* HeldItemData;
+	class UInventoryItemData *HeldItemData;
 
 	/** Stored quantity from picked up item */
 	int32 HeldItemQuantity;
@@ -458,7 +460,7 @@ protected:
 
 	/** Currently equipped tool */
 	UPROPERTY(BlueprintReadOnly, Category = "Equipment")
-	AEquippableTool* EquippedTool;
+	AEquippableTool *EquippedTool;
 
 	/** Current equippable state for animation blend poses */
 	UPROPERTY(BlueprintReadOnly, Category = "Equipment")
@@ -466,7 +468,7 @@ protected:
 
 	/** Item data of currently equipped tool (for re-equipping after save/load) */
 	UPROPERTY()
-	UInventoryItemData* EquippedToolItemData;
+	UInventoryItemData *EquippedToolItemData;
 
 	/** Whether unarmed harvesting requires continuous hold */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Equipment|Unarmed")
@@ -498,7 +500,7 @@ protected:
 public:
 	/** Currently active fabrication station (for exiting crafting mode) */
 	UPROPERTY()
-	class AFabricationBase* ActiveFabricationStation;
+	class AFabricationBase *ActiveFabricationStation;
 
 	AOutercorpCharacter();
 
@@ -586,7 +588,7 @@ protected:
 
 	/** Adjust placement distance (mousewheel) */
 	UFUNCTION(BlueprintCallable, Category = "Construction")
-	void AdjustPlacementDistance(const FInputActionValue& Value);
+	void AdjustPlacementDistance(const FInputActionValue &Value);
 
 	/** Called when right-click is pressed in construction mode */
 	UFUNCTION(BlueprintCallable, Category = "Construction")
@@ -670,14 +672,14 @@ protected:
 	bool AreSocketTypesCompatible(FName SocketType1, FName SocketType2) const;
 
 	/** Helper function to test if a rotation offset will result in a valid snap */
-	bool TestRotationForValidSnap(float TestRotationOffset, class AConstructionPart* TargetPart, class UArrowComponent* TargetSnapPoint) const;
+	bool TestRotationForValidSnap(float TestRotationOffset, class AConstructionPart *TargetPart, class UArrowComponent *TargetSnapPoint) const;
 
 public:
 	// === Equipment/Tool Functions ===
 
 	/** Equip a tool from inventory */
 	UFUNCTION(BlueprintCallable, Category = "Equipment")
-	void EquipToolFromInventory(const FInventoryItem& InventoryItem);
+	void EquipToolFromInventory(const FInventoryItem &InventoryItem);
 
 	/** Unequip currently equipped tool and return it to inventory */
 	UFUNCTION(BlueprintCallable, Category = "Equipment")
@@ -717,11 +719,11 @@ public:
 
 	/** Get currently equipped tool */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment")
-	AEquippableTool* GetEquippedTool() const { return EquippedTool; }
+	AEquippableTool *GetEquippedTool() const { return EquippedTool; }
 
 	/** Get equipped tool's item data */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment")
-	UInventoryItemData* GetEquippedToolItemData() const { return EquippedToolItemData; }
+	UInventoryItemData *GetEquippedToolItemData() const { return EquippedToolItemData; }
 
 	/** Get current equippable state for animation blueprints */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment")
@@ -785,7 +787,7 @@ public:
 
 	/** Open item info window with item data */
 	UFUNCTION(BlueprintCallable, Category = "UI")
-	void OpenItemInfo(const FInventoryItem& Item);
+	void OpenItemInfo(const FInventoryItem &Item);
 
 	/** Update item info widget with current item data - implement this in Blueprint */
 	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
@@ -805,7 +807,7 @@ public:
 
 	/** Get the inventory widget */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory")
-	UInventoryWidget* GetInventoryWidget() const { return InventoryWidget; }
+	UInventoryWidget *GetInventoryWidget() const { return InventoryWidget; }
 
 	/** Debug helper to print widget type */
 	UFUNCTION(BlueprintCallable, Category = "UI")
@@ -845,7 +847,7 @@ public:
 
 	/** Called when a window is clicked */
 	UFUNCTION()
-	void OnWindowClicked(UWindow* ClickedWindow);
+	void OnWindowClicked(UWindow *ClickedWindow);
 
 	/** Called when inventory window interaction starts */
 	UFUNCTION()
@@ -861,16 +863,16 @@ public:
 
 	/** Bring a window to the front of all other windows */
 	UFUNCTION(BlueprintCallable, Category = "UI")
-	void BringWindowToFront(UUserWidget* Window);
+	void BringWindowToFront(UUserWidget *Window);
 
 	/** Register a window for Z-order management */
-	void RegisterWindow(UUserWidget* Window);
+	void RegisterWindow(UUserWidget *Window);
 
 	/** Check if a window is currently maximized/fullscreened */
-	bool IsWindowMaximized(UUserWidget* Window) const;
+	bool IsWindowMaximized(UUserWidget *Window) const;
 
 	/** Un-maximize a window if it's currently maximized */
-	void UnMaximizeWindow(UUserWidget* Window);
+	void UnMaximizeWindow(UUserWidget *Window);
 
 protected:
 	/** Set up input action bindings */

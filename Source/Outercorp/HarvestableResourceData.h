@@ -19,13 +19,13 @@ class UParticleSystem;
 UENUM(BlueprintType)
 enum class EHarvestToolType : uint8
 {
-	None			UMETA(DisplayName = "None (Hand)"),
-	Axe				UMETA(DisplayName = "Axe"),
-	Pickaxe			UMETA(DisplayName = "Pickaxe"),
-	Shovel			UMETA(DisplayName = "Shovel"),
-	Sickle			UMETA(DisplayName = "Sickle"),
-	Knife			UMETA(DisplayName = "Knife"),
-	Any				UMETA(DisplayName = "Any Tool")
+	None UMETA(DisplayName = "None (Hand)"),
+	Axe UMETA(DisplayName = "Axe"),
+	Pickaxe UMETA(DisplayName = "Pickaxe"),
+	Shovel UMETA(DisplayName = "Shovel"),
+	Sickle UMETA(DisplayName = "Sickle"),
+	Knife UMETA(DisplayName = "Knife"),
+	Any UMETA(DisplayName = "Any Tool")
 };
 
 /**
@@ -34,10 +34,10 @@ enum class EHarvestToolType : uint8
 UENUM(BlueprintType)
 enum class EToolEffectiveness : uint8
 {
-	Incompatible	UMETA(DisplayName = "Incompatible - Cannot Harvest"),
-	Poor			UMETA(DisplayName = "Poor - Heavily Penalized"),
-	Suboptimal		UMETA(DisplayName = "Suboptimal - Penalized"),
-	Optimal			UMETA(DisplayName = "Optimal - Full Effectiveness")
+	Incompatible UMETA(DisplayName = "Incompatible - Cannot Harvest"),
+	Poor UMETA(DisplayName = "Poor - Heavily Penalized"),
+	Suboptimal UMETA(DisplayName = "Suboptimal - Penalized"),
+	Optimal UMETA(DisplayName = "Optimal - Full Effectiveness")
 };
 
 /**
@@ -69,14 +69,10 @@ struct FToolEffectivenessEntry
 	int32 MinimumToolTier = 0;
 
 	FToolEffectivenessEntry()
-		: ToolType(EHarvestToolType::None)
-		, Effectiveness(EToolEffectiveness::Incompatible)
-		, DamageMultiplier(1.0f)
-		, YieldMultiplier(1.0f)
-		, MinimumToolTier(0)
-	{}
+		: ToolType(EHarvestToolType::None), Effectiveness(EToolEffectiveness::Incompatible), DamageMultiplier(1.0f), YieldMultiplier(1.0f), MinimumToolTier(0)
+	{
+	}
 };
-
 
 /**
  * Single item drop from harvesting
@@ -88,7 +84,7 @@ struct FHarvestYield
 
 	/** Item to drop */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Yield")
-	UInventoryItemData* ItemData = nullptr;
+	UInventoryItemData *ItemData = nullptr;
 
 	/** Minimum quantity per harvest hit */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Yield", meta = (ClampMin = "0"))
@@ -123,16 +119,9 @@ struct FHarvestYield
 	bool bEnablePhysics = true;
 
 	FHarvestYield()
-		: ItemData(nullptr)
-		, MinQuantity(1)
-		, MaxQuantity(1)
-		, DropChance(1.0f)
-		, RequiredToolTier(0)
-		, SpawnOffset(FVector::ZeroVector)
-		, SpawnRandomRadius(0.0f)
-		, SpawnHeightOffset(100.0f)
-		, bEnablePhysics(true)
-	{}
+		: ItemData(nullptr), MinQuantity(1), MaxQuantity(1), DropChance(1.0f), RequiredToolTier(0), SpawnOffset(FVector::ZeroVector), SpawnRandomRadius(0.0f), SpawnHeightOffset(100.0f), bEnablePhysics(true)
+	{
+	}
 };
 
 /**
@@ -149,22 +138,20 @@ struct FHarvestStage
 
 	/** Optional mesh to swap to at this stage */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage")
-	UStaticMesh* StageMesh = nullptr;
+	UStaticMesh *StageMesh = nullptr;
 
 	/** Optional material override at this stage */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage")
-	UMaterialInterface* StageMaterial = nullptr;
+	UMaterialInterface *StageMaterial = nullptr;
 
 	/** Scale modifier at this stage */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage")
 	FVector ScaleModifier = FVector(1.0f);
 
 	FHarvestStage()
-		: HealthThreshold(1.0f)
-		, StageMesh(nullptr)
-		, StageMaterial(nullptr)
-		, ScaleModifier(FVector(1.0f))
-	{}
+		: HealthThreshold(1.0f), StageMesh(nullptr), StageMaterial(nullptr), ScaleModifier(FVector(1.0f))
+	{
+	}
 };
 
 /**
@@ -177,7 +164,7 @@ struct FHarvestableSourceMesh
 
 	/** The static mesh used by PCG instances */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mesh")
-	UStaticMesh* Mesh = nullptr;
+	UStaticMesh *Mesh = nullptr;
 
 	/** Display name for this variant (e.g., "Small Maple Tree") */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mesh")
@@ -197,7 +184,7 @@ struct FHarvestableSourceMesh
 
 	/** Item to give when directly picked up (only used if bDirectPickup is true) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup", meta = (EditCondition = "bDirectPickup"))
-	UInventoryItemData* DirectPickupItem = nullptr;
+	UInventoryItemData *DirectPickupItem = nullptr;
 
 	/** Quantity to give on direct pickup */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup", meta = (EditCondition = "bDirectPickup", ClampMin = "1"))
@@ -212,12 +199,9 @@ struct FHarvestableSourceMesh
 	TArray<FHarvestYield> DepletionBonusYields;
 
 	FHarvestableSourceMesh()
-		: Mesh(nullptr)
-		, MaxHealth(100.0f)
-		, bDirectPickup(false)
-		, DirectPickupItem(nullptr)
-		, DirectPickupQuantity(1)
-	{}
+		: Mesh(nullptr), MaxHealth(100.0f), bDirectPickup(false), DirectPickupItem(nullptr), DirectPickupQuantity(1)
+	{
+	}
 };
 
 /**
@@ -278,8 +262,24 @@ public:
 	float RespawnTime = 300.0f;
 
 	// ============================================
-	// YIELDS
+	// YIELDS & PHYSICS
 	// ============================================
+
+	/** Minimum horizontal impulse strength for spawned items */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Yields", meta = (ClampMin = "0.0"))
+	float MinHorizontalImpulse = 150.0f;
+
+	/** Maximum horizontal impulse strength for spawned items */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Yields", meta = (ClampMin = "0.0"))
+	float MaxHorizontalImpulse = 300.0f;
+
+	/** Minimum vertical impulse strength for spawned items */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Yields", meta = (ClampMin = "0.0"))
+	float MinVerticalImpulse = 300.0f;
+
+	/** Maximum vertical impulse strength for spawned items */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Yields", meta = (ClampMin = "0.0"))
+	float MaxVerticalImpulse = 500.0f;
 
 	// ============================================
 	// VISUALS & FEEDBACK
@@ -291,19 +291,19 @@ public:
 
 	/** Sound played on each harvest hit */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback")
-	USoundBase* HarvestSound = nullptr;
+	USoundBase *HarvestSound = nullptr;
 
 	/** Sound played when resource is fully depleted */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback")
-	USoundBase* DepletionSound = nullptr;
+	USoundBase *DepletionSound = nullptr;
 
 	/** Particle effect on harvest hit */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback")
-	UParticleSystem* HarvestParticle = nullptr;
+	UParticleSystem *HarvestParticle = nullptr;
 
 	/** Niagara effect on harvest hit (preferred over legacy particles) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback")
-	UNiagaraSystem* HarvestNiagaraEffect = nullptr;
+	UNiagaraSystem *HarvestNiagaraEffect = nullptr;
 
 	/** Camera shake on harvest hit */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Feedback")
@@ -350,11 +350,11 @@ public:
 	// ============================================
 
 	/** Get the destruction stage for a given health percentage */
-	const FHarvestStage* GetStageForHealth(float HealthPercent) const;
+	const FHarvestStage *GetStageForHealth(float HealthPercent) const;
 
 	/** Get the destruction stage for a given health percentage (Blueprint-friendly version) */
 	UFUNCTION(BlueprintCallable, Category = "Harvestable Resource")
-	bool GetStageForHealthBP(float HealthPercent, FHarvestStage& OutStage) const;
+	bool GetStageForHealthBP(float HealthPercent, FHarvestStage &OutStage) const;
 
 	/** Calculate total damage after armor */
 	UFUNCTION(BlueprintCallable, Category = "Harvestable Resource")
@@ -366,15 +366,85 @@ public:
 
 	/** Get the effectiveness of a specific tool for this resource. Returns multipliers and compatibility. */
 	UFUNCTION(BlueprintCallable, Category = "Harvestable Resource")
-	bool GetToolEffectiveness(EHarvestToolType ToolType, int32 ToolTier, float& OutDamageMultiplier, float& OutYieldMultiplier) const;
+	virtual bool GetToolEffectiveness(EHarvestToolType ToolType, int32 ToolTier, float &OutDamageMultiplier, float &OutYieldMultiplier) const;
 
 	/** Check if a tool can harvest this resource at all (not incompatible) */
 	UFUNCTION(BlueprintCallable, Category = "Harvestable Resource")
 	bool CanToolHarvest(EHarvestToolType ToolType, int32 ToolTier) const;
 
 	/** Check if this data asset contains the given mesh */
-	bool ContainsMesh(UStaticMesh* Mesh) const;
+	bool ContainsMesh(UStaticMesh *Mesh) const;
 
 	/** Get the source mesh entry for a given mesh (returns nullptr if not found) */
-	const FHarvestableSourceMesh* GetSourceMeshEntry(UStaticMesh* Mesh) const;
+	const FHarvestableSourceMesh *GetSourceMeshEntry(UStaticMesh *Mesh) const;
+};
+
+/**
+ * Tree-specific harvestable resource data with trunk and stump physics
+ */
+UCLASS(BlueprintType)
+class OUTERCORP_API UTreeHarvestableResourceData : public UHarvestableResourceData
+{
+	GENERATED_BODY()
+
+public:
+	// ============================================
+	// TREE-SPECIFIC VISUALS
+	// ============================================
+
+	/** Mesh to spawn as stump when fully depleted (stays in place) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree Visuals")
+	UStaticMesh *StumpMesh = nullptr;
+
+	/** Mesh to spawn as trunk when fully depleted (has physics enabled to fall) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree Visuals")
+	UStaticMesh *TrunkMesh = nullptr;
+
+	/** Material for spawned stump (optional) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree Visuals")
+	UMaterialInterface *StumpMaterial = nullptr;
+
+	/** Material for spawned trunk (optional) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree Visuals")
+	UMaterialInterface *TrunkMaterial = nullptr;
+
+	// ============================================
+	// TRUNK PHYSICS
+	// ============================================
+
+	/** Offset from tree location where trunk spawns */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics")
+	FVector TrunkSpawnOffset = FVector(0, 0, 100.0f);
+
+	/** Mass of the trunk for physics simulation */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "10.0"))
+	float TrunkMass = 100.0f;
+
+	/** Downward velocity applied to trunk when it falls */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0"))
+	float TrunkFallSpeed = 300.0f;
+
+	/** Rotational speed (angular velocity) applied to trunk in radians */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0"))
+	float TrunkRotationSpeed = 3.0f;
+
+	/** Random variance for rotation speed */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0"))
+	float TrunkRotationSpeedVariance = 1.0f;
+
+	/** Linear damping to slow down trunk movement */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float TrunkLinearDamping = 0.2f;
+
+	/** Angular damping to slow down trunk rotation */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float TrunkAngularDamping = 0.3f;
+
+	/** Impulse force applied at the top of trunk to tip it over */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0"))
+	float TrunkTippingImpulse = 500.0f;
+
+	/** Height offset from trunk spawn location where impulse is applied */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0"))
+	float TrunkImpulseHeightOffset = 100.0f;
 };
