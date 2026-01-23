@@ -12,7 +12,6 @@ class UInventoryItemData;
 class USoundBase;
 class UNiagaraSystem;
 class UParticleSystem;
-class ASlicedMeshActor;
 
 /**
  * Type of harvesting tool required
@@ -285,10 +284,6 @@ public:
 	// ============================================
 	// VISUALS & FEEDBACK
 	// ============================================
-
-	/** Sliced mesh actor class to spawn as a slicing effect when harvested */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")
-	TSubclassOf<class ASlicedMeshActor> DestructibleActorClass = nullptr;
 
 	/** Destruction stages for visual feedback */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visuals")

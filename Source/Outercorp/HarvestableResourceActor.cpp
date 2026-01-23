@@ -10,7 +10,6 @@
 #include "PickupableItem.h"
 #include "EquippableTool.h"
 #include "NotificationComponent.h"
-#include "SlicedMeshActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
@@ -723,64 +722,6 @@ void AHarvestableResourceActor::Deplete()
 	if (ResourceData && ResourceData->bCanRespawn)
 	{
 		RespawnTimeRemaining = ResourceData->RespawnTime;
-	}
-
-	// Spawn sliced mesh actor if specified (instance override takes priority, then data asset)
-	TSubclassOf<ASlicedMeshActor> ActorClassToSpawn = SlicedMeshActorClassOverride;
-	if (!ActorClassToSpawn && ResourceData && ResourceData->DestructibleActorClass)
-	{
-		ActorClassToSpawn = ResourceData->DestructibleActorClass;
-	}
-	if (!ActorClassToSpawn)
-	{
-		// Use default ASlicedMeshActor if no override specified
-		ActorClassToSpawn = ASlicedMeshActor::StaticClass();
-	}
-
-	if (ActorClassToSpawn)
-	{
-		UWorld* World = GetWorld();
-		if (World && ResourceMesh && ResourceMesh->GetStaticMesh())
-		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-			ASlicedMeshActor* SlicedActor = World->SpawnActor<ASlicedMeshActor>(
-				ActorClassToSpawn,
-				GetActorLocation(),
-				GetActorRotation(),
-				SpawnParams
-			);
-
-			if (SlicedActor)
-			{
-				SlicedActor->SetActorScale3D(GetActorScale3D());
-				SlicedActor->SetActorLocation(GetActorLocation());
-				SlicedActor->SetActorRotation(GetActorRotation());
-
-				// Initialize slicing parameters
-				// Get mesh bounds in local space
-				FVector MeshOrigin, MeshExtent;
-				ResourceMesh->GetStaticMesh()->GetBounds().GetCenterAndExtents(MeshOrigin, MeshExtent);
-
-				// Slice at 30% from the bottom of the mesh bounds
-				// MeshOrigin is the center, so bottom is at -MeshExtent.Z
-				float SliceHeight = MeshOrigin.Z + (-MeshExtent.Z * 0.7f); // 30% from bottom = 70% down from center
-				FVector SlicePlaneLocation = FVector(0, 0, SliceHeight); // Local space
-				FVector SlicePlaneNormal = FVector::UpVector;
-				FVector FallingVelocity(FMath::RandRange(-200, 200), FMath::RandRange(-200, 200), -500);
-
-				SlicedActor->InitializeSlicedMesh(
-					ResourceMesh->GetStaticMesh(),
-					SlicePlaneLocation,
-					SlicePlaneNormal,
-					FallingVelocity,
-					ResourceMesh->GetMaterial(0)
-				);
-
-				SlicedActor->CreateSlicedMeshes();
-			}
-		}
 	}
 
 	// Hide mesh

@@ -23,8 +23,7 @@ public class Outercorp : ModuleRules
 			"NX_ModularWindow",
 			"Niagara",
 			"Chaos",
-			"GeometryCollectionEngine",
-			"ProceduralMeshComponent"
+			"GeometryCollectionEngine"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
