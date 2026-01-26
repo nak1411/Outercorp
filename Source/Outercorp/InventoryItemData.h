@@ -17,15 +17,15 @@ class UNiagaraSystem;
 UENUM(BlueprintType)
 enum class EToolType : uint8
 {
-	None		UMETA(DisplayName = "None"),
-	Axe			UMETA(DisplayName = "Axe"),
-	Pickaxe		UMETA(DisplayName = "Pickaxe"),
-	Shovel		UMETA(DisplayName = "Shovel"),
-	Sickle		UMETA(DisplayName = "Sickle"),
-	Knife		UMETA(DisplayName = "Knife"),
-	Hammer		UMETA(DisplayName = "Hammer"),
-	Wrench		UMETA(DisplayName = "Wrench"),
-	Generic		UMETA(DisplayName = "Generic Tool")
+	None UMETA(DisplayName = "None"),
+	Axe UMETA(DisplayName = "Axe"),
+	Pickaxe UMETA(DisplayName = "Pickaxe"),
+	Shovel UMETA(DisplayName = "Shovel"),
+	Sickle UMETA(DisplayName = "Sickle"),
+	Knife UMETA(DisplayName = "Knife"),
+	Hammer UMETA(DisplayName = "Hammer"),
+	Wrench UMETA(DisplayName = "Wrench"),
+	Generic UMETA(DisplayName = "Generic Tool")
 };
 
 /**
@@ -161,17 +161,41 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Tool", meta = (EditCondition = "bIsEquippable", ClampMin = "1"))
 	int32 ToolTier = 1;
 
+	// ============================================
+	// SHOVEL PROPERTIES (only used if ToolType == Shovel)
+	// ============================================
+
+	/** Class of landscape patch to spawn when digging */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Shovel", meta = (EditCondition = "bIsEquippable"))
+	TSubclassOf<class AActor> ToolLandscapePatchClass;
+
+	/** Radius of the hole to dig (if applicable to patch) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Shovel", meta = (EditCondition = "bIsEquippable"))
+	float ToolDigRadius = 100.0f;
+
+	/** Depth of the hole to dig (Z offset) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Shovel", meta = (EditCondition = "bIsEquippable"))
+	float ToolDigDepth = 50.0f;
+
+	/** Offset from hit location to spawn the patch (z usually needs adjustment) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Shovel", meta = (EditCondition = "bIsEquippable"))
+	float ToolSpawnHeightOffset = 0.0f;
+
 	/** First-person skeletal mesh (seen by player when equipped) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Mesh", meta = (EditCondition = "bIsEquippable"))
-	USkeletalMesh* ToolFirstPersonMesh = nullptr;
+	USkeletalMesh *ToolFirstPersonMesh = nullptr;
 
 	/** Third-person skeletal mesh (seen by others) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Mesh", meta = (EditCondition = "bIsEquippable"))
-	USkeletalMesh* ToolThirdPersonMesh = nullptr;
+	USkeletalMesh *ToolThirdPersonMesh = nullptr;
 
 	/** Socket name to attach to on character's first-person mesh */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Attachment", meta = (EditCondition = "bIsEquippable"))
 	FName ToolAttachSocketName = FName("GripPoint");
+
+	/** Transform offset applied relative to the socket after attachment */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Attachment", meta = (EditCondition = "bIsEquippable"))
+	FTransform ToolAttachOffsetTransform = FTransform::Identity;
 
 	/** Animation state to set on character when this tool is equipped */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Animation", meta = (EditCondition = "bIsEquippable"))
@@ -179,11 +203,11 @@ public:
 
 	/** Animation to play on character when using tool (primary action) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Animation", meta = (EditCondition = "bIsEquippable"))
-	UAnimMontage* ToolPrimaryUseAnimation = nullptr;
+	UAnimMontage *ToolPrimaryUseAnimation = nullptr;
 
 	/** Animation to play on character when using tool (secondary action) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Animation", meta = (EditCondition = "bIsEquippable"))
-	UAnimMontage* ToolSecondaryUseAnimation = nullptr;
+	UAnimMontage *ToolSecondaryUseAnimation = nullptr;
 
 	/** Whether this tool requires continuous hold for primary action */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Usage", meta = (EditCondition = "bIsEquippable"))
@@ -211,19 +235,19 @@ public:
 
 	/** Sound played when swinging the tool (whoosh) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Feedback", meta = (EditCondition = "bIsEquippable"))
-	USoundBase* ToolUseSound = nullptr;
+	USoundBase *ToolUseSound = nullptr;
 
 	/** Sound played when tool hits a target (impact) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Feedback", meta = (EditCondition = "bIsEquippable"))
-	USoundBase* ToolHitSound = nullptr;
+	USoundBase *ToolHitSound = nullptr;
 
 	/** Sound played when equipping the tool */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Feedback", meta = (EditCondition = "bIsEquippable"))
-	USoundBase* ToolEquipSound = nullptr;
+	USoundBase *ToolEquipSound = nullptr;
 
 	/** Niagara effect when using the tool */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item|Equipment|Feedback", meta = (EditCondition = "bIsEquippable"))
-	UNiagaraSystem* ToolUseEffect = nullptr;
+	UNiagaraSystem *ToolUseEffect = nullptr;
 
 	/** Item metadata (for custom properties) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")

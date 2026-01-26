@@ -1,6 +1,5 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-
 #include "OutercorpPlayerController.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
@@ -22,7 +21,6 @@ void AOutercorpPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	
 	// only spawn touch controls on local player controllers
 	if (ShouldUseTouchControls() && IsLocalPlayerController())
 	{
@@ -33,13 +31,12 @@ void AOutercorpPlayerController::BeginPlay()
 		{
 			// add the controls to the player screen
 			MobileControlsWidget->AddToPlayerScreen(0);
-
-		} else {
+		}
+		else
+		{
 
 			UE_LOG(LogOutercorp, Error, TEXT("Could not spawn mobile controls widget."));
-
 		}
-
 	}
 }
 
@@ -51,27 +48,43 @@ void AOutercorpPlayerController::SetupInputComponent()
 	if (IsLocalPlayerController())
 	{
 		// Add Input Mapping Context
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+		if (UEnhancedInputLocalPlayerSubsystem *Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 		{
-			for (UInputMappingContext* CurrentContext : DefaultMappingContexts)
+			if (DefaultMappingContexts.IsEmpty())
 			{
-				Subsystem->AddMappingContext(CurrentContext, 0);
+				UE_LOG(LogOutercorp, Warning, TEXT("AOutercorpPlayerController::SetupInputComponent - DefaultMappingContexts is empty!"));
+			}
+
+			for (UInputMappingContext *CurrentContext : DefaultMappingContexts)
+			{
+				if (CurrentContext)
+				{
+					Subsystem->AddMappingContext(CurrentContext, 0);
+					UE_LOG(LogOutercorp, Log, TEXT("AOutercorpPlayerController::SetupInputComponent - Added mapping context: %s"), *GetNameSafe(CurrentContext));
+				}
+				else
+				{
+					UE_LOG(LogOutercorp, Warning, TEXT("AOutercorpPlayerController::SetupInputComponent - Found null context in DefaultMappingContexts"));
+				}
 			}
 
 			// only add these IMCs if we're not using mobile touch input
 			if (!ShouldUseTouchControls())
 			{
-				for (UInputMappingContext* CurrentContext : MobileExcludedMappingContexts)
+				for (UInputMappingContext *CurrentContext : MobileExcludedMappingContexts)
 				{
 					Subsystem->AddMappingContext(CurrentContext, 0);
 				}
 			}
 		}
+		else
+		{
+			UE_LOG(LogOutercorp, Error, TEXT("AOutercorpPlayerController::SetupInputComponent - Failed to get EnhancedInputLocalPlayerSubsystem!"));
+		}
 
 		// Bind ESC key to toggle exit menu (bExecuteWhenPaused = true to work when game is paused)
 		InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AOutercorpPlayerController::ToggleExitMenu).bExecuteWhenPaused = true;
 	}
-
 }
 
 bool AOutercorpPlayerController::ShouldUseTouchControls() const

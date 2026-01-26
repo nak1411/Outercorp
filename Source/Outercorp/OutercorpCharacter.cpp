@@ -568,8 +568,13 @@ void AOutercorpCharacter::SetupPlayerInputComponent(UInputComponent *PlayerInput
 		// Tool Use Actions
 		if (ToolUseAction)
 		{
+			UE_LOG(LogTemp, Log, TEXT("AOutercorpCharacter::SetupPlayerInputComponent - Binding ToolUseAction: %s"), *GetNameSafe(ToolUseAction));
 			EnhancedInputComponent->BindAction(ToolUseAction, ETriggerEvent::Started, this, &AOutercorpCharacter::StartToolUse);
 			EnhancedInputComponent->BindAction(ToolUseAction, ETriggerEvent::Completed, this, &AOutercorpCharacter::StopToolUse);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("AOutercorpCharacter::SetupPlayerInputComponent - ToolUseAction is NULL!"));
 		}
 
 		if (ToolSecondaryUseAction)
@@ -5005,9 +5010,9 @@ void AOutercorpCharacter::EquipToolFromInventory(const FInventoryItem &Inventory
 	{
 	case EToolType::Axe:
 	case EToolType::Pickaxe:
-	case EToolType::Shovel:
 	case EToolType::Sickle:
 	case EToolType::Knife:
+	case EToolType::Shovel:
 		ToolClassToSpawn = AHarvestingTool::StaticClass();
 		break;
 	default:
@@ -5114,13 +5119,17 @@ void AOutercorpCharacter::ToggleEquipTool()
 
 void AOutercorpCharacter::StartToolUse()
 {
+	UE_LOG(LogTemp, Log, TEXT("AOutercorpCharacter::StartToolUse called"));
+
 	if (EquippedTool)
 	{
+		UE_LOG(LogTemp, Log, TEXT("AOutercorpCharacter: Delegating to EquippedTool: %s"), *EquippedTool->GetName());
 		// Delegate to the equipped tool
 		EquippedTool->StartPrimaryUse();
 	}
 	else
 	{
+		UE_LOG(LogTemp, Log, TEXT("AOutercorpCharacter: No tool equipped, performing unarmed harvest"));
 		// Unarmed harvesting - interact with what we're looking at
 		PerformUnarmedHarvest();
 	}

@@ -43,23 +43,27 @@ public:
 
 	/** Item data asset this tool was created from */
 	UPROPERTY(BlueprintReadOnly, Category = "Tool|Data")
-	UInventoryItemData* SourceItemData;
+	UInventoryItemData *SourceItemData;
 
 	/** First-person mesh for when tool is equipped (seen by player) */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	USkeletalMeshComponent* FirstPersonMesh;
+	USkeletalMeshComponent *FirstPersonMesh;
 
 	/** Third-person mesh override (optional, uses ItemMesh if not set) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Mesh")
-	USkeletalMesh* ThirdPersonSkeletalMesh;
+	USkeletalMesh *ThirdPersonSkeletalMesh;
 
 	/** First-person skeletal mesh for equipped tool */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Mesh")
-	USkeletalMesh* FirstPersonSkeletalMesh;
+	USkeletalMesh *FirstPersonSkeletalMesh;
 
 	/** Socket name to attach to on character's first-person mesh (e.g., "GripPoint", "hand_r") */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Attachment")
 	FName AttachSocketName;
+
+	/** Transform offset applied relative to the socket after attachment */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Attachment")
+	FTransform AttachOffsetTransform;
 
 	/** Animation state to set on character when this tool is equipped */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Animation")
@@ -87,15 +91,15 @@ public:
 
 	/** Character that has this tool equipped */
 	UPROPERTY(BlueprintReadOnly, Category = "Tool|State")
-	AOutercorpCharacter* OwningCharacter;
+	AOutercorpCharacter *OwningCharacter;
 
 	/** Animation to play on character when using tool (primary action) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Animation")
-	UAnimMontage* PrimaryUseAnimation;
+	UAnimMontage *PrimaryUseAnimation;
 
 	/** Animation to play on character when using tool (secondary action) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Animation")
-	UAnimMontage* SecondaryUseAnimation;
+	UAnimMontage *SecondaryUseAnimation;
 
 	/** Maximum durability of the tool (0 = infinite durability) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Durability")
@@ -111,13 +115,13 @@ public:
 
 	/** Sound played when equipping the tool */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tool|Feedback")
-	USoundBase* EquipSound;
+	USoundBase *EquipSound;
 
 	// === Tool Lifecycle Functions ===
 
 	/** Called when tool is equipped by a character */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Tool")
-	void OnEquipped(AOutercorpCharacter* Character);
+	void OnEquipped(AOutercorpCharacter *Character);
 
 	/** Called when tool is unequipped */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Tool")
@@ -125,7 +129,7 @@ public:
 
 	/** Equip this tool to a character */
 	UFUNCTION(BlueprintCallable, Category = "Tool")
-	void EquipTool(AOutercorpCharacter* Character);
+	void EquipTool(AOutercorpCharacter *Character);
 
 	/** Unequip this tool from character */
 	UFUNCTION(BlueprintCallable, Category = "Tool")
@@ -179,11 +183,11 @@ public:
 
 	/** Initialize tool properties from an inventory item data asset */
 	UFUNCTION(BlueprintCallable, Category = "Tool")
-	virtual void InitializeFromItemData(UInventoryItemData* InItemData);
+	virtual void InitializeFromItemData(UInventoryItemData *InItemData);
 
 	/** Get the source item data asset */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Tool")
-	UInventoryItemData* GetSourceItemData() const { return SourceItemData; }
+	UInventoryItemData *GetSourceItemData() const { return SourceItemData; }
 
 protected:
 	/** Timer handle for cooldown */
@@ -202,14 +206,14 @@ protected:
 	void ResetCooldown();
 
 	/** Play tool use animation on character. Returns true if animation started, false if queued/blocked */
-	bool PlayUseAnimation(UAnimMontage* Animation);
+	bool PlayUseAnimation(UAnimMontage *Animation);
 
 	/** Stop any currently playing montage */
 	void StopCurrentMontage();
 
 	/** Handle montage notify events - looks for "ToolHit" notify */
 	UFUNCTION()
-	void HandleMontageNotify(FName NotifyName, const FBranchingPointNotifyPayload& BranchingPointPayload);
+	void HandleMontageNotify(FName NotifyName, const FBranchingPointNotifyPayload &BranchingPointPayload);
 
 	/** Called repeatedly while holding for continuous use */
 	void ContinuousUseTick();

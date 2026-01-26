@@ -18,9 +18,9 @@ class UInventoryItemData;
 class APickupableItem;
 class AOutercorpCharacter;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnResourceHarvested, AHarvestableResourceActor*, Resource, float, DamageDealt);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnResourceDepleted, AHarvestableResourceActor*, Resource);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnResourceRespawned, AHarvestableResourceActor*, Resource);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnResourceHarvested, AHarvestableResourceActor *, Resource, float, DamageDealt);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnResourceDepleted, AHarvestableResourceActor *, Resource);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnResourceRespawned, AHarvestableResourceActor *, Resource);
 
 /**
  * Actor representing a harvestable resource (tree, rock, bush, etc.)
@@ -46,16 +46,16 @@ public:
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	USceneComponent* RootSceneComponent;
+	USceneComponent *RootSceneComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	UStaticMeshComponent* ResourceMesh;
+	UStaticMeshComponent *ResourceMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	UBoxComponent* InteractionVolume;
+	UBoxComponent *InteractionVolume;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	UInteractableComponent* InteractableComponent;
+	UInteractableComponent *InteractableComponent;
 
 	// ============================================
 	// RESOURCE DATA
@@ -64,7 +64,7 @@ protected:
 public:
 	/** Data asset defining this resource's properties */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Resource")
-	UHarvestableResourceData* ResourceData;
+	UHarvestableResourceData *ResourceData;
 
 	/** Current health of this resource instance */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resource")
@@ -116,7 +116,7 @@ public:
 
 	/** Item to give on direct pickup */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PCG")
-	UInventoryItemData* DirectPickupItem;
+	UInventoryItemData *DirectPickupItem;
 
 	/** Quantity to give on direct pickup */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "PCG")
@@ -129,7 +129,7 @@ public:
 protected:
 	/** Original mesh from resource data */
 	UPROPERTY()
-	UStaticMesh* OriginalMesh;
+	UStaticMesh *OriginalMesh;
 
 	/** Original scale */
 	UPROPERTY()
@@ -141,7 +141,7 @@ protected:
 
 	/** Last harvester for determining trunk fall direction */
 	UPROPERTY()
-	AOutercorpCharacter* LastHarvester;
+	AOutercorpCharacter *LastHarvester;
 
 	/** If true, this is a spawned destruction mesh (trunk/stump) and won't spawn further destruction meshes */
 	UPROPERTY()
@@ -168,12 +168,12 @@ public:
 	// INTERACTABLE INTERFACE
 	// ============================================
 
-	virtual void OnLookAt_Implementation(AActor* LookingActor) override;
-	virtual void OnLookAway_Implementation(AActor* LookingActor) override;
-	virtual void OnInteract_Implementation(AActor* InteractingActor) override;
+	virtual void OnLookAt_Implementation(AActor *LookingActor) override;
+	virtual void OnLookAway_Implementation(AActor *LookingActor) override;
+	virtual void OnInteract_Implementation(AActor *InteractingActor) override;
 	virtual FText GetInteractionName_Implementation() const override;
 	virtual FText GetInteractionPrompt_Implementation() const override;
-	virtual bool CanInteract_Implementation(AActor* InteractingActor) const override;
+	virtual bool CanInteract_Implementation(AActor *InteractingActor) const override;
 	virtual float GetInteractionRange_Implementation() const override;
 	virtual bool ShouldHighlight_Implementation() const override;
 
@@ -190,7 +190,7 @@ public:
 	 * @return True if damage was applied
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Harvesting")
-	bool ApplyHarvestDamage(AOutercorpCharacter* Harvester, EHarvestToolType ToolType, int32 ToolTier, float BaseDamage);
+	bool ApplyHarvestDamage(AOutercorpCharacter *Harvester, EHarvestToolType ToolType, int32 ToolTier, float BaseDamage);
 
 	/**
 	 * Spawn yield items at this location
@@ -198,7 +198,7 @@ public:
 	 * @param SpawnLocation Where to spawn the items
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Harvesting")
-	void SpawnYieldItems(const TArray<FHarvestYield>& Yields, const FVector& SpawnLocation);
+	void SpawnYieldItems(const TArray<FHarvestYield> &Yields, const FVector &SpawnLocation);
 
 	/**
 	 * Get current health as a percentage (0.0 - 1.0)
@@ -215,7 +215,7 @@ public:
 	 * @param Data The resource data to use
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Resource")
-	void InitializeFromData(UHarvestableResourceData* Data);
+	void InitializeFromData(UHarvestableResourceData *Data);
 
 	/**
 	 * Initialize from a PCG instance
@@ -225,7 +225,7 @@ public:
 	 * @param InstanceTransform The transform of the original instance
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Resource")
-	void InitializeFromPCGInstance(UHarvestableResourceData* Data, UInstancedStaticMeshComponent* ISMComponent, int32 InstanceIndex, const FTransform& InstanceTransform);
+	void InitializeFromPCGInstance(UHarvestableResourceData *Data, UInstancedStaticMeshComponent *ISMComponent, int32 InstanceIndex, const FTransform &InstanceTransform);
 
 	// ============================================
 	// STATE MANAGEMENT
@@ -241,7 +241,7 @@ public:
 	 * Deplete this resource (called when health reaches 0)
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Resource")
-	void Deplete(AOutercorpCharacter* Harvester = nullptr);
+	void Deplete(AOutercorpCharacter *Harvester = nullptr);
 
 	/**
 	 * Respawn this resource (reset to full health)
@@ -260,7 +260,7 @@ protected:
 	void HandleRespawnTimer(float DeltaTime);
 
 	/** Play harvest feedback effects */
-	void PlayHarvestFeedback(const FVector& HitLocation);
+	void PlayHarvestFeedback(const FVector &HitLocation);
 
 	/** Play depletion feedback effects */
 	void PlayDepletionFeedback();
@@ -269,5 +269,5 @@ protected:
 	TSubclassOf<APickupableItem> GetPickupItemClass() const;
 
 	/** Spawn stump and trunk meshes when fully depleted */
-	void SpawnDestructionMeshes(AOutercorpCharacter* Harvester = nullptr);
+	void SpawnDestructionMeshes(AOutercorpCharacter *Harvester = nullptr);
 };

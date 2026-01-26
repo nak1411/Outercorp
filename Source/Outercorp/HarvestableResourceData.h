@@ -110,16 +110,20 @@ struct FHarvestYield
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn", meta = (ClampMin = "0.0"))
 	float SpawnRandomRadius = 0.0f;
 
-	/** Base height offset for spawned items */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn")
-	float SpawnHeightOffset = 100.0f;
-
 	/** Whether spawned items should simulate physics and receive impulse */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn")
 	bool bEnablePhysics = true;
 
+	/** Whether to spawn distinct items for each unit (false) or one item with a stack quantity (true) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn")
+	bool bSpawnAsStack = false;
+
+	/** Optional mesh to use when spawning as a stack (overrides item's default mesh) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawn", meta = (EditCondition = "bSpawnAsStack"))
+	UStaticMesh *StackMeshOverride = nullptr;
+
 	FHarvestYield()
-		: ItemData(nullptr), MinQuantity(1), MaxQuantity(1), DropChance(1.0f), RequiredToolTier(0), SpawnOffset(FVector::ZeroVector), SpawnRandomRadius(0.0f), SpawnHeightOffset(100.0f), bEnablePhysics(true)
+		: ItemData(nullptr), MinQuantity(1), MaxQuantity(1), DropChance(1.0f), RequiredToolTier(0), SpawnOffset(FVector::ZeroVector), SpawnRandomRadius(0.0f), bEnablePhysics(true), bSpawnAsStack(false), StackMeshOverride(nullptr)
 	{
 	}
 };
@@ -382,7 +386,7 @@ public:
 /**
  * Tree-specific harvestable resource data with trunk and stump physics
  */
-UCLASS(BlueprintType)
+UCLASS(BlueprintType, meta = (PrioritizeCategories = "PCG Harvesting Health Yields TreeVisuals TrunkPhysics Visuals Feedback Interaction Debug"))
 class OUTERCORP_API UTreeHarvestableResourceData : public UHarvestableResourceData
 {
 	GENERATED_BODY()
@@ -393,19 +397,19 @@ public:
 	// ============================================
 
 	/** Mesh to spawn as stump when fully depleted (stays in place) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree Visuals")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TreeVisuals")
 	UStaticMesh *StumpMesh = nullptr;
 
 	/** Mesh to spawn as trunk when fully depleted (has physics enabled to fall) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree Visuals")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TreeVisuals")
 	UStaticMesh *TrunkMesh = nullptr;
 
 	/** Material for spawned stump (optional) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree Visuals")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TreeVisuals")
 	UMaterialInterface *StumpMaterial = nullptr;
 
 	/** Material for spawned trunk (optional) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tree Visuals")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TreeVisuals")
 	UMaterialInterface *TrunkMaterial = nullptr;
 
 	// ============================================
@@ -413,38 +417,38 @@ public:
 	// ============================================
 
 	/** Offset from tree location where trunk spawns */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TrunkPhysics")
 	FVector TrunkSpawnOffset = FVector(0, 0, 100.0f);
 
 	/** Mass of the trunk for physics simulation */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "10.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TrunkPhysics", meta = (ClampMin = "10.0"))
 	float TrunkMass = 100.0f;
 
 	/** Downward velocity applied to trunk when it falls */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TrunkPhysics", meta = (ClampMin = "0.0"))
 	float TrunkFallSpeed = 300.0f;
 
 	/** Rotational speed (angular velocity) applied to trunk in radians */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TrunkPhysics", meta = (ClampMin = "0.0"))
 	float TrunkRotationSpeed = 3.0f;
 
 	/** Random variance for rotation speed */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TrunkPhysics", meta = (ClampMin = "0.0"))
 	float TrunkRotationSpeedVariance = 1.0f;
 
 	/** Linear damping to slow down trunk movement */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TrunkPhysics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float TrunkLinearDamping = 0.2f;
 
 	/** Angular damping to slow down trunk rotation */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TrunkPhysics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float TrunkAngularDamping = 0.3f;
 
 	/** Impulse force applied at the top of trunk to tip it over */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TrunkPhysics", meta = (ClampMin = "0.0"))
 	float TrunkTippingImpulse = 500.0f;
 
 	/** Height offset from trunk spawn location where impulse is applied */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Trunk Physics", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TrunkPhysics", meta = (ClampMin = "0.0"))
 	float TrunkImpulseHeightOffset = 100.0f;
 };

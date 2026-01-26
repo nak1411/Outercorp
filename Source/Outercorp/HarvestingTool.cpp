@@ -113,9 +113,13 @@ void AHarvestingTool::InitializeFromItemData(UInventoryItemData *InItemData)
 
 void AHarvestingTool::StartPrimaryUse_Implementation()
 {
+	UE_LOG(LogTemp, Log, TEXT("HarvestingTool::StartPrimaryUse_Implementation called (Tool: %s)"), *GetName());
+
 	// Don't call Super - we handle everything ourselves for harvesting tools
 	if (!CanUseTool())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("HarvestingTool: Cannot use tool (Equipped: %d, Cooldown: %d, Durability: %d)"),
+			   bIsEquipped, bIsOnCooldown, HasDurability());
 		return;
 	}
 
@@ -148,6 +152,7 @@ void AHarvestingTool::PerformHarvestSwing()
 {
 	if (bIsSwinging || !OwningCharacter)
 	{
+		// UE_LOG(LogTemp, Warning, TEXT("HarvestingTool: Already swinging or no owner"));
 		return;
 	}
 
@@ -156,6 +161,12 @@ void AHarvestingTool::PerformHarvestSwing()
 	if (PrimaryUseAnimation)
 	{
 		bAnimationStarted = PlayUseAnimation(PrimaryUseAnimation);
+	}
+	else
+	{
+		// Force start animation logic even if no animation is present (e.g. for prototyping)
+		UE_LOG(LogTemp, Warning, TEXT("HarvestingTool: No PrimaryUseAnimation set! Proceeding without visual feedback."));
+		bAnimationStarted = true;
 	}
 
 	// Only proceed if animation actually started (not queued)

@@ -26,6 +26,7 @@ AEquippableTool::AEquippableTool()
 
 	// Default values
 	AttachSocketName = FName("GripPoint");
+	AttachOffsetTransform = FTransform::Identity;
 	ToolAnimationState = EEquippableState::OneHandedTool;
 	bRequiresContinuousHold = false;
 	UsageCooldown = 0.5f;
@@ -204,6 +205,9 @@ void AEquippableTool::OnEquipped_Implementation(AOutercorpCharacter *Character)
 			CharacterFPMesh,
 			AttachRules,
 			SocketToUse);
+
+		// Apply configured offset relative to the socket
+		MeshToAttach->SetRelativeTransform(AttachOffsetTransform);
 
 		// Set owner for visibility
 		SetOwner(Character);
@@ -648,6 +652,7 @@ void AEquippableTool::InitializeFromItemData(UInventoryItemData *InItemData)
 
 	// Set attachment
 	AttachSocketName = InItemData->ToolAttachSocketName;
+	AttachOffsetTransform = InItemData->ToolAttachOffsetTransform;
 
 	// Set animation state
 	ToolAnimationState = InItemData->ToolAnimationState;

@@ -386,9 +386,24 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter *Harveste
 	// Check if depleted
 	bool bWasDepleted = CurrentHealth <= 0.0f;
 
-	// Only spawn yields when fully depleted (and only for destruction meshes like trunks, not original trees)
+	// Check if this resource produces a destruction mesh (trunk) that carries the loot
+	// If so, we delay drops until THAT mesh is destroyed
+	bool bSpawnsDestructionMesh = false;
+	if (!bIsDestructionMesh && ResourceData)
+	{
+		if (UTreeHarvestableResourceData *TreeData = Cast<UTreeHarvestableResourceData>(ResourceData))
+		{
+			if (TreeData->TrunkMesh)
+			{
+				bSpawnsDestructionMesh = true;
+			}
+		}
+	}
+
+	// Only spawn yields when fully depleted AND acting as a final destruction stage
+	// (either is a destruction mesh, or doesn't spawn one to begin with)
 	TArray<FHarvestYield> Yields;
-	if (bWasDepleted && bIsDestructionMesh)
+	if (bWasDepleted && (bIsDestructionMesh || !bSpawnsDestructionMesh))
 	{
 		// Use tool effectiveness yield multiplier
 		float FinalYieldMultiplier = YieldMultiplier;
@@ -446,17 +461,14 @@ bool AHarvestableResourceActor::ApplyHarvestDamage(AOutercorpCharacter *Harveste
 		}
 		SpawnYieldItems(Yields, SpawnLocation);
 
-		// Show notification for each yield type
+		// Show simple notification for the harvested resource instead of individual items
 		if (UNotificationComponent *NotificationComp = Harvester->GetNotificationComponent())
 		{
-			for (const FHarvestYield &Yield : Yields)
-			{
-				if (Yield.ItemData && Yield.MinQuantity > 0)
-				{
-					UTexture2D *ItemIcon = Yield.ItemData->ItemIcon.LoadSynchronous();
-					NotificationComp->ShowItemHarvestedNotification(Yield.ItemData->ItemName, Yield.MinQuantity, ItemIcon);
-				}
-			}
+			FText ResourceName = !MeshDisplayName.IsEmpty() ? MeshDisplayName : FText::FromString(TEXT("Resource"));
+			NotificationComp->ShowSimpleNotification(
+				FText::Format(FText::FromString(TEXT("Harvested {0}")), ResourceName),
+				ENotificationType::Info,
+				2.0f);
 		}
 	}
 
@@ -506,8 +518,13 @@ void AHarvestableResourceActor::SpawnYieldItems(const TArray<FHarvestYield> &Yie
 		FVector LocalOffset = MeshRotation.RotateVector(Yield.SpawnOffset);
 		FVector YieldBaseLocation = SpawnLocation + LocalOffset;
 
-		// Spawn individual items for each unit of quantity
-		for (int32 i = 0; i < Yield.MinQuantity; ++i)
+		// Determine spawn loop parameters based on stacking setting
+		// If bSpawnAsStack is true, we spawn 1 actor with the full quantity
+		// If false, we spawn N actors with 1 quantity each
+		int32 Loops = Yield.bSpawnAsStack ? 1 : Yield.MinQuantity;
+		int32 QuantityPerActor = Yield.bSpawnAsStack ? Yield.MinQuantity : 1;
+
+		for (int32 i = 0; i < Loops; ++i)
 		{
 			// Calculate offset based on index to spread items in a spiral pattern
 			float Angle = i * 137.5f * (PI / 180.0f); // Golden angle for even distribution
@@ -517,7 +534,7 @@ void AHarvestableResourceActor::SpawnYieldItems(const TArray<FHarvestYield> &Yie
 			FVector LocalRandomOffset = FVector(
 				FMath::Cos(Angle) * Radius,
 				FMath::Sin(Angle) * Radius,
-				Yield.SpawnHeightOffset + (i * 20.0f) // Use yield's height offset
+				(i * 20.0f) // Vertical stacking
 			);
 
 			// Rotate spiral pattern by mesh orientation so it adapts to trunk's rotation
@@ -532,7 +549,13 @@ void AHarvestableResourceActor::SpawnYieldItems(const TArray<FHarvestYield> &Yie
 			if (SpawnedItem)
 			{
 				// Initialize the item properly (this sets up mesh, interaction, etc.)
-				SpawnedItem->InitializeItem(Yield.ItemData, 1);
+				SpawnedItem->InitializeItem(Yield.ItemData, QuantityPerActor);
+
+				// Apply stack mesh override if configured
+				if (Yield.bSpawnAsStack && Yield.StackMeshOverride && SpawnedItem->ItemMesh)
+				{
+					SpawnedItem->ItemMesh->SetStaticMesh(Yield.StackMeshOverride);
+				}
 
 				// Configure physics based on yield settings
 				if (UStaticMeshComponent *MeshComp = SpawnedItem->ItemMesh)
@@ -559,6 +582,23 @@ void AHarvestableResourceActor::SpawnYieldItems(const TArray<FHarvestYield> &Yie
 						MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
 						MeshComp->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 						MeshComp->SetSimulatePhysics(false);
+
+						// Perform a line trace to find the ground and snap to it
+						FVector TraceStart = FinalLocation + FVector(0, 0, 50.0f); // Start slightly above
+						FVector TraceEnd = FinalLocation - FVector(0, 0, 1000.0f); // Trace down
+						FHitResult HitResult;
+						FCollisionQueryParams QueryParams;
+						QueryParams.AddIgnoredActor(SpawnedItem);
+						QueryParams.AddIgnoredActor(this); // Ignore the resource itself
+
+						if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
+						{
+							SpawnedItem->SetActorLocation(HitResult.Location);
+
+							// Align actor rotation to the surface normal
+							FQuat SurfaceRot = FQuat::FindBetweenNormals(FVector::UpVector, HitResult.ImpactNormal);
+							SpawnedItem->SetActorRotation(SurfaceRot * SpawnRotation.Quaternion());
+						}
 					}
 				}
 			}
